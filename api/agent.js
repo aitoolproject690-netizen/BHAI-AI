@@ -14,8 +14,9 @@ async function webSearch(q){
 }
 
 async function github(action,a){
- const token=process.env.GITHUB_TOKEN; if(!token) throw new Error("GitHub is not configured. Add GITHUB_TOKEN.");
- const h={Authorization:"Bearer "+token,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
+ const token=process.env.GITHUB_TOKEN;
+ const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
+ if(token) h.Authorization="Bearer "+token;
  if(!a.owner||!a.repo) throw new Error("GitHub owner and repo are required.");
  const base="https://api.github.com/repos/"+encodeURIComponent(a.owner)+"/"+encodeURIComponent(a.repo),branch=a.branch||"main";
  if(action==="github_info"){
@@ -29,6 +30,7 @@ async function github(action,a){
   return{type:"file",path:d.path,sha:d.sha,content:Buffer.from(d.content||"","base64").toString("utf8")};
  }
  if(action==="github_update"){
+  if(!token) throw new Error("GitHub write access is not configured. Add GITHUB_TOKEN in Render to let BHAI AI modify repositories.");
   if(!a.doIt) throw new Error("DO IT mode is OFF; enable DO IT before executing GitHub changes.");
   if(!a.path||typeof a.content!=="string") throw new Error("path and content are required");
   if(a.content.length>500000) throw new Error("File is too large for direct agent update.");

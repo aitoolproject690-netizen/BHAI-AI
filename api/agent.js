@@ -48,7 +48,20 @@ export default async function handler(req,res){
  const {messages=[],doIt=false}=req.body||{}; const activity=[];
  const system=`You are BHAI AI, a practical personal work agent. Reply in Hinglish when the user does. Be concise and action-oriented. DO IT mode is ${doIt?"ON":"OFF"}. You have real tools: web search and GitHub. Use tools when useful. Never claim an action happened unless the tool result confirms it. For destructive or irreversible actions, ask for confirmation first. GitHub changes require DO IT mode ON and a clear user request.`;
  const tools=[{type:"function",function:{name:"web_search",description:"Search public web for current information.",parameters:{type:"object",properties:{query:{type:"string"}},required:["query"]}}},{type:"function",function:{name:"github_info",description:"Get GitHub repository information.",parameters:{type:"object",properties:{owner:{type:"string"},repo:{type:"string"}},required:["owner","repo"]}}},{type:"function",function:{name:"github_read",description:"Read a GitHub file or directory.",parameters:{type:"object",properties:{owner:{type:"string"},repo:{type:"string"},path:{type:"string"},branch:{type:"string"}},required:["owner","repo","path"]}}}];
- if(process.env.GITHUB_TOKEN) tools.push({type:"function",function:{name:"github_update",description:"Create or replace a GitHub text file. Only use when DO IT is ON and the user clearly requested the change.",parameters:{type:"object",properties:{owner:{type:"string"},repo:{type:"string"},path:{type:"string"},content:{type:"string"},branch:{type:"string"}},required:["owner","repo","path","content"]}});
+  if(process.env.GITHUB_TOKEN){
+    tools.push({
+      type:"function",
+      function:{
+        name:"github_update",
+        description:"Create or replace a GitHub text file. Only use when DO IT is ON and the user clearly requested the change.",
+        parameters:{
+          type:"object",
+          properties:{owner:{type:"string"},repo:{type:"string"},path:{type:"string"},content:{type:"string"},branch:{type:"string"}},
+          required:["owner","repo","path","content"]
+        }
+      }
+    });
+  }
  let msgs=[{role:"system",content:system},...messages.filter(m=>m&&["user","assistant"].includes(m.role)).slice(-20).map(m=>({role:m.role,content:String(m.text||"")}))];
  for(let round=0;round<4;round++){
   const r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+key},body:JSON.stringify({model:process.env.OPENAI_MODEL||"gpt-4o-mini",messages:msgs,tools,tool_choice:"auto",temperature:.2})});

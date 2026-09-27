@@ -1,3 +1,5 @@
+import { selectSkillForTask, getSkillPromptContext } from "../src/skillsRouter.js";
+
 const json=(res,status,data)=>res.status(status).json(data);
 
 async function webSearch(q){
@@ -68,7 +70,10 @@ export default async function handler(req,res){
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
  if(!key) return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
  const {messages=[],doIt=false}=req.body||{},activity=[];
- const system=`You are BHAI AI, a practical personal work agent. Reply in Hinglish when the user does. Be concise and action-oriented. DO IT mode is ${doIt?"ON":"OFF"}. You have real tools: web search and GitHub. Use tools when useful. Before acting, make a compact internal plan: identify the requested outcome, the minimum files/tools needed, then execute. For repository tasks, first inspect the root directory, then read only the key files needed for the requested change. Use a strict GitHub read budget: at most 7 unique github_read calls per task. Never reread the same path, never repeat an identical call, and prefer directory listings over individual files when possible. After you have enough context, stop reading and implement. If a tool already returned the needed information, use that result. When implementing a feature, inspect only the files required for that feature, then make the requested changes. Never claim an action happened unless the tool result confirms it. For destructive or irreversible actions, ask for confirmation first. GitHub changes require DO IT mode ON and a clear user request. After the requested changes are successfully written, stop using tools and report the changed files and commit result.`;
+ const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
+ const activeSkill=selectSkillForTask(latestUserMessage);
+ const skillContext=getSkillPromptContext(activeSkill);
+ const system=`You are BHAI AI, a practical personal work agent. ${skillContext} Automatically use the selected skill as the primary execution strategy while preserving the ability to use other tools when the task genuinely requires them. Reply in Hinglish when the user does. Be concise and action-oriented. DO IT mode is ${doIt?"ON":"OFF"}. You have real tools: web search and GitHub. Use tools when useful. Before acting, make a compact internal plan: identify the requested outcome, the minimum files/tools needed, then execute. For repository tasks, first inspect the root directory, then read only the key files needed for the requested change. Use a strict GitHub read budget: at most 7 unique github_read calls per task. Never reread the same path, never repeat an identical call, and prefer directory listings over individual files when possible. After you have enough context, stop reading and implement. If a tool already returned the needed information, use that result. When implementing a feature, inspect only the files required for that feature, then make the requested changes. Never claim an action happened unless the tool result confirms it. For destructive or irreversible actions, ask for confirmation first. GitHub changes require DO IT mode ON and a clear user request. After the requested changes are successfully written, stop using tools and report the changed files and commit result.`;
  let contents=toGeminiContents(messages).slice(-20);
  // Default to the free-tier Gemini 3.5 Flash-Lite model. GEMINI_MODEL can override it in Render.
  const model=process.env.GEMINI_MODEL||"gemini-3.5-flash-lite";

@@ -95,7 +95,7 @@ export default async function handler(req,res){
      continue;
     }
     if(name==="github_read"){
-     const readKey=a.owner+"/"+a.repo+":"+a.branch||"main"+":"+a.path;
+     const readKey=a.owner+"/"+a.repo+":"+(a.branch||"main")+":"+a.path;
      if(readPaths.has(readKey)) throw new Error("Smart read guard: this GitHub path was already inspected; use the existing result.");
      if(githubReadCount>=maxGithubReads) throw new Error("Smart read budget reached: maximum 7 unique GitHub reads for this task. Use the information already gathered and execute the requested change.");
      readPaths.add(readKey); githubReadCount++;

@@ -68,7 +68,8 @@ export default async function handler(req,res){
  const {messages=[],doIt=false}=req.body||{},activity=[];
  const system=`You are BHAI AI, a practical personal work agent. Reply in Hinglish when the user does. Be concise and action-oriented. DO IT mode is ${doIt?"ON":"OFF"}. You have real tools: web search and GitHub. Use tools when useful. Never claim an action happened unless the tool result confirms it. For destructive or irreversible actions, ask for confirmation first. GitHub changes require DO IT mode ON and a clear user request.`;
  let contents=toGeminiContents(messages).slice(-20);
- const model=process.env.GEMINI_MODEL||"gemini-3.8-flash";
+ // Default to the free-tier Gemini 3.5 Flash-Lite model. GEMINI_MODEL can override it in Render.
+ const model=process.env.GEMINI_MODEL||"gemini-3.5-flash-lite";
  for(let round=0;round<4;round++){
   let d; try{d=await geminiGenerate(key,model,system,contents)}catch(e){return json(res,502,{error:e.message})}
   const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];

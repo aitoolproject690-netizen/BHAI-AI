@@ -72,7 +72,8 @@ export default async function handler(req,res){
  let contents=toGeminiContents(messages).slice(-20);
  // Default to the free-tier Gemini 3.5 Flash-Lite model. GEMINI_MODEL can override it in Render.
  const model=process.env.GEMINI_MODEL||"gemini-3.5-flash-lite";
- const seenCalls=new Set();\n for(let round=0;round<12;round++){
+ const seenCalls=new Set();
+ for(let round=0;round<12;round++){
   let d; try{d=await geminiGenerate(key,model,system,contents)}catch(e){return json(res,502,{error:e.message})}
   const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);

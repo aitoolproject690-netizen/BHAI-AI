@@ -1,11 +1,11 @@
-# Skill: Web Research (`web-research`)
+# Web Research Skill
 
-- **Name:** Web Research & Information Gathering Skill (`web-research`)
-- **Purpose:** Search the public web in real-time to find up-to-date documentation, error solutions, library APIs, and latest tech news.
-- **Trigger Conditions:** User asks about recent events, library documentation, error troubleshooting requiring external web knowledge, or factual research.
+- **Skill Name:** web-research
+- **Purpose:** Search the public web for real-time information, documentation, news, and technical references.
+- **Trigger Conditions:** When user asks for up-to-date facts, library documentation, error troubleshooting, or external info not present in code.
 - **Required Tools:** `web_search`
 - **Execution Rules:**
-  1. Formulate concise, targeted search queries.
-  2. Parse search snippets and extract trustworthy URLs and titles.
-  3. Synthesize findings clearly in Hinglish with references when helpful.
-- **Output Format:** Structured bullet points with titles, key takeaways, and relevant source links.
+  1. Formulate precise search queries using keywords.
+  2. Parse search results and extract titles, URLs, and relevant snippets.
+  3. Synthesize findings concisely in Hinglish/English.
+- **Output Format:** Structured list of citations with titles, URLs, and summaries.

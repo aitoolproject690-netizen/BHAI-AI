@@ -79,7 +79,7 @@ Reply in Hinglish when the user does. Be concise and action-oriented. DO IT mode
 EXECUTION POLICY:
 - First make a compact internal plan: desired outcome, required skills, minimum tools/files.
 - Execute skills in the selected order. Do not randomly switch skills.
-- For repository work: github_info once, then root directory once, then only the minimum key files required. Never reread a path.
+- For repository work: github_info once, then read the repository root directory once. Treat that listing as authoritative: only read exact file/directory paths returned by it; never guess paths and never reread a path.
 - Do not search the web unless current external information is genuinely required.
 - Do not repeat a failed tool call with the same arguments. If a tool fails, use the error to adjust once; otherwise move forward with gathered information.
 - Prefer implementing once enough context is available. Do not keep reading files just to understand the whole repository.
@@ -90,7 +90,7 @@ EXECUTION POLICY:
  let contents=toGeminiContents(messages).slice(-20);
  const model=process.env.GEMINI_MODEL||"gemini-3.5-flash-lite";
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set();
- let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
+ let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;\n const knownPaths=new Set([""]);\n let rootListed=false;
  const maxGithubReads=7,maxToolCalls=12,maxRounds=15;
 
  for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
@@ -126,7 +126,7 @@ EXECUTION POLICY:
   }
   if(calls.length>allowedCalls.length) responseParts.push({functionResponse:{name:"tool_budget_guard",response:{error:"At most 2 tool calls are allowed per model round. Continue from returned results instead of issuing parallel calls."}}});
   contents.push({role:"user",parts:responseParts});
-  if(consecutiveFailures>=3) break;
+  if(consecutiveFailures>=2) break;
  }
 
  const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains.";

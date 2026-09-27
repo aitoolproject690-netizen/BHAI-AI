@@ -55,10 +55,10 @@ function toGeminiContents(messages){
  return messages.filter(m=>m&&["user","assistant"].includes(m.role)).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:String(m.text||"")}] }));
 }
 
-async function geminiGenerate(apiKey,model,system,contents){
+async function geminiGenerate(apiKey,model,system,contents,useTools=true){
  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(apiKey),{
   method:"POST",headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,tools:[{functionDeclarations:toolDefinitions}],generationConfig:{temperature:0.2}})
+  body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,...(useTools?{tools:[{functionDeclarations:toolDefinitions}]}:{}),generationConfig:{temperature:0.2}})
  });
  const d=await r.json(); if(!r.ok) throw new Error(d?.error?.message||"Gemini API request failed"); return d;
 }
@@ -72,7 +72,7 @@ export default async function handler(req,res){
  let contents=toGeminiContents(messages).slice(-20);
  // Default to the free-tier Gemini 3.5 Flash-Lite model. GEMINI_MODEL can override it in Render.
  const model=process.env.GEMINI_MODEL||"gemini-3.5-flash-lite";
- const seenCalls=new Set();
+ const seenCalls=new Map();
  for(let round=0;round<12;round++){
   let d; try{d=await geminiGenerate(key,model,system,contents)}catch(e){return json(res,502,{error:e.message})}
   const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];
@@ -84,10 +84,15 @@ export default async function handler(req,res){
   contents.push(candidate.content);
   const responseParts=[];
   for(const call of calls){
-   const name=call.name,a={...(call.args||{}),doIt}; activity.push({tool:name,state:"running"});
+   const name=call.name,a={...(call.args||{}),doIt}; const cacheKey=name+":"+JSON.stringify(a); activity.push({tool:name,state:"running"});
    try{
+    if(seenCalls.has(cacheKey)){
+     const cached=seenCalls.get(cacheKey); activity[activity.length-1].state="cached";
+     responseParts.push({functionResponse:{name,response:{result:cached,cached:true}}});
+     continue;
+    }
     const result=name==="web_search"?await webSearch(a.query):await github(name,a);
-    activity[activity.length-1].state="done";
+    seenCalls.set(cacheKey,result); activity[activity.length-1].state="done";
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
     activity[activity.length-1].state="failed";
@@ -96,5 +101,5 @@ export default async function handler(req,res){
   }
   contents.push({role:"user",parts:responseParts});
  }
- return json(res,500,{error:"Tool loop limit reached after 12 tool rounds. The agent stopped safely to avoid an endless tool loop.",activity});
+ const finalSystem=system+" You have reached the tool budget. Do not call any more tools. Use the information already gathered to give the best possible final response. If the requested code change was not completed, clearly say what remains."; try{const fd=await geminiGenerate(key,model,finalSystem,contents,false); const fp=fd.candidates?.[0]?.content?.parts||[]; const ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim(); return json(res,200,{text:ft||"I reached the safe tool limit before finishing the task.",activity});}catch(e){return json(res,500,{error:"Tool loop limit reached after 12 tool rounds. The agent stopped safely to avoid an endless tool loop.",activity});}
 }

@@ -21,5 +21,18 @@ http.createServer((req,res)=>{
   let p=decodeURIComponent(u.pathname);if(p==="/")p="/index.html";
   const root=path.join(__dirname,"dist"),file=path.join(root,p.replace(/^\//,""));
   if(!file.startsWith(root+path.sep)&&file!==root){res.statusCode=403;return res.end("Forbidden");}
-  fs.readFile(file,(e,data)=>{if(e){fs.readFile(path.join(root,"index.html"),(e2,d)=>{if(e2){res.statusCode=404;return res.end("Not found")}res.setHeader("Content-Type","text/html");res.end(d)});return}res.end(data);});
+  const types={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".mjs":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".json":"application/json; charset=utf-8",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".ico":"image/x-icon"};
+  fs.readFile(file,(e,data)=>{
+    if(e){
+      fs.readFile(path.join(root,"index.html"),(e2,d)=>{
+        if(e2){res.statusCode=404;return res.end("Not found")}
+        res.statusCode=200;res.setHeader("Content-Type","text/html; charset=utf-8");res.end(d)
+      });
+      return;
+    }
+    res.statusCode=200;
+    res.setHeader("Content-Type",types[path.extname(file).toLowerCase()]||"application/octet-stream");
+    res.setHeader("Cache-Control",p.includes("/assets/")?"public, max-age=31536000, immutable":"no-cache");
+    res.end(data);
+  });
 }).listen(port,"0.0.0.0",()=>console.log("BHAI AI listening on "+port));

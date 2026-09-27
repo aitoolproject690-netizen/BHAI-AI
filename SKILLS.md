@@ -7,7 +7,7 @@ Welcome to **BHAI AI**, your practical, Hinglish-speaking personal work agent. T
 ## 🚀 1. Architecture Overview
 BHAI AI is built as a full-stack real-time agent system:
 - **Frontend (`src/`):** React 18 with Vite, featuring chat history, voice input (SpeechRecognition), file attachment handling, and a live **Task Execution Activity Panel**.
-- **Backend (`api/agent.js` & `server.js`):** Node.js handler communicating with Gemini models (supporting Gemini 3.5 Flash-Lite / 1.5 Flash), tool declarations, and recursive tool execution loops (up to 8 rounds).
+- **Backend (`api/agent.js` & `server.js`):** Node.js handler communicating with Gemini models (supporting Gemini 3.5 Flash-Lite / 1.5 Flash), tool declarations, and recursive tool execution loops (up to 15 rounds).
 - **Deployment:** Configured for Vercel Serverless and Node.js (`server.js`).
 
 ---
@@ -37,7 +37,13 @@ When a user sends a task, the frontend transitions through a live state machine 
 
 ---
 
-## 🔮 5. Future Skill-System Roadmap
+## 🧠 5. Automatic Skill Routing
+- `src/skillsRouter.js` selects a primary skill from the latest user task.
+- The backend (`api/agent.js`) now imports and applies the selected skill context before tool execution.
+- Supported primary skills: `github`, `web-research`, `coding`, and `file`.
+- The selected skill guides execution, while the agent may still use other tools when the task genuinely requires them.
+
+## 🔮 6. Future Skill-System Roadmap
 - **Custom Skill Plugins:** Modular JS skill loaders for database queries, code linting, and automated testing.
 - **Advanced Memory Integration:** Long-term vector/embedding-based memory across chat sessions.
 - **Multi-Agent Collaboration:** Specialized sub-agents for UI design, backend refactoring, and security audits.

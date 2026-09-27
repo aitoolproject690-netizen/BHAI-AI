@@ -42,38 +42,55 @@ async function github(action,a){
  throw new Error("Unsupported tool");
 }
 
+const toolDefinitions=[
+ {name:"web_search",description:"Search public web for current information.",parameters:{type:"OBJECT",properties:{query:{type:"STRING",description:"Search query"}},required:["query"]}},
+ {name:"github_info",description:"Get GitHub repository information.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"}},required:["owner","repo"]}},
+ {name:"github_read",description:"Read a GitHub file or directory.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path"]}}
+];
+if(process.env.GITHUB_TOKEN) toolDefinitions.push({name:"github_update",description:"Create or replace a GitHub text file. Only use when DO IT is ON and the user clearly requested the change.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},content:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path","content"]}});
+
+function toGeminiContents(messages){
+ return messages.filter(m=>m&&["user","assistant"].includes(m.role)).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:String(m.text||"")}] }));
+}
+
+async function geminiGenerate(apiKey,model,system,contents){
+ const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(apiKey),{
+  method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,tools:[{functionDeclarations:toolDefinitions}],generationConfig:{temperature:0.2}})
+ });
+ const d=await r.json(); if(!r.ok) throw new Error(d?.error?.message||"Gemini API request failed"); return d;
+}
+
 export default async function handler(req,res){
  if(req.method!=="POST") return json(res,405,{error:"Method not allowed"});
- const key=process.env.OPENAI_API_KEY; if(!key) return json(res,503,{error:"AI provider is not configured. Add OPENAI_API_KEY."});
- const {messages=[],doIt=false}=req.body||{}; const activity=[];
+ const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
+ if(!key) return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
+ const {messages=[],doIt=false}=req.body||{},activity=[];
  const system=`You are BHAI AI, a practical personal work agent. Reply in Hinglish when the user does. Be concise and action-oriented. DO IT mode is ${doIt?"ON":"OFF"}. You have real tools: web search and GitHub. Use tools when useful. Never claim an action happened unless the tool result confirms it. For destructive or irreversible actions, ask for confirmation first. GitHub changes require DO IT mode ON and a clear user request.`;
- const tools=[{type:"function",function:{name:"web_search",description:"Search public web for current information.",parameters:{type:"object",properties:{query:{type:"string"}},required:["query"]}}},{type:"function",function:{name:"github_info",description:"Get GitHub repository information.",parameters:{type:"object",properties:{owner:{type:"string"},repo:{type:"string"}},required:["owner","repo"]}}},{type:"function",function:{name:"github_read",description:"Read a GitHub file or directory.",parameters:{type:"object",properties:{owner:{type:"string"},repo:{type:"string"},path:{type:"string"},branch:{type:"string"}},required:["owner","repo","path"]}}}];
-  if(process.env.GITHUB_TOKEN){
-    tools.push({
-      type:"function",
-      function:{
-        name:"github_update",
-        description:"Create or replace a GitHub text file. Only use when DO IT is ON and the user clearly requested the change.",
-        parameters:{
-          type:"object",
-          properties:{owner:{type:"string"},repo:{type:"string"},path:{type:"string"},content:{type:"string"},branch:{type:"string"}},
-          required:["owner","repo","path","content"]
-        }
-      }
-    });
-  }
- let msgs=[{role:"system",content:system},...messages.filter(m=>m&&["user","assistant"].includes(m.role)).slice(-20).map(m=>({role:m.role,content:String(m.text||"")}))];
+ let contents=toGeminiContents(messages).slice(-20);
+ const model=process.env.GEMINI_MODEL||"gemini-3.8-flash";
  for(let round=0;round<4;round++){
-  const r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+key},body:JSON.stringify({model:process.env.OPENAI_MODEL||"gpt-4o-mini",messages:msgs,tools,tool_choice:"auto",temperature:.2})});
-  const d=await r.json(); if(!r.ok) return json(res,r.status,{error:d?.error?.message||"AI request failed"});
-  const m=d.choices?.[0]?.message; if(!m) return json(res,500,{error:"No AI response"});
-  if(!m.tool_calls?.length) return json(res,200,{text:m.content||"No response received.",activity});
-  msgs.push(m);
-  for(const call of m.tool_calls){
-   const a=JSON.parse(call.function.arguments||"{}"); a.doIt=doIt; activity.push({tool:call.function.name,state:"running"});
-   try{const result=call.function.name==="web_search"?await webSearch(a.query):await github(call.function.name,a); activity[activity.length-1].state="done"; msgs.push({role:"tool",tool_call_id:call.id,content:JSON.stringify(result).slice(0,18000)});}
-   catch(e){activity[activity.length-1].state="failed"; msgs.push({role:"tool",tool_call_id:call.id,content:JSON.stringify({error:e.message})});}
+  let d; try{d=await geminiGenerate(key,model,system,contents)}catch(e){return json(res,502,{error:e.message})}
+  const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];
+  const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
+  if(!calls.length){
+   const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
+   return json(res,200,{text:text||"No response received.",activity});
   }
+  contents.push(candidate.content);
+  const responseParts=[];
+  for(const call of calls){
+   const name=call.name,a={...(call.args||{}),doIt}; activity.push({tool:name,state:"running"});
+   try{
+    const result=name==="web_search"?await webSearch(a.query):await github(name,a);
+    activity[activity.length-1].state="done";
+    responseParts.push({functionResponse:{name,response:{result}}});
+   }catch(e){
+    activity[activity.length-1].state="failed";
+    responseParts.push({functionResponse:{name,response:{error:e.message}}});
+   }
+  }
+  contents.push({role:"user",parts:responseParts});
  }
  return json(res,500,{error:"Tool loop limit reached",activity});
 }

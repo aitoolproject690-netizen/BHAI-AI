@@ -87,10 +87,13 @@ EXECUTION POLICY:
 - After successful requested changes, stop tools and report changed files and commit result.
 - Never claim an action happened unless a tool result confirms it.`;
 
- let contents=toGeminiContents(messages).slice(-20);\n const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
+ let contents=toGeminiContents(messages).slice(-20);
+ const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
  const model=process.env.GEMINI_MODEL||"gemini-3.5-flash-lite";
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set();
- let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;\n const knownPaths=new Set(["","/"]);\n let rootListed=false;
+ let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
+ const knownPaths=new Set(["","/"]);
+ let rootListed=false;
  const maxGithubReads=7,maxToolCalls=12,maxRounds=15;
 
  for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
@@ -98,7 +101,8 @@ EXECUTION POLICY:
   const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){
-   const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
+   const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("
+").trim();
    return json(res,200,{text:text||"No response received.",activity});
   }
   contents.push(candidate.content);
@@ -132,7 +136,8 @@ EXECUTION POLICY:
  const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains.";
  try{
   const fd=await geminiGenerate(key,model,finalSystem,contents,false,activeToolDefinitions);
-  const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
+  const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("
+").trim();
   return json(res,200,{text:ft||"I reached the safe execution limit before finishing the task.",activity});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }

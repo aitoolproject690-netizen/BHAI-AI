@@ -1,4 +1,4 @@
-import { selectSkillForTask, getSkillPromptContext } from "../src/skillsRouter.js";
+import { selectSkillsForTask, getSkillPromptContext } from "../src/skillsRouter.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -47,11 +47,11 @@ async function github(action,a){
 }
 
 const toolDefinitions=[
- {name:"web_search",description:"Search public web for current information.",parameters:{type:"OBJECT",properties:{query:{type:"STRING",description:"Search query"}},required:["query"]}},
- {name:"github_info",description:"Get GitHub repository information.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"}},required:["owner","repo"]}},
- {name:"github_read",description:"Read a GitHub file or directory.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path"]}}
+ {name:"web_search",description:"Search public web for current information. Use only when the task genuinely needs current external information.",parameters:{type:"OBJECT",properties:{query:{type:"STRING",description:"Search query"}},required:["query"]}},
+ {name:"github_info",description:"Get GitHub repository information. Use once to verify the repository before repository work.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"}},required:["owner","repo"]}},
+ {name:"github_read",description:"Read a GitHub file or directory. Prefer one root directory read first, then only the minimum key files needed. Never reread a path.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path"]}}
 ];
-if(process.env.GITHUB_TOKEN) toolDefinitions.push({name:"github_update",description:"Create or replace a GitHub text file. Only use when DO IT is ON and the user clearly requested the change.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},content:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path","content"]}});
+if(process.env.GITHUB_TOKEN) toolDefinitions.push({name:"github_update",description:"Create or replace a GitHub text file. Only use when DO IT is ON and the user clearly requested the change. Prefer one update per changed file after inspection.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},content:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path","content"]}});
 
 function toGeminiContents(messages){
  return messages.filter(m=>m&&["user","assistant"].includes(m.role)).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:String(m.text||"")}] }));
@@ -71,18 +71,30 @@ export default async function handler(req,res){
  if(!key) return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
  const {messages=[],doIt=false}=req.body||{},activity=[];
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
- const activeSkill=selectSkillForTask(latestUserMessage);
- const skillContext=getSkillPromptContext(activeSkill);
- const system=`You are BHAI AI, a practical personal work agent. ${skillContext} Automatically use the selected skill as the primary execution strategy while preserving the ability to use other tools when the task genuinely requires them. Reply in Hinglish when the user does. Be concise and action-oriented. DO IT mode is ${doIt?"ON":"OFF"}. You have real tools: web search and GitHub. Use tools when useful. Before acting, make a compact internal plan: identify the requested outcome, the minimum files/tools needed, then execute. For repository tasks, first inspect the root directory, then read only the key files needed for the requested change. Use a strict GitHub read budget: at most 7 unique github_read calls per task. Never reread the same path, never repeat an identical call, and prefer directory listings over individual files when possible. After you have enough context, stop reading and implement. If a tool already returned the needed information, use that result. When implementing a feature, inspect only the files required for that feature, then make the requested changes. Never claim an action happened unless the tool result confirms it. For destructive or irreversible actions, ask for confirmation first. GitHub changes require DO IT mode ON and a clear user request. After the requested changes are successfully written, stop using tools and report the changed files and commit result.`;
+ const selectedSkills=selectSkillsForTask(latestUserMessage);
+ const skillContext=getSkillPromptContext(selectedSkills);
+ const system=`You are BHAI AI, a practical personal work agent. ${skillContext}
+Reply in Hinglish when the user does. Be concise and action-oriented. DO IT mode is ${doIt?"ON":"OFF"}.
+
+EXECUTION POLICY:
+- First make a compact internal plan: desired outcome, required skills, minimum tools/files.
+- Execute skills in the selected order. Do not randomly switch skills.
+- For repository work: github_info once, then root directory once, then only the minimum key files required. Never reread a path.
+- Do not search the web unless current external information is genuinely required.
+- Do not repeat a failed tool call with the same arguments. If a tool fails, use the error to adjust once; otherwise move forward with gathered information.
+- Prefer implementing once enough context is available. Do not keep reading files just to understand the whole repository.
+- GitHub changes require DO IT mode ON and a clear user request.
+- After successful requested changes, stop tools and report changed files and commit result.
+- Never claim an action happened unless a tool result confirms it.`;
+
  let contents=toGeminiContents(messages).slice(-20);
- // Default to the free-tier Gemini 3.5 Flash-Lite model. GEMINI_MODEL can override it in Render.
  const model=process.env.GEMINI_MODEL||"gemini-3.5-flash-lite";
- const seenCalls=new Map();
- const readPaths=new Set();
- let githubReadCount=0;
- const maxGithubReads=7;
- for(let round=0;round<15;round++){
-  let d; try{d=await geminiGenerate(key,model,system,contents)}catch(e){return json(res,502,{error:e.message})}
+ const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set();
+ let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
+ const maxGithubReads=7,maxToolCalls=12,maxRounds=15;
+
+ for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
+  let d; try{d=await geminiGenerate(key,model,system,contents)}catch(e){return json(res,502,{error:e.message,activity})}
   const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){
@@ -90,30 +102,37 @@ export default async function handler(req,res){
    return json(res,200,{text:text||"No response received.",activity});
   }
   contents.push(candidate.content);
-  const responseParts=[];
-  for(const call of calls){
-   const name=call.name,a={...(call.args||{}),doIt}; const cacheKey=name+":"+JSON.stringify(a); activity.push({tool:name,state:"running"});
+  const allowedCalls=calls.slice(0,2),responseParts=[];
+  for(const call of allowedCalls){
+   if(totalToolCalls>=maxToolCalls) break;
+   const name=call.name,a={...(call.args||{}),doIt},cacheKey=name+":"+JSON.stringify(a);
+   activity.push({tool:name,state:"running"}); totalToolCalls++;
    try{
-    if(seenCalls.has(cacheKey)){
-     const cached=seenCalls.get(cacheKey); activity[activity.length-1].state="cached";
-     responseParts.push({functionResponse:{name,response:{result:cached,cached:true}}});
-     continue;
-    }
+    if(seenCalls.has(cacheKey)){const cached=seenCalls.get(cacheKey);activity[activity.length-1].state="cached";responseParts.push({functionResponse:{name,response:{result:cached,cached:true}}});continue;}
+    if(failedCalls.has(cacheKey)) throw new Error("Smart retry guard: this exact failed tool call will not be retried.");
     if(name==="github_read"){
      const readKey=a.owner+"/"+a.repo+":"+(a.branch||"main")+":"+a.path;
      if(readPaths.has(readKey)) throw new Error("Smart read guard: this GitHub path was already inspected; use the existing result.");
-     if(githubReadCount>=maxGithubReads) throw new Error("Smart read budget reached: maximum 7 unique GitHub reads for this task. Use the information already gathered and execute the requested change.");
-     readPaths.add(readKey); githubReadCount++;
+     if(githubReadCount>=maxGithubReads) throw new Error("Smart read budget reached. Stop reading and execute using the information already gathered.");
+     readPaths.add(readKey);githubReadCount++;
     }
     const result=name==="web_search"?await webSearch(a.query):await github(name,a);
-    seenCalls.set(cacheKey,result); activity[activity.length-1].state="done";
+    seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
-    activity[activity.length-1].state="failed";
+    failedCalls.add(cacheKey);consecutiveFailures++;activity[activity.length-1].state="failed";
     responseParts.push({functionResponse:{name,response:{error:e.message}}});
    }
   }
+  if(calls.length>allowedCalls.length) responseParts.push({functionResponse:{name:"tool_budget_guard",response:{error:"At most 2 tool calls are allowed per model round. Continue from returned results instead of issuing parallel calls."}}});
   contents.push({role:"user",parts:responseParts});
+  if(consecutiveFailures>=3) break;
  }
- const finalSystem=system+" You have reached the tool budget. Do not call any more tools. Use the information already gathered to give the best possible final response. If the requested code change was not completed, clearly say what remains."; try{const fd=await geminiGenerate(key,model,finalSystem,contents,false); const fp=fd.candidates?.[0]?.content?.parts||[]; const ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim(); return json(res,200,{text:ft||"I reached the safe tool limit before finishing the task.",activity});}catch(e){return json(res,500,{error:"Tool loop limit reached after 15 tool rounds. The agent stopped safely to avoid an endless tool loop.",activity});}
+
+ const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains.";
+ try{
+  const fd=await geminiGenerate(key,model,finalSystem,contents,false);
+  const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
+  return json(res,200,{text:ft||"I reached the safe execution limit before finishing the task.",activity});
+ }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }

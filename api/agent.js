@@ -3,11 +3,11 @@ const json=(res,status,data)=>res.status(status).json(data);
 async function webSearch(q){
  const r=await fetch("https://html.duckduckgo.com/html/?q="+encodeURIComponent(q),{headers:{"User-Agent":"Mozilla/5.0 BHAI-AI/1.0"}});
  const html=await r.text(); if(!r.ok) throw new Error("Web search failed");
- const out=[]; const re=/<a rel="nofollow" class="result__a" href="([^"]+)">([\\s\\S]*?)<\\/a>/g; let m;
+ const out=[]; const re=/<a rel="nofollow" class="result__a" href="([^"]+)">([\s\S]*?)<\/a>/g; let m;
  while((m=re.exec(html))&&out.length<8){
   const title=m[2].replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&#x27;/g,"'").trim();
   const url=m[1].replace(/&amp;/g,"&"); const tail=html.slice(m.index,m.index+5000);
-  const sm=tail.match(/class="result__snippet"[^>]*>([\\s\\S]*?)<\\/a>/);
+  const sm=tail.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/);
   const snippet=(sm?sm[1]:"").replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&#x27;/g,"'").trim();
   if(title&&url) out.push({title,url,snippet});
  } return out;

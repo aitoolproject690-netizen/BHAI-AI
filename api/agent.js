@@ -119,7 +119,7 @@ EXECUTION POLICY:
      if(githubReadCount>=maxGithubReads) throw new Error("Smart read budget reached. Stop reading and execute using the information already gathered.");
      readPaths.add(readKey);githubReadCount++;
     }
-    const normalizedPath=typeof a.path==="string"?(a.path==="."||a.path==="/"?"" : a.path.replace(/^\\/+/, "")):"";
+    const normalizedPath=typeof a.path==="string"?(a.path==="."||a.path==="/"?"":a.path.replace(/^\/+/, "")):"";
     if(name==="github_read"){
      if(!rootListed && normalizedPath!=="") throw new Error("GitHub path guard: inspect the repository root first.");
      if(rootListed && !knownPaths.has(normalizedPath)) throw new Error("GitHub path guard: path was not returned by the authoritative root listing. Do not guess paths.");

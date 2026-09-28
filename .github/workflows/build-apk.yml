@@ -52,12 +52,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  official-release:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.official_release == true && env.BHAI_OWNER_RELEASE == 'AUTHORIZED' }}
-    env:
-      BHAI_OWNER_RELEASE: ${{ secrets.BHAI_OWNER_RELEASE }}
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Owner release gate passed
-        run: echo "BHAI X official release gate passed"
+      - name: Owner official release gate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.official_release == true }}
+        env:
+          BHAI_OWNER_RELEASE: ${{ secrets.BHAI_OWNER_RELEASE }}
+        run: |
+          test "$BHAI_OWNER_RELEASE" = "AUTHORIZED" || { echo "Owner release authorization missing"; exit 1; }
+          echo "BHAI X official release gate passed"

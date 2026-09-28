@@ -145,7 +145,7 @@ EXECUTION POLICY:
  if(!r.ok) throw new Error(d?.error?.message||"Unable to list Gemini models");
  return (d.models||[])
   .filter(m=>Array.isArray(m.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent"))
-  .map(m=>String(m.name||"").replace(/^models\\//,""))
+  .map(m=>String(m.name||"").replace(/^models\//,""))
   .filter(Boolean);
 }
 const models=await getAvailableModels();

@@ -72,14 +72,24 @@ function App(){
  }
  async function compileMission(goalOverride){
   const goal=(goalOverride??input).trim(); if(!goal||running)return;
-  setRunning(true);setToolsOpen(false);
+  setRunning(true);setToolsOpen(false);setActivityOpen(false);
   try{
    const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'compile_goal',goal})});
    const d=await r.json(); if(!r.ok)throw new Error(d.error||'Mission compile failed');
-   const m=d.mission; const plan='🎯 MISSION MODE\\n\\nGoal: '+m.goal+'\\n\\n'+m.steps.map((s,i)=>(i+1)+'. '+s.name).join('\\n')+'\\n\\nStatus: '+m.steps.length+' steps compiled. DO IT ON karke execution start kar sakte ho.';
-   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:goal},{id:crypto.randomUUID(),role:'assistant',text:plan}];
+   const m=d.mission;
+   const plan='🎯 MISSION MODE\\n\\nGoal: '+m.goal+'\\n\\n'+m.steps.map((s,i)=>(i+1)+'. '+s.name).join('\\n')+'\\n\\nStatus: '+m.steps.length+' steps compiled.'+(doIt?'\\n\\nDO IT ON — mission execution start ho raha hai.':'\\n\\nDO IT OFF — plan ready hai; execute karne ke liye DO IT ON karo.');
+   const userMsg={id:crypto.randomUUID(),role:'user',text:goal};
+   const planMsg={id:crypto.randomUUID(),role:'assistant',text:plan};
+   const next=[...chat.messages,userMsg,planMsg];
    upd(()=>next);setInput('');setMissionMode(false);
-  }catch(e){upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ '+e.message}])}finally{setRunning(false)}
+   if(doIt){
+    const execMessages=[...next,{id:crypto.randomUUID(),role:'user',text:'MISSION EXECUTION: Ab compiled mission ko end-to-end execute karo. Required files/code changes/build/test/deploy jo possible ho actual tools se karo. Har step verify karo; kaam complete hone tak execute karo.'}];
+    const er=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:execMessages,doIt:true})});
+    const ed=await er.json();
+    upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:ed.text||('⚠️ '+(ed.error||'Mission execution failed')),images:ed.images||[]}]);
+    if(Array.isArray(ed.activity)&&ed.activity.length)setActivity(ed.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Mission',text:x.state||'done',state:x.state||'done'})));
+   }
+  }catch(e){upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ '+e.message}])}finally{setRunning(false)}
  }
  async function copyText(text,id){try{await navigator.clipboard.writeText(text);setCopied(id);setTimeout(()=>setCopied(''),1200)}catch{}}
  const filtered=sessions.filter(s=>s.title.toLowerCase().includes(search.toLowerCase()));

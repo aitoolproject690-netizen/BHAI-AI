@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState}from'react';
 import{createRoot}from'react-dom/client';
-import{Send,Mic,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw}from'lucide-react';
+import{Send,Mic,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug}from'lucide-react';
 import'./styles.css';
 import OwnerPanel from'./OwnerPanel.jsx';
 
@@ -64,6 +64,17 @@ function App(){
   const prompts={web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: '};
   setInput(v=>(v?v+'\n':'')+prompts[label]);setToolsOpen(false);
  }
+ async function compileMission(){
+  const goal=input.trim(); if(!goal||running)return;
+  setRunning(true);setToolsOpen(false);
+  try{
+   const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'compile_goal',goal})});
+   const d=await r.json(); if(!r.ok)throw new Error(d.error||'Mission compile failed');
+   const m=d.mission; const plan='🎯 MISSION MODE\\n\\nGoal: '+m.goal+'\\n\\n'+m.steps.map((s,i)=>(i+1)+'. '+s.name).join('\\n')+'\\n\\nStatus: '+m.steps.length+' steps compiled. DO IT ON karke execution start kar sakte ho.';
+   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:goal},{id:crypto.randomUUID(),role:'assistant',text:plan}];
+   upd(()=>next);setInput('');
+  }catch(e){upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ '+e.message}])}finally{setRunning(false)}
+ }
  async function copyText(text,id){try{await navigator.clipboard.writeText(text);setCopied(id);setTimeout(()=>setCopied(''),1200)}catch{}}
  const filtered=sessions.filter(s=>s.title.toLowerCase().includes(search.toLowerCase()));
  return <div className="app">
@@ -100,7 +111,7 @@ function App(){
     <div className="composerTools">
      <div className="toolMenuWrap">
       <button className="roundBtn" onClick={()=>setToolsOpen(v=>!v)}><Plus size={20}/></button>
-      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button></div>}
+      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button><button onClick={compileMission}><Target/> Mission Mode</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button></div>}
      </div>
      <label className="roundBtn attach"><Paperclip size={19}/><input type="file" hidden onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setFileInfo({name:f.name,text:(await f.text()).slice(0,50000)})}}/></label>
      <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message BHAI X..." rows="1"/>

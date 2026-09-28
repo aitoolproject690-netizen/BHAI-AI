@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState}from'react';
 import{createRoot}from'react-dom/client';
 import{Send,Mic,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw}from'lucide-react';
 import'./styles.css';
+import OwnerPanel from'./OwnerPanel.jsx';
 
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};
@@ -22,7 +23,7 @@ function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),[doIt,setDoIt]=useState(true);
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
- const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState('');
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false);
  const end=useRef(null),recognition=useRef(null);
 
  useEffect(()=>{if(!sessions.length){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);
@@ -74,7 +75,7 @@ function App(){
    <button className="newChat" onClick={newChat}><Plus size={17}/> New chat</button>
    <div className="searchBox"><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search chats"/></div>
    <div className="history">{filtered.map(s=><button className={s.id===active?'chat active':'chat'} onClick={()=>setActive(s.id)} key={s.id}>{s.title}</button>)}</div>
-   <div className="sideBottom"><div className="status"><span/> Agent online</div><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><Settings size={15}/></div></div>
+   <div className="sideBottom"><div className="status"><span/> Agent online</div><button className="ownerOpenBtn" onClick={()=>setOwnerOpen(true)}><ShieldCheck size={15}/> Owner Control</button><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><Settings size={15}/></div></div>
   </aside>
   <main>
    <header>
@@ -110,6 +111,7 @@ function App(){
     <div className="composerHint">BHAI X can search, code, generate images, work with files and execute tasks. <b>Check important results.</b></div>
    </div>
   </main>
+ {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>} 
  </div>
 }
 createRoot(document.getElementById('root')).render(<App/>);

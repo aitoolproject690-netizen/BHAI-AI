@@ -19,20 +19,18 @@ async function generateImage(prompt,aspectRatio="16:9"){
  const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;
  const height=aspectRatio==="9:16"?1365:aspectRatio==="1:1"?768:576;
  const hf=process.env.HF_TOKEN;
- const hfModel=process.env.HF_IMAGE_MODEL||"black-forest-labs/FLUX.1-schnell";
+ const hfModel=process.env.HF_IMAGE_MODEL||"black-forest-labs/FLUX.1-dev";
  if(hf){
-  const r=await fetch("https://router.huggingface.co/hf-inference/models/"+encodeURIComponent(hfModel),{
-   method:"POST",
-   headers:{Authorization:"Bearer "+hf,"Content-Type":"application/json"},
-   body:JSON.stringify({inputs:prompt,parameters:{width,height}})
-  });
-  const ct=r.headers.get("content-type")||"";
-  if(r.ok&&ct.startsWith("image/")){
-   const b=Buffer.from(await r.arrayBuffer());
-   return {mimeType:ct.split(";")[0]||"image/png",data:b.toString("base64"),provider:"huggingface"};
+  try{
+   const {InferenceClient}=await import("@huggingface/inference");
+   const client=new InferenceClient(hf);
+   const image=await client.textToImage({model:hfModel,provider:"auto",inputs:prompt,width,height},{outputType:"blob"});
+   const b=Buffer.from(await image.arrayBuffer());
+   return {mimeType:"image/png",data:b.toString("base64"),provider:"huggingface"};
+  }catch(e){
+   const msg=String(e?.message||e);
+   if(!/401|403|402|unauthorized|forbidden|payment|quota|credit/i.test(msg)) throw new Error("Hugging Face image generation failed: "+msg.slice(0,500));
   }
-  const err=await r.text();
-  if(r.status!==401&&r.status!==403&&r.status!==402) throw new Error("Hugging Face image generation failed: "+err.slice(0,500));
  }
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
  if(!key) throw new Error("No image provider configured. Add HF_TOKEN (recommended) or GEMINI_API_KEY in Render Environment.");

@@ -17,7 +17,8 @@
     "lucide-react": "latest",
     "@huggingface/inference": "latest",
     "@capacitor/core": "latest",
-    "@capacitor/ios": "latest"
+    "@capacitor/ios": "latest",
+    "pg": "latest"
   },
   "devDependencies": {
     "@capacitor/cli": "latest"

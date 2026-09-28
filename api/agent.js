@@ -134,14 +134,9 @@ EXECUTION POLICY:
      }
     }
     if(name==="github_read" && normalizedPath!=="" && !knownPaths.has(normalizedPath)){
-     const rootResult=seenCalls.get("github_read:"+a.owner+"/"+a.repo+":"+(a.branch||"main")+":");
-     const dir=await github("github_read",{...a,path:normalizedPath});
-     if(dir?.type==="directory"){
-      for(const item of dir.items||[]) knownPaths.add(item.path);
-     }
-    }
-    if(name==="github_read" && rootListed && !knownPaths.has(normalizedPath)){
-     throw new Error("GitHub path guard: path was not returned by the authoritative listing. Use an exact path from the repository listing.");
+     activity[activity.length-1].state="skipped";
+     responseParts.push({functionResponse:{name,response:{result:{skipped:true,reason:"Path is not in the authoritative repository listing. Use an exact returned path."}}}});
+     continue;
     }
     const result=name==="web_search"?await webSearch(a.query):await github(name,{...a,path:normalizedPath});
     if(name==="github_read" && result?.type==="directory"){

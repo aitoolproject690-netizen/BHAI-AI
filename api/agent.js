@@ -19,7 +19,7 @@ async function generateImage(prompt,aspectRatio="16:9"){
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
  if(!key) throw new Error("Gemini API key is not configured.");
  const model=process.env.GEMINI_IMAGE_MODEL||"gemini-3.1-flash-image";
- const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],responseFormat:{image:{aspectRatio}}}})});
+ const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],imageConfig:{aspectRatio}}})});
  const d=await r.json(); if(!r.ok) throw new Error(d?.error?.message||"Image generation failed");
  const p=(d?.candidates?.[0]?.content?.parts||[]).find(x=>x.inlineData?.data);
  if(!p?.inlineData?.data) throw new Error("Image model returned no image.");

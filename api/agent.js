@@ -101,8 +101,7 @@ EXECUTION POLICY:
   const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){
-   const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("
-").trim();
+   const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
    return json(res,200,{text:text||"No response received.",activity});
   }
   contents.push(candidate.content);
@@ -147,8 +146,7 @@ EXECUTION POLICY:
  const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains.";
  try{
   const fd=await geminiGenerate(key,model,finalSystem,contents,false,activeToolDefinitions);
-  const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("
-").trim();
+  const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
   return json(res,200,{text:ft||"I reached the safe execution limit before finishing the task.",activity});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }

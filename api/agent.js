@@ -88,6 +88,20 @@ function toGeminiContents(messages){
  return messages.filter(m=>m&&["user","assistant"].includes(m.role)).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:String(m.text||"")}] }));
 }
 
+function compactContents(messages){
+ const keep=messages.slice(-12);
+ return keep.map(m=>({
+  ...m,
+  parts:Array.isArray(m.parts)?m.parts.map(p=>{
+   if(typeof p.text==="string" && p.text.length>7000) return {...p,text:p.text.slice(0,7000)+"\\n[context trimmed]"};
+   if(p.functionResponse?.response?.result?.content && typeof p.functionResponse.response.result.content==="string" && p.functionResponse.response.result.content.length>7000){
+    return {...p,functionResponse:{...p.functionResponse,response:{...p.functionResponse.response,result:{...p.functionResponse.response.result,content:p.functionResponse.response.result.content.slice(0,7000)+"\\n[tool output trimmed]"}}}};
+   }
+   return p;
+  }):m.parts
+ }));
+}
+
 async function geminiGenerate(apiKey,model,system,contents,useTools=true,activeDefinitions=toolDefinitions){
  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent?key="+encodeURIComponent(apiKey),{
   method:"POST",headers:{"Content-Type":"application/json"},
@@ -118,9 +132,9 @@ EXECUTION POLICY:
 - After successful requested changes, stop tools and report changed files and commit result.
 - Never claim an action happened unless a tool result confirms it.`;
 
- let contents=toGeminiContents(messages).slice(-20);
+ let contents=compactContents(toGeminiContents(messages));\n const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!/429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(String(e?.message||e)))throw e;}}throw last;};
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
- const model=process.env.GEMINI_MODEL||"gemini-3.5-flash-lite";
+ const models=[process.env.GEMINI_MODEL,"gemini-3.8-flash","gemini-3.5-flash-lite"].filter((m,i,a)=>m&&!a.slice(0,i).includes(m));
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
@@ -128,7 +142,7 @@ EXECUTION POLICY:
  const maxGithubReads=7,maxToolCalls=12,maxRounds=15;
 
  for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
-  let d; try{d=await geminiGenerate(key,model,system,contents,true,activeToolDefinitions)}catch(e){return json(res,502,{error:e.message,activity})}
+  let d; try{d=await generateWithFallback(true)}catch(e){return json(res,502,{error:e.message,activity})}
   const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){
@@ -190,13 +204,13 @@ EXECUTION POLICY:
    }
   }
   if(calls.length>allowedCalls.length) responseParts.push({functionResponse:{name:"tool_budget_guard",response:{error:"At most 2 tool calls are allowed per model round. Continue from returned results instead of issuing parallel calls."}}});
-  contents.push({role:"user",parts:responseParts});
+  contents.push({role:"user",parts:responseParts});\n  contents=compactContents(contents);
   if(consecutiveFailures>=2) break;
  }
 
  const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains.";
  try{
-  const fd=await geminiGenerate(key,model,finalSystem,contents,false,activeToolDefinitions);
+  const fd=await (async()=>{let last;for(const m of models){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!/429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(String(e?.message||e)))throw e;}}throw last;})();
   const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
   return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}

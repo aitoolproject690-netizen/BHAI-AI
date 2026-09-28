@@ -65,9 +65,10 @@ function App(){
  }
  function useTool(label){
   if(label==='connect'){setConnectOpen(true);setToolsOpen(false);return}
+  if(label==='mission'){setMissionMode(true);setToolsOpen(false);return}
   const prompts={web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: '};
-  if(label==='connect'){setConnectOpen(true);setToolsOpen(false);return}
-  setInput(v=>(v?v+'\n':'')+prompts[label]);setToolsOpen(false);
+  const prompt=prompts[label]; if(!prompt)return;
+  setInput(v=>(v?v+'\n':'')+prompt);setToolsOpen(false);
  }
  async function compileMission(goalOverride){
   const goal=(goalOverride??input).trim(); if(!goal||running)return;

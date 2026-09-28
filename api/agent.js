@@ -139,7 +139,18 @@ EXECUTION POLICY:
 
  let contents=compactContents(toGeminiContents(messages));
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
- const models=[process.env.GEMINI_MODEL,"gemini-3.8-flash","gemini-3.7-flash","gemini-3.1-flash","gemini-flash-latest","gemini-flash-lite-latest"].filter((m,i,a)=>m&&!a.slice(0,i).includes(m));
+ async function getAvailableModels(){
+ const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models?key="+encodeURIComponent(key));
+ const d=await r.json();
+ if(!r.ok) throw new Error(d?.error?.message||"Unable to list Gemini models");
+ return (d.models||[])
+  .filter(m=>Array.isArray(m.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent"))
+  .map(m=>String(m.name||"").replace(/^models\\//,""))
+  .filter(Boolean);
+}
+const models=await getAvailableModels();
+const preferred=["gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash","gemini-3.5-flash-lite","gemini-3.1-pro-preview"];
+models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return (ai<0?999:ai)-(bi<0?999:bi);});
  const isTransientModelError=(e)=>/429|RESOURCE_EXHAUSTED|quota|rate.?limit|high demand|temporarily unavailable|try again later|overloaded/i.test(String(e?.message||e));
  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<5;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<4) await sleep(Math.min(8000,1500*Math.pow(2,attempt)));}}}throw last;};

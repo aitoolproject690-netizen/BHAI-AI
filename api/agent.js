@@ -16,14 +16,35 @@ async function webSearch(q){
 }
 
 async function generateImage(prompt,aspectRatio="16:9"){
+ const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;
+ const height=aspectRatio==="9:16"?1365:aspectRatio==="1:1"?768:576;
+ const hf=process.env.HF_TOKEN;
+ const hfModel=process.env.HF_IMAGE_MODEL||"black-forest-labs/FLUX.1-schnell";
+ if(hf){
+  const r=await fetch("https://router.huggingface.co/hf-inference/models/"+encodeURIComponent(hfModel),{
+   method:"POST",
+   headers:{Authorization:"Bearer "+hf,"Content-Type":"application/json"},
+   body:JSON.stringify({inputs:prompt,parameters:{width,height}})
+  });
+  const ct=r.headers.get("content-type")||"";
+  if(r.ok&&ct.startsWith("image/")){
+   const b=Buffer.from(await r.arrayBuffer());
+   return {mimeType:ct.split(";")[0]||"image/png",data:b.toString("base64"),provider:"huggingface"};
+  }
+  const err=await r.text();
+  if(r.status!==401&&r.status!==403&&r.status!==402) throw new Error("Hugging Face image generation failed: "+err.slice(0,500));
+ }
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
- if(!key) throw new Error("Gemini API key is not configured.");
+ if(!key) throw new Error("No image provider configured. Add HF_TOKEN (recommended) or GEMINI_API_KEY in Render Environment.");
  const model=process.env.GEMINI_IMAGE_MODEL||"gemini-3.1-flash-image";
- const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],imageConfig:{aspectRatio}}})});
+ const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{
+  method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},
+  body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],imageConfig:{aspectRatio}}})
+ });
  const d=await r.json(); if(!r.ok) throw new Error(d?.error?.message||"Image generation failed");
  const p=(d?.candidates?.[0]?.content?.parts||[]).find(x=>x.inlineData?.data);
  if(!p?.inlineData?.data) throw new Error("Image model returned no image.");
- return {mimeType:p.inlineData.mimeType||"image/png",data:p.inlineData.data};
+ return {mimeType:p.inlineData.mimeType||"image/png",data:p.inlineData.data,provider:"gemini"};
 }
 
 async function github(action,a){
@@ -58,7 +79,7 @@ async function github(action,a){
 }
 
 const toolDefinitions=[
- {name:"generate_image",description:"Generate an actual image from the user's request using the connected Gemini image model. Use this when the user asks to create, draw, generate, make, design, or visualize an image. Do not merely write an image prompt when this tool is available.",parameters:{type:"OBJECT",properties:{prompt:{type:"STRING",description:"Detailed image-generation prompt based on the user's request"},aspectRatio:{type:"STRING",description:"Output aspect ratio, usually 1:1, 16:9, or 9:16"}},required:["prompt"]}},
+ {name:"generate_image",description:"Generate an actual image. Prefer Hugging Face Inference Providers when HF_TOKEN is configured; fall back to Gemini when available. Use this when the user asks to create, draw, generate, make, design, or visualize an image. Do not merely write an image prompt when this tool is available.",parameters:{type:"OBJECT",properties:{prompt:{type:"STRING",description:"Detailed image-generation prompt based on the user's request"},aspectRatio:{type:"STRING",description:"Output aspect ratio, usually 1:1, 16:9, or 9:16"}},required:["prompt"]}},
  {name:"web_search",description:"Search public web for current information. Use only when the task genuinely needs current external information.",parameters:{type:"OBJECT",properties:{query:{type:"STRING",description:"Search query"}},required:["query"]}},
  {name:"github_info",description:"Get GitHub repository information. Use once to verify the repository before repository work.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"}},required:["owner","repo"]}},
  {name:"github_read",description:"Read a GitHub file or directory. Prefer one root directory read first, then only the minimum key files needed. Never reread a path.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path"]}}

@@ -10,6 +10,12 @@ on:
       - 'package.json'
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:
+    inputs:
+      official_release:
+        description: 'Owner-approved official release'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   build:
@@ -45,3 +51,11 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+  official-release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.official_release == true && secrets.BHAI_OWNER_RELEASE == 'AUTHORIZED' }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Owner release gate passed
+        run: echo "BHAI X official release gate passed"

@@ -134,8 +134,10 @@ EXECUTION POLICY:
 
  let contents=compactContents(toGeminiContents(messages));
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
- const models=[process.env.GEMINI_MODEL,"gemini-3.8-flash","gemini-3.5-flash-lite"].filter((m,i,a)=>m&&!a.slice(0,i).includes(m));
- const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!/429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(String(e?.message||e)))throw e;}}throw last;};
+ const models=[process.env.GEMINI_MODEL,"gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash","gemini-3.5-flash-lite"].filter((m,i,a)=>m&&!a.slice(0,i).includes(m));
+ const isTransientModelError=(e)=>/429|RESOURCE_EXHAUSTED|quota|rate.?limit|high demand|temporarily unavailable|try again later|overloaded/i.test(String(e?.message||e));
+ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+ const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<2;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt===0) await sleep(1200);}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
@@ -212,7 +214,7 @@ EXECUTION POLICY:
 
  const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains.";
  try{
-  const fd=await (async()=>{let last;for(const m of models){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!/429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(String(e?.message||e)))throw e;}}throw last;})();
+  const fd=await (async()=>{let last;for(const m of models){for(let attempt=0;attempt<2;attempt++){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt===0) await sleep(1200);}}}throw last;})();
   const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
   return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}

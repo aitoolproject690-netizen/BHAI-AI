@@ -5,6 +5,10 @@ import'./styles.css';
 import OwnerPanel from'./OwnerPanel.jsx';
 import ConnectPanel from'./ConnectPanel.jsx';
 import SettingsPanel from'./SettingsPanel.jsx';
+import CodeFixPanel from'./CodeFixPanel.jsx';
+
+const API_BASE=(typeof window!=='undefined'&&/^https?:\/\/localhost(?::\d+)?$/.test(window.location.origin))?'https://bhai-ai-vpna.onrender.com':'';
+const apiUrl=p=>API_BASE+p;
 
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};
@@ -45,7 +49,7 @@ function App(){
   upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
   try{
    setTimeout(()=>setActivity(a=>a.map(x=>x.id===id+'1'?{...x,state:'done'}:x.id===id+'2'?{...x,state:'running'}:x)),350);
-   const r=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:next,doIt})});
+   const r=await fetch(apiUrl('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:next,doIt})});
    const d=await r.json();
    setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
@@ -75,7 +79,7 @@ function App(){
   const goal=(goalOverride??input).trim(); if(!goal||running)return;
   setRunning(true);setToolsOpen(false);setActivityOpen(false);
   try{
-   const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'compile_goal',goal})});
+   const r=await fetch(apiUrl('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'compile_goal',goal})});
    const d=await r.json(); if(!r.ok)throw new Error(d.error||'Mission compile failed');
    const m=d.mission;
    const plan='🎯 MISSION MODE\\n\\nGoal: '+m.goal+'\\n\\n'+m.steps.map((s,i)=>(i+1)+'. '+s.name).join('\\n')+'\\n\\nStatus: '+m.steps.length+' steps compiled.'+(doIt?'\\n\\nDO IT ON — mission execution start ho raha hai.':'\\n\\nDO IT OFF — plan ready hai; execute karne ke liye DO IT ON karo.');
@@ -85,7 +89,7 @@ function App(){
    upd(()=>next);setInput('');setMissionMode(false);
    if(doIt){
     const execMessages=[...next,{id:crypto.randomUUID(),role:'user',text:'MISSION EXECUTION: Ab compiled mission ko end-to-end execute karo. Required files/code changes/build/test/deploy jo possible ho actual tools se karo. Har step verify karo; kaam complete hone tak execute karo.'}];
-    const er=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:execMessages,doIt:true})});
+    const er=await fetch(apiUrl('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:execMessages,doIt:true})});
     const ed=await er.json();
     upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:ed.text||('⚠️ '+(ed.error||'Mission execution failed')),images:ed.images||[]}]);
     if(Array.isArray(ed.activity)&&ed.activity.length)setActivity(ed.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Mission',text:x.state||'done',state:x.state||'done'})));

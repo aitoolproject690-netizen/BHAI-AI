@@ -11,6 +11,8 @@ import ConnectPanel from'./ConnectPanel.jsx';
 import SettingsPanel from'./SettingsPanel.jsx';
 import ConnectPanel from'./ConnectPanel.jsx';
 import SettingsPanel from'./SettingsPanel.jsx';
+import ConnectPanel from'./ConnectPanel.jsx';
+import SettingsPanel from'./SettingsPanel.jsx';
 
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};
@@ -71,6 +73,7 @@ function App(){
  function useTool(label){
   if(label==='connect'){setConnectOpen(true);setToolsOpen(false);return}
   const prompts={web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: '};
+  if(label==='connect'){setConnectOpen(true);setToolsOpen(false);return}
   setInput(v=>(v?v+'\n':'')+prompts[label]);setToolsOpen(false);
  }
  async function compileMission(){

@@ -5,6 +5,8 @@ import'./styles.css';
 import OwnerPanel from'./OwnerPanel.jsx';
 import ConnectPanel from'./ConnectPanel.jsx';
 import SettingsPanel from'./SettingsPanel.jsx';
+import ConnectPanel from'./ConnectPanel.jsx';
+import SettingsPanel from'./SettingsPanel.jsx';
 
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};

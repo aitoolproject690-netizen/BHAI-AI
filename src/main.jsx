@@ -3,6 +3,8 @@ import{createRoot}from'react-dom/client';
 import{Send,Mic,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug}from'lucide-react';
 import'./styles.css';
 import OwnerPanel from'./OwnerPanel.jsx';
+import ConnectPanel from'./ConnectPanel.jsx';
+import SettingsPanel from'./SettingsPanel.jsx';
 
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};
@@ -23,7 +25,7 @@ function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),[doIt,setDoIt]=useState(true);
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
- const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false);
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false);
  const end=useRef(null),recognition=useRef(null);
 
  useEffect(()=>{if(!sessions.length){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);
@@ -86,13 +88,13 @@ function App(){
    <button className="newChat" onClick={newChat}><Plus size={17}/> New chat</button>
    <div className="searchBox"><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search chats"/></div>
    <div className="history">{filtered.map(s=><button className={s.id===active?'chat active':'chat'} onClick={()=>setActive(s.id)} key={s.id}>{s.title}</button>)}</div>
-   <div className="sideBottom"><div className="status"><span/> Agent online</div><button className="ownerOpenBtn" onClick={()=>setOwnerOpen(true)}><ShieldCheck size={15}/> Owner Control</button><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><Settings size={15}/></div></div>
+   <div className="sideBottom"><div className="status"><span/> Agent online</div><button className="ownerOpenBtn" onClick={()=>setOwnerOpen(true)}><ShieldCheck size={15}/> Owner Control</button><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><button className="settingsBtn" aria-label="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={16}/></button></div></div>
   </aside>
   <main>
    <header>
     {!sidebar&&<button className="openSide" onClick={()=>setSidebar(true)}><PanelLeftOpen size={19}/></button>}
     <div className="topTitle"><b>BHAI X</b><button className="modelBtn">BHAI X Agent <ChevronDown size={14}/></button></div>
-    <button className={doIt?'topDo on':'topDo'} onClick={()=>setDoIt(v=>!v)}><Zap size={14}/> DO IT {doIt?'ON':'OFF'}</button>
+    <button className={doIt?'topDo on':'topDo'} onClick={()=>setDoIt(v=>{const n=!v;localStorage.setItem('bhai_x_default_doit',String(n));return n})}><Zap size={14}/> DO IT {doIt?'ON':'OFF'}</button>
    </header>
    <section className="messages">
     {chat?.messages.map(m=><div className={m.role==='user'?'row user':'row'} key={m.id}>
@@ -123,6 +125,8 @@ function App(){
    </div>
   </main>
  {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>} 
+ {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>} 
+ {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>} 
  </div>
 }
 createRoot(document.getElementById('root')).render(<App/>);

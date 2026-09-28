@@ -205,7 +205,8 @@ EXECUTION POLICY:
    }
   }
   if(calls.length>allowedCalls.length) responseParts.push({functionResponse:{name:"tool_budget_guard",response:{error:"At most 2 tool calls are allowed per model round. Continue from returned results instead of issuing parallel calls."}}});
-  contents.push({role:"user",parts:responseParts});\n  contents=compactContents(contents);
+  contents.push({role:"user",parts:responseParts});
+  contents=compactContents(contents);
   if(consecutiveFailures>=2) break;
  }
 

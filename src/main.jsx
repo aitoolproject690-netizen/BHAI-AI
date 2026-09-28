@@ -48,7 +48,7 @@ function App(){
   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t}];
   upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
   try{
-   setTimeout(()=>setActivity(a=>a.map(x=>x.id===id+'1'?{...x,state:'done'}:x.id===id+'2'?{...x,state:'running'}:x)),350);
+   const pf=await fetch(apiUrl("/api/control"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"preflight"})}).then(r=>r.json()).catch(e=>({ready:false,risks:[{message:e.message}]})); if(!pf.ready){upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"🛡️ PRE-FLIGHT STOP\n\n"+(pf.risks||[]).map(x=>"⚠️ "+x.message).join("\n")+"\n\nBHAI X ne predictable failure se pehle task rok diya. Required connection/model fix karo, phir task resume karenge."}]);setActivity(a=>a.map(x=>({...x,state:x.state==="running"?"failed":x.state})));return;} setActivity(a=>a.map(x=>x.id===id+"1"?{...x,state:"done"}:x.id===id+"2"?{...x,state:"running"}:x));
    const r=await fetch(apiUrl('/api/agent'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:next,doIt})});
    const d=await r.json();
    setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));

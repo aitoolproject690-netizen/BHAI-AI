@@ -139,7 +139,7 @@ EXECUTION POLICY:
 
  let contents=compactContents(toGeminiContents(messages));
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
- const models=[process.env.GEMINI_MODEL,"gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash","gemini-2.0-flash-lite","gemini-3.1-flash-lite","gemini-3.1-flash"].filter((m,i,a)=>m&&!a.slice(0,i).includes(m));
+ const models=[process.env.GEMINI_MODEL,"gemini-3.8-flash","gemini-3.7-flash","gemini-3.1-flash","gemini-flash-latest","gemini-flash-lite-latest"].filter((m,i,a)=>m&&!a.slice(0,i).includes(m));
  const isTransientModelError=(e)=>/429|RESOURCE_EXHAUSTED|quota|rate.?limit|high demand|temporarily unavailable|try again later|overloaded/i.test(String(e?.message||e));
  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<5;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<4) await sleep(Math.min(8000,1500*Math.pow(2,attempt)));}}}throw last;};

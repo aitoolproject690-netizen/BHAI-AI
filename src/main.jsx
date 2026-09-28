@@ -5,6 +5,8 @@ import'./styles.css';
 import OwnerPanel from'./OwnerPanel.jsx';
 import ConnectPanel from'./ConnectPanel.jsx';
 import SettingsPanel from'./SettingsPanel.jsx';
+import ConnectPanel from'./ConnectPanel.jsx';
+import SettingsPanel from'./SettingsPanel.jsx';
 
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};
@@ -115,7 +117,7 @@ function App(){
     <div className="composerTools">
      <div className="toolMenuWrap">
       <button className="roundBtn" onClick={()=>setToolsOpen(v=>!v)}><Plus size={20}/></button>
-      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button><button onClick={compileMission}><Target/> Mission Mode</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button></div>}
+      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button><button onClick={()=>useTool('mission')}><Target/> Mission Mode</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button></div>}
      </div>
      <label className="roundBtn attach"><Paperclip size={19}/><input type="file" hidden onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setFileInfo({name:f.name,text:(await f.text()).slice(0,50000)})}}/></label>
      <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message BHAI X..." rows="1"/>

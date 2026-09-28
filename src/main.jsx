@@ -1,1 +1,115 @@
-import React,{useEffect,useRef,useState}from'react';import{createRoot}from'react-dom/client';import{Send,Mic,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,FileText,Activity,CheckCircle2,Clock,AlertCircle,Download,ChevronDown,ChevronUp}from'lucide-react';import'./styles.css';const K='bhai_x_v3';function renderMessageText(text=''){const urlRe=new RegExp('(https?://[^\\s<]+|www\\.[^\\s<]+)','g');return text.split(urlRe).map((part,i)=>{const clean=part.replace(/[.,!?;:]+$/,'');const trailing=part.slice(clean.length);if(clean.startsWith('http://')||clean.startsWith('https://')||clean.startsWith('www.')){const href=clean.startsWith('www.')?'https://'+clean:clean;return <React.Fragment key={i}><a className="messageLink" href={href} target="_blank" rel="noopener noreferrer">{clean}</a>{trailing}</React.Fragment>}return <React.Fragment key={i}>{part}</React.Fragment>})}const starter=[{id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\\n\\nTask execution system active hai. Koi bhi task bhej. Live Activity ko niche se open karke steps dekh sakta hai.\\n\\n⚡ DO IT = active mode.'}];function App(){const[fileInfo,setFileInfo]=useState(null),[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}}),[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),[doIt,setDoIt]=useState(true),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false),[listening,setListening]=useState(false),end=useRef(null),recognition=useRef(null);useEffect(()=>{if(!sessions.length){let s={id:crypto.randomUUID(),title:'New Chat',messages:starter};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);useEffect(()=>{localStorage.setItem(K,JSON.stringify(sessions));end.current?.scrollIntoView({behavior:'smooth'})},[sessions]);let chat=sessions.find(x=>x.id===active);const upd=fn=>setSessions(a=>a.map(s=>s.id===active?{...s,messages:fn(s.messages)}:s));async function send(){let t=input.trim();if(fileInfo)t=t+'\\n\\n[Attached file: '+fileInfo.name+' ]\\n'+fileInfo.text;if(!t||running||!chat)return;setInput('');setFileInfo(null);setRunning(true);setActivityOpen(false);const taskId=crypto.randomUUID();setActivity([{id:taskId+'-1',text:'Planning task requirements & intent...',state:'running',step:'Planning'},{id:taskId+'-2',text:'Selecting appropriate tools...',state:'pending',step:'Tool Selection'},{id:taskId+'-3',text:'Executing backend & agent work...',state:'pending',step:'Working'},{id:taskId+'-4',text:'Finalizing and rendering response...',state:'pending',step:'Completed'}]);const user={id:crypto.randomUUID(),role:'user',text:t};const next=[...chat.messages,user];upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New Chat'?{...s,title:t.slice(0,30)}:s));try{setTimeout(()=>setActivity(a=>a.map(x=>x.id===taskId+'-1'?{...x,state:'done'}:x.id===taskId+'-2'?{...x,state:'running'}:x)),400);const r=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:next,doIt})});setTimeout(()=>setActivity(a=>a.map(x=>x.id===taskId+'-2'?{...x,state:'done'}:x.id===taskId+'-3'?{...x,state:'running'}:x)),800);const d=await r.json();setTimeout(()=>setActivity(a=>a.map(x=>x.id===taskId+'-3'?{...x,state:'done'}:x.id===taskId+'-4'?{...x,state:'done'}:x)),1200);if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a.filter(x=>!x.id.startsWith(taskId)),...d.activity.map(x=>({id:crypto.randomUUID(),text:(x.tool==='web_search'?'🌐 Web search: ':x.tool==='github_read'?'📖 GitHub read: ':x.tool==='github_update'?'✏️ GitHub update: ':'🔧 '+x.tool+': ')+(x.state||'done'),state:x.state}))]);upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}]);}catch(e){upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ Connection error: '+e.message}]);setActivity(a=>a.map(x=>x.id.startsWith(taskId)?{...x,state:'failed'}:x));}finally{setRunning(false)}}function newChat(){let s={id:crypto.randomUUID(),title:'New Chat',messages:starter};setSessions(a=>[s,...a]);setActive(s.id);setActivity([]);setActivityOpen(false);setFileInfo(null)}function toggleMic(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert('Bhai, voice input support nahi hai.');return}if(listening){recognition.current?.stop();return}const r=new SR();r.lang='hi-IN';r.interimResults=true;r.continuous=false;r.onstart=()=>setListening(true);r.onend=()=>setListening(false);r.onerror=()=>setListening(false);r.onresult=e=>{let s='';for(const x of e.results)s+=x[0].transcript;setInput(v=>(v?v+' ':'')+s)};recognition.current=r;r.start()}return <div className="app"><aside><div className="brand"><div className="logo">B</div><div><b>BHAI X</b><span>Personal Agent</span></div></div><button className="new" onClick={newChat}><Plus size={18}/> New Chat</button><div className="history">{sessions.map(s=><button className={s.id===active?'chat active':'chat'} onClick={()=>setActive(s.id)} key={s.id}>{s.title}</button>)}</div><div className="sideBottom"><div className="status"><span/> Agent online</div></div></aside><main><header><div><h1>BHAI X</h1><p>Personal AI • Build • Search • Fix • Execute</p></div><div className="badges"><span><ShieldCheck size={15}/> Permission based</span><button className={doIt?'mode on':'mode'} onClick={()=>setDoIt(v=>!v)}><Zap size={15}/> DO IT {doIt?'ON':'OFF'}</button></div></header><section className="hero"><div className="heroIcon"><Zap/></div><div><h2>Bol bhai, kya kaam karna hai?</h2><p>Chat yahin rahega. Live task steps optional panel mein hain.</p></div></section><div className="tools"><div><Globe2/> Web Agent<small>Research</small></div><div><Code2/> Coding Agent<small>Build & fix</small></div><div><FileText/> File Agent<small>Read & create</small></div><div><ShieldCheck/> Live Steps<small>Optional</small></div></div><section className="messages">{chat?.messages.map(m=><div className={m.role==='user'?'row user':'row'} key={m.id}><div className={m.role==='user'?'bubble userBubble':'bubble'}>{renderMessageText(m.text)}{m.images?.map((im,i)=>{const src='data:'+im.mimeType+';base64,'+im.data;return <div className="generatedWrap" key={i}><img className="generatedImage" src={src} alt="BHAI X generated"/><a className="downloadBtn" href={src} download={'bhai-x-image-'+(i+1)+'.png'}><Download size={15}/> Download Image</a></div>})}</div></div>)}{running&&<div className="row"><div className="bubble"><Loader2 className="spin"/> Working on task...</div></div>}<div ref={end}/></section>{activityOpen&&<section className="activity"><div className="activityHead"><span><Activity size={14}/> Task Execution Activity</span><button onClick={()=>setActivityOpen(false)}><ChevronDown size={15}/> Hide</button></div>{activity.length===0?<div className="activityItem">No active tasks.</div>:activity.map(x=><div className={'activityItem '+x.state} key={x.id}>{x.state==='done'?<CheckCircle2 size={14}/>:x.state==='running'?<Loader2 size={14} className="spin"/>:x.state==='failed'?<AlertCircle size={14}/>:<Clock size={14}/>}<span><b>{x.step?x.step+': ':''}</b>{x.text}</span><small>{x.state}</small></div>)}</section>}<div className="mobileControls"><button className={doIt?"quickDo on":"quickDo"} onClick={()=>setDoIt(v=>!v)}><Zap size={13}/> DO IT {doIt?"ON":"OFF"}</button><button className="quickSteps" onClick={()=>setActivityOpen(v=>!v)}><Activity size={13}/> {activityOpen?"Hide Steps":"Task Steps"}</button></div><div className="composer"><label className="attach"><Paperclip/><input type="file" hidden onChange={async e=>{const f=e.target.files?.[0];if(!f)return;const text=await f.text();setFileInfo({name:f.name,text:text.slice(0,50000)});}}/></label><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Bhai, task bol..."/><button className={listening?'mic listening':''} onClick={toggleMic}><Mic/></button><button className="send" onClick={send}><Send/></button></div><div className="hint">{activity.length>0&&<button className="activityToggle" onClick={()=>setActivityOpen(v=>!v)}>{activityOpen?<ChevronUp size={12}/>:<Activity size={12}/>} {activityOpen?'Hide':'Show'} task steps</button>}{fileInfo&&<span>📎 {fileInfo.name} • <button className="clearFile" onClick={()=>setFileInfo(null)}>remove</button></span>} Enter = send • Shift+Enter = new line • <b>DO IT {doIt?'ON':'OFF'}</b></div></main></div>}createRoot(document.getElementById('root')).render(<App/>);
+import React,{useEffect,useRef,useState}from'react';
+import{createRoot}from'react-dom/client';
+import{Send,Mic,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw}from'lucide-react';
+import'./styles.css';
+
+const K='bhai_x_v3';
+const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};
+
+function renderText(text=''){
+ const urlRe=/(https?:\/\/[^\s<]+|www\.[^\s<]+)/g;
+ return text.split(urlRe).map((part,i)=>{
+  const clean=part.replace(/[.,!?;:]+$/,'');const trailing=part.slice(clean.length);
+  if(clean.startsWith('http://')||clean.startsWith('https://')||clean.startsWith('www.')){
+   const href=clean.startsWith('www.')?'https://'+clean:clean;
+   return <React.Fragment key={i}><a className="messageLink" href={href} target="_blank" rel="noopener noreferrer">{clean}</a>{trailing}</React.Fragment>;
+  }
+  return <React.Fragment key={i}>{part}</React.Fragment>;
+ });
+}
+
+function App(){
+ const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
+ const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),[doIt,setDoIt]=useState(true);
+ const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState('');
+ const end=useRef(null),recognition=useRef(null);
+
+ useEffect(()=>{if(!sessions.length){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);
+ useEffect(()=>{localStorage.setItem(K,JSON.stringify(sessions));end.current?.scrollIntoView({behavior:'smooth'})},[sessions]);
+ const chat=sessions.find(x=>x.id===active);
+ const upd=fn=>setSessions(a=>a.map(s=>s.id===active?{...s,messages:fn(s.messages)}:s));
+
+ async function send(textOverride){
+  let t=(textOverride??input).trim();
+  if(fileInfo)t=t+'\n\n[Attached file: '+fileInfo.name+']\n'+fileInfo.text;
+  if(!t||running||!chat)return;
+  setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(false);
+  const id=crypto.randomUUID();
+  setActivity([{id:id+'1',step:'Planning',text:'Planning task requirements...',state:'running'},{id:id+'2',step:'Tools',text:'Selecting tools...',state:'pending'},{id:id+'3',step:'Working',text:'Executing task...',state:'pending'},{id:id+'4',step:'Done',text:'Finalizing response...',state:'pending'}]);
+  const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t}];
+  upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
+  try{
+   setTimeout(()=>setActivity(a=>a.map(x=>x.id===id+'1'?{...x,state:'done'}:x.id===id+'2'?{...x,state:'running'}:x)),350);
+   const r=await fetch('/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:next,doIt})});
+   const d=await r.json();
+   setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
+   if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
+   upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}]);
+  }catch(e){upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ Connection error: '+e.message}]);setActivity(a=>a.map(x=>({...x,state:'failed'})))}finally{setRunning(false)}
+ }
+
+ function newChat(){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions(a=>[s,...a]);setActive(s.id);setInput('');setFileInfo(null);setActivity([]);setActivityOpen(false)}
+ function toggleMic(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert('Bhai, is phone par voice input support nahi hai.');return}
+  if(listening){recognition.current?.stop();return}
+  const r=new SR();r.lang='hi-IN';r.interimResults=true;r.continuous=false;
+  r.onstart=()=>setListening(true);r.onend=()=>setListening(false);r.onerror=()=>setListening(false);
+  r.onresult=e=>{let s='';for(const x of e.results)s+=x[0].transcript;setInput(v=>(v?v+' ':'')+s)};
+  recognition.current=r;r.start();
+ }
+ function useTool(label){
+  const prompts={web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: '};
+  setInput(v=>(v?v+'\n':'')+prompts[label]);setToolsOpen(false);
+ }
+ async function copyText(text,id){try{await navigator.clipboard.writeText(text);setCopied(id);setTimeout(()=>setCopied(''),1200)}catch{}}
+ const filtered=sessions.filter(s=>s.title.toLowerCase().includes(search.toLowerCase()));
+ return <div className="app">
+  <aside className={sidebar?'sidebar':'sidebar closed'}>
+   <div className="sideTop">
+    <div className="brand"><div className="logo">B</div><div><b>BHAI X</b><span>Personal AI Agent</span></div></div>
+    <button className="sideToggle" onClick={()=>setSidebar(false)}><PanelLeftClose size={17}/></button>
+   </div>
+   <button className="newChat" onClick={newChat}><Plus size={17}/> New chat</button>
+   <div className="searchBox"><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search chats"/></div>
+   <div className="history">{filtered.map(s=><button className={s.id===active?'chat active':'chat'} onClick={()=>setActive(s.id)} key={s.id}>{s.title}</button>)}</div>
+   <div className="sideBottom"><div className="status"><span/> Agent online</div><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><Settings size={15}/></div></div>
+  </aside>
+  <main>
+   <header>
+    {!sidebar&&<button className="openSide" onClick={()=>setSidebar(true)}><PanelLeftOpen size={19}/></button>}
+    <div className="topTitle"><b>BHAI X</b><button className="modelBtn">BHAI X Agent <ChevronDown size={14}/></button></div>
+    <button className={doIt?'topDo on':'topDo'} onClick={()=>setDoIt(v=>!v)}><Zap size={14}/> DO IT {doIt?'ON':'OFF'}</button>
+   </header>
+   <section className="messages">
+    {chat?.messages.map(m=><div className={m.role==='user'?'row user':'row'} key={m.id}>
+      <div className={m.role==='user'?'bubble userBubble':'bubble'}>
+       {m.role==='assistant'&&<div className="assistantLabel"><div className="miniLogo">B</div><b>BHAI X</b></div>}
+       <div className="messageText">{renderText(m.text)}</div>
+       {m.images?.map((im,i)=>{const src='data:'+im.mimeType+';base64,'+im.data;return <div className="generatedWrap" key={i}><img className="generatedImage" src={src}/><a className="downloadBtn" href={src} download={'bhai-x-image-'+(i+1)+'.png'}><Download size={14}/> Download</a></div>})}
+       {m.role==='assistant'&&!running&&<div className="messageActions"><button onClick={()=>copyText(m.text,m.id)}>{copied===m.id?<Check size={13}/>:<Copy size={13}/>} {copied===m.id?'Copied':'Copy'}</button></div>}
+      </div>
+    </div>)}
+    {running&&<div className="row"><div className="bubble working"><Loader2 className="spin" size={16}/> BHAI X is working...</div></div>}
+    <div ref={end}/>
+   </section>
+   {activityOpen&&<section className="activity"><div className="activityHead"><b>Task steps</b><button onClick={()=>setActivityOpen(false)}><X size={14}/></button></div>{activity.map(x=><div className="activityItem" key={x.id}><span className={x.state==='done'?'ok':''}>{x.state==='done'?<Check size={12}/>:<Loader2 size={12} className={x.state==='running'?'spin':''}/>}</span><b>{x.step}</b><span>{x.text}</span></div>)}</section>}
+   <div className="composerWrap">
+    <div className="composerTools">
+     <div className="toolMenuWrap">
+      <button className="roundBtn" onClick={()=>setToolsOpen(v=>!v)}><Plus size={20}/></button>
+      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button></div>}
+     </div>
+     <label className="roundBtn attach"><Paperclip size={19}/><input type="file" hidden onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setFileInfo({name:f.name,text:(await f.text()).slice(0,50000)})}}/></label>
+     <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message BHAI X..." rows="1"/>
+     <button className={listening?'roundBtn mic listening':'roundBtn mic'} onClick={toggleMic}><Mic size={19}/></button>
+     <button className="sendBtn" disabled={!input.trim()&&!fileInfo||running} onClick={()=>send()}>{running?<Loader2 className="spin" size={19}/>:<Send size={19}/>}</button>
+    </div>
+    {fileInfo&&<div className="fileChip"><Paperclip size={12}/> {fileInfo.name}<button onClick={()=>setFileInfo(null)}><X size={12}/></button></div>}
+    <div className="composerHint">BHAI X can search, code, generate images, work with files and execute tasks. <b>Check important results.</b></div>
+   </div>
+  </main>
+ </div>
+}
+createRoot(document.getElementById('root')).render(<App/>);

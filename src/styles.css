@@ -2,3 +2,5 @@
 .mode{border:1px solid #333;background:#161616;color:#aaa;padding:7px 10px;border-radius:10px;display:flex;align-items:center;gap:5px;font:inherit;cursor:pointer}.mode.on{color:#fff;border-color:#666;background:#242424}
 
 .activity{margin:0 24px 4px;border:1px solid #202738;background:#0d131e;border-radius:12px;padding:8px 10px}.activityHead{display:flex;justify-content:space-between;align-items:center;color:#aeb8cd;font-size:11px;font-weight:700}.activityHead span{display:flex;align-items:center;gap:5px}.activityHead small{color:#6f7b91}.activityItem{display:flex;align-items:center;gap:7px;padding-top:7px;color:#8995ab;font-size:11px}.activityItem svg{color:#5ee1a5}.activityItem small{margin-left:auto;color:#66738a}@media(max-width:760px){.activity{margin-left:14px;margin-right:14px}}
+
+.messageLink{color:#60a5fa;text-decoration:underline;text-underline-offset:2px;cursor:pointer}.messageLink:hover{color:#93c5fd}

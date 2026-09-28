@@ -136,15 +136,15 @@ export default async function handler(req,res){
 Reply in Hinglish when the user does. Be concise and action-oriented. DO IT mode is ${doIt?"ON":"OFF"}.
 
 EXECUTION POLICY:
-- First make a compact internal plan: desired outcome, required skills, minimum tools/files.
+- First make a compact internal plan: desired outcome, required skills, minimum tools/files. Before execution, perform a pre-flight risk check for API/model availability, credentials, required files, dependencies and target service health whenever relevant. Prevent predictable failures instead of waiting for them.
 - Execute skills in the selected order. Do not randomly switch skills.
 - For repository work: github_info once, then read the repository root directory once. Treat that listing as authoritative: only read exact file/directory paths returned by it; never guess paths and never reread a path.
 - Do not search the web unless current external information is genuinely required.
 - Do not repeat a failed tool call with the same arguments. If a tool fails, use the error to adjust once; otherwise move forward with gathered information.
 - Prefer implementing once enough context is available. Do not keep reading files just to understand the whole repository.
-- GitHub changes require DO IT mode ON and a clear user request.- For coding/debugging tasks, inspect the smallest relevant files, identify the root cause, make the complete fix, then use GitHub Actions to build/test when a suitable workflow exists. Never claim code is fixed or built until the repository/tool result confirms it.- When a build/test fails, read the failure result, diagnose it, patch the relevant file, and rerun the workflow. Continue until success or a concrete blocker.- For "make an app/APK" tasks, treat source changes, build workflow, build execution, artifact verification, and final delivery as one task when the repository supports them.
+- GitHub changes require DO IT mode ON and a clear user request.- For coding/debugging tasks, inspect the smallest relevant files, identify the root cause, make the complete fix, then use GitHub Actions to build/test when a suitable workflow exists. Never claim code is fixed or built until the repository/tool result confirms it.- When a build/test fails, read the failure result, diagnose it, patch the relevant file, and rerun the workflow. Continue until success or a concrete blocker. For transient API/network/model failures, retry with backoff, use a verified compatible fallback, then resume from the last checkpoint.- For "make an app/APK" tasks, treat source changes, build workflow, build execution, artifact verification, and final delivery as one task when the repository supports them.
 - After successful requested changes, stop tools and report changed files and commit result.
-- Never claim an action happened unless a tool result confirms it.`;
+- Never claim an action happened unless a tool result confirms it. Never say DONE when verification is missing. Every final report must state completed work, remaining work, verification performed, and one or more useful next-step recommendations when appropriate.`;
 
  let contents=compactContents(toGeminiContents(messages));
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");

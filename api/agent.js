@@ -1,5 +1,5 @@
 import { selectSkillsForTask, getSkillPromptContext } from "../src/skillsRouter.js";
-import { ownerState } from "./owner.js";
+import { ownerState, ownerReady } from "./owner.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -112,6 +112,7 @@ async function geminiGenerate(apiKey,model,system,contents,useTools=true,activeD
 }
 
 export default async function handler(req,res){
+ await ownerReady;
  const control=ownerState();
  if(control.serverMode==="maintenance") return json(res,503,{error:"BHAI X is in owner maintenance mode.",maintenance:true});
  if(control.emergencyLock) return json(res,423,{error:"BHAI X is temporarily locked by the owner.",locked:true});

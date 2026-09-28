@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'android/**'
+      - 'src/**'
+      - 'index.html'
+      - 'package.json'
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
@@ -27,7 +30,6 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
-
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4

@@ -65,6 +65,7 @@ function App(){
   recognition.current=r;r.start();
  }
  function useTool(label){
+  if(label==='connect'){setConnectOpen(true);setToolsOpen(false);return}
   const prompts={web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: '};
   setInput(v=>(v?v+'\n':'')+prompts[label]);setToolsOpen(false);
  }

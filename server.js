@@ -14,9 +14,10 @@ import owner from "./api/owner.js";
 import control from "./api/control.js";
 import backups from "./api/backups.js";
 import codefix from "./api/codefix.js";
+import capabilities from "./api/capabilities.js";
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT)||10000;
-const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix};
+const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities};
 function runApi(fn,req,res){
   let body="";
   req.on("data",c=>{body+=c;if(body.length>2000000){res.statusCode=413;req.destroy();}});

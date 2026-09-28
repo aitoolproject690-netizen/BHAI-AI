@@ -7,7 +7,7 @@ import ConnectPanel from'./ConnectPanel.jsx';
 import SettingsPanel from'./SettingsPanel.jsx';
 import CodeFixPanel from'./CodeFixPanel.jsx';
 
-const API_BASE=(typeof window!=='undefined'&&/^https?:\/\/localhost(?::\d+)?$/.test(window.location.origin))?'https://bhai-ai-vpna.onrender.com':'';
+const API_BASE='https://bhai-ai-vpna.onrender.com';
 const apiUrl=p=>API_BASE+p;
 
 const K='bhai_x_v3';

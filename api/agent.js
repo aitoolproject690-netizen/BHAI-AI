@@ -120,9 +120,28 @@ EXECUTION POLICY:
      readPaths.add(readKey);githubReadCount++;
     }
     const normalizedPath=typeof a.path==="string"?(a.path==="."||a.path==="/"?"":a.path.replace(/^\/+/, "")):"";
-    if(name==="github_read"){
-     if(!rootListed && normalizedPath!=="") throw new Error("GitHub path guard: inspect the repository root first.");
-     if(rootListed && !knownPaths.has(normalizedPath)) throw new Error("GitHub path guard: path was not returned by the authoritative root listing. Do not guess paths.");
+    if(name==="github_read" && !rootListed){
+     const rootResult=await github("github_read",{...a,path:""});
+     rootListed=true;
+     for(const item of rootResult.items||[]) knownPaths.add(item.path);
+     seenCalls.set("github_read:"+a.owner+"/"+a.repo+":"+(a.branch||"main")+":",rootResult);
+     if(normalizedPath===""){
+      seenCalls.set(cacheKey,rootResult);
+      consecutiveFailures=0;
+      activity[activity.length-1].state="done";
+      responseParts.push({functionResponse:{name,response:{result:rootResult}}});
+      continue;
+     }
+    }
+    if(name==="github_read" && normalizedPath!=="" && !knownPaths.has(normalizedPath)){
+     const rootResult=seenCalls.get("github_read:"+a.owner+"/"+a.repo+":"+(a.branch||"main")+":");
+     const dir=await github("github_read",{...a,path:normalizedPath});
+     if(dir?.type==="directory"){
+      for(const item of dir.items||[]) knownPaths.add(item.path);
+     }
+    }
+    if(name==="github_read" && rootListed && !knownPaths.has(normalizedPath)){
+     throw new Error("GitHub path guard: path was not returned by the authoritative listing. Use an exact path from the repository listing.");
     }
     const result=name==="web_search"?await webSearch(a.query):await github(name,{...a,path:normalizedPath});
     if(name==="github_read" && result?.type==="directory"){

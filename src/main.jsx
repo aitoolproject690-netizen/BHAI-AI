@@ -54,7 +54,7 @@ function App(){
    setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
    upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}]);
-  }catch(e){upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ Connection error: '+e.message}]);setActivity(a=>a.map(x=>({...x,state:'failed'})))}finally{setRunning(false)}
+  }catch(e){try{const rr=await fetch(apiUrl("/api/control"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"recovery_plan",error:e.message,stage:"agent"})});const rp=await rr.json();upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted\n\nProblem: "+e.message+"\n\n🛡️ Recovery plan: "+(rp.plan||[]).map(x=>x.action).join(" → ")+"\n\nBHAI X will not mark this task complete without verification."}])}catch{upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted: "+e.message+"\n\nRecovery check unavailable."}])}setActivity(a=>a.map(x=>({...x,state:"failed"})))}finally{setRunning(false)}
  }
 
  function newChat(){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions(a=>[s,...a]);setActive(s.id);setInput('');setFileInfo(null);setActivity([]);setActivityOpen(false)}

@@ -132,9 +132,10 @@ EXECUTION POLICY:
 - After successful requested changes, stop tools and report changed files and commit result.
 - Never claim an action happened unless a tool result confirms it.`;
 
- let contents=compactContents(toGeminiContents(messages));\n const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!/429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(String(e?.message||e)))throw e;}}throw last;};
+ let contents=compactContents(toGeminiContents(messages));
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
  const models=[process.env.GEMINI_MODEL,"gemini-3.8-flash","gemini-3.5-flash-lite"].filter((m,i,a)=>m&&!a.slice(0,i).includes(m));
+ const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!/429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(String(e?.message||e)))throw e;}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);

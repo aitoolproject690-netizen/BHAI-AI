@@ -6,7 +6,8 @@ const FALLBACK=[
 ].map(([id,name,type])=>({id,name,type,auth:"OAuth / API / Webhook",status:"available"}));
 
 export default function ConnectPanel({onClose}){
- const API_BASE="https://bhai-ai-vpna.onrender.com";\n const[items,setItems]=useState(FALLBACK),[busy,setBusy]=useState(true),[error,setError]=useState("");
+ const API_BASE="https://bhai-ai-vpna.onrender.com";
+ const[items,setItems]=useState(FALLBACK),[busy,setBusy]=useState(true),[error,setError]=useState("");
  const[connected,setConnected]=useState(()=>{try{return JSON.parse(localStorage.getItem("bhai_x_connections")||"{}")}catch{return{}}});
  async function load(){
   setBusy(true);setError("");

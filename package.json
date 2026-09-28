@@ -15,9 +15,13 @@
     "react": "latest",
     "react-dom": "latest",
     "lucide-react": "latest",
-    "@huggingface/inference": "latest"
+    "@huggingface/inference": "latest",
+    "@capacitor/core": "latest",
+    "@capacitor/ios": "latest"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@capacitor/cli": "latest"
+  },
   "engines": {
     "node": ">=20.19.0"
   }

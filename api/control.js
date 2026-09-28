@@ -6,11 +6,16 @@ const catalog=[
  {id:"mission-mode",name:"Mission Mode",status:"foundation",desc:"Long-running task state, checkpoints aur completion tracking."},
  {id:"context-engine",name:"Bhai Samajh Gaya",status:"foundation",desc:"Intent, project context aur decision memory ko ek task context me rakhta hai."},
  {id:"agent-swarm",name:"AI Swarm",status:"planned",desc:"Planner, researcher, coder, tester, security aur DevOps specialist roles."},
- {id:"fallback-engine",name:"Try 3 Ways",status:"planned",desc:"Failure par alternate implementation strategies."},
- {id:"digital-twin",name:"Project Digital Twin",status:"planned",desc:"Project dependencies, services, secrets aur build relationships ka model."},
+ {id:"fallback-engine",name:"Try 3 Ways",status:"foundation",desc:"Failure se pehle risk detect, alternate route, retry aur recovery."},
+ {id:"digital-twin",name:"Project Digital Twin",status:"foundation",desc:"Project dependencies, services, secrets aur build relationships ka model."},
  {id:"connect-app",name:"Connect App",status:"foundation",desc:"OAuth/API/Webhook/MCP based provider connection layer."},
  {id:"credential-vault",name:"Credential Vault",status:"foundation",desc:"Secrets ko source code se alag rakhne ka control plane."},
  {id:"social",name:"Social AI",status:"planned",desc:"Official platform APIs ke through content, inbox aur scheduling."},
+ {id:"preflight",name:"Predictive Pre-flight",status:"foundation",desc:"Failure se pehle API, model, credentials, services aur deployment risk check."},
+ {id:"self-healing",name:"Self-Healing Recovery",status:"foundation",desc:"Detect, retry, switch route, resume checkpoint, verify and rollback."},
+ {id:"progress-reporter",name:"Live Progress Reporter",status:"foundation",desc:"Kya hua, kya baaki hai, kya verify hua aur next recommendation."},
+ {id:"task-queue",name:"Task Queue / Scheduler",status:"planned",desc:"Long-running and scheduled tasks with resume and retry."},
+ {id:"smart-suggestions",name:"Smart Improvement Suggestions",status:"foundation",desc:"Kaam ke context se safe next improvements suggest karta hai."},
  {id:"marketplace",name:"AI Marketplace",status:"planned",desc:"Skills, agents aur integrations."},
  {id:"apk-factory",name:"APK Factory",status:"foundation",desc:"Source → GitHub Actions → APK artifact verification pipeline."},
  {id:"release-control",name:"Owner Release Control",status:"foundation",desc:"Official core release owner-controlled."},
@@ -35,11 +40,14 @@ function basePlan(goal){
  const text=String(goal||"").trim();
  const lower=text.toLowerCase();
  const steps=[
+  {id:"preflight",name:"Pre-flight risk scan and prevention",state:"ready"},
   {id:"understand",name:"Understand goal",state:"ready"},
   {id:"plan",name:"Compile requirements + constraints",state:"ready"},
+  {id:"checkpoint",name:"Create recovery checkpoint",state:"ready"},
   {id:"execute",name:"Execute with selected skills/tools",state:"ready"},
+  {id:"recover",name:"Monitor, self-heal and recover if needed",state:"ready"},
   {id:"verify",name:"Test / verify result",state:"ready"},
-  {id:"deliver",name:"Deliver result + record decision",state:"ready"}
+  {id:"deliver",name:"Report done, remaining work and recommendations",state:"ready"}
  ];
  if(/apk|android|app/i.test(lower)) steps.splice(3,0,{id:"build",name:"Build APK/AAB and inspect artifact",state:"ready"});
  if(/github|repo|code|coding/i.test(lower)) steps.splice(2,0,{id:"repo",name:"Inspect repository and implement changes",state:"ready"});

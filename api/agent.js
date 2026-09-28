@@ -1,4 +1,5 @@
 import { selectSkillsForTask, getSkillPromptContext } from "../src/skillsRouter.js";
+import { ownerState } from "./owner.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -111,6 +112,9 @@ async function geminiGenerate(apiKey,model,system,contents,useTools=true,activeD
 }
 
 export default async function handler(req,res){
+ const control=ownerState();
+ if(control.serverMode==="maintenance") return json(res,503,{error:"BHAI X is in owner maintenance mode.",maintenance:true});
+ if(control.emergencyLock) return json(res,423,{error:"BHAI X is temporarily locked by the owner.",locked:true});
  if(req.method!=="POST") return json(res,405,{error:"Method not allowed"});
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
  if(!key) return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});

@@ -15,6 +15,17 @@ async function webSearch(q){
  } return out;
 }
 
+async function generateImage(prompt,aspectRatio="16:9"){
+ const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
+ if(!key) throw new Error("Gemini API key is not configured.");
+ const model=process.env.GEMINI_IMAGE_MODEL||"gemini-3.1-flash-image";
+ const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],responseFormat:{image:{aspectRatio}}}})});
+ const d=await r.json(); if(!r.ok) throw new Error(d?.error?.message||"Image generation failed");
+ const p=(d?.candidates?.[0]?.content?.parts||[]).find(x=>x.inlineData?.data);
+ if(!p?.inlineData?.data) throw new Error("Image model returned no image.");
+ return {mimeType:p.inlineData.mimeType||"image/png",data:p.inlineData.data};
+}
+
 async function github(action,a){
  const token=process.env.GITHUB_TOKEN;
  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
@@ -47,6 +58,7 @@ async function github(action,a){
 }
 
 const toolDefinitions=[
+ {name:"generate_image",description:"Generate an actual image from the user's request using the connected Gemini image model. Use this when the user asks to create, draw, generate, make, design, or visualize an image. Do not merely write an image prompt when this tool is available.",parameters:{type:"OBJECT",properties:{prompt:{type:"STRING",description:"Detailed image-generation prompt based on the user's request"},aspectRatio:{type:"STRING",description:"Output aspect ratio, usually 1:1, 16:9, or 9:16"}},required:["prompt"]}},
  {name:"web_search",description:"Search public web for current information. Use only when the task genuinely needs current external information.",parameters:{type:"OBJECT",properties:{query:{type:"STRING",description:"Search query"}},required:["query"]}},
  {name:"github_info",description:"Get GitHub repository information. Use once to verify the repository before repository work.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"}},required:["owner","repo"]}},
  {name:"github_read",description:"Read a GitHub file or directory. Prefer one root directory read first, then only the minimum key files needed. Never reread a path.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path"]}}
@@ -90,7 +102,7 @@ EXECUTION POLICY:
  let contents=toGeminiContents(messages).slice(-20);
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
  const model=process.env.GEMINI_MODEL||"gemini-3.5-flash-lite";
- const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set();
+ const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
  let rootListed=false;
@@ -102,7 +114,7 @@ EXECUTION POLICY:
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){
    const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
-   return json(res,200,{text:text||"No response received.",activity});
+   return json(res,200,{text:text||"Image ready.",activity,images:generatedImages});
   }
   contents.push(candidate.content);
   const allowedCalls=calls.slice(0,2),responseParts=[];
@@ -138,7 +150,8 @@ EXECUTION POLICY:
      responseParts.push({functionResponse:{name,response:{result:{skipped:true,reason:"Path is not in the authoritative repository listing. Use an exact returned path."}}}});
      continue;
     }
-    const result=name==="web_search"?await webSearch(a.query):await github(name,{...a,path:normalizedPath});
+    const result=name==="web_search"?await webSearch(a.query):name==="generate_image"?await generateImage(a.prompt,a.aspectRatio||"16:9"):await github(name,{...a,path:normalizedPath});
+    if(name==="generate_image") generatedImages.push({mimeType:result.mimeType,data:result.data});
     if(name==="github_read" && result?.type==="directory"){
      if(normalizedPath==="") rootListed=true;
      for(const item of result.items||[]) knownPaths.add(item.path);
@@ -166,6 +179,6 @@ EXECUTION POLICY:
  try{
   const fd=await geminiGenerate(key,model,finalSystem,contents,false,activeToolDefinitions);
   const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
-  return json(res,200,{text:ft||"I reached the safe execution limit before finishing the task.",activity});
+  return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }

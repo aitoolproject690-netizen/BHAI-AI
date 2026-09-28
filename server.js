@@ -4,7 +4,7 @@ import path from "node:path";
 import {fileURLToPath} from "node:url";
 import agent from "./api/agent.js"; import health from "./api/health.js"; import build from "./api/build.js";
 import files from "./api/files.js"; import jobs from "./api/jobs.js"; import search from "./api/search.js";
-import task from "./api/task.js"; import github from "./api/github.js";
+import task from "./api/task.js"; import github from "./api/github.js"; import owner from "./api/owner.js";
 const __dirname=path.dirname(fileURLToPath(import.meta.url)); const port=Number(process.env.PORT)||10000;
 const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/search":search,"/api/task":task,"/api/github":github};
 function runApi(fn,req,res){

@@ -1,12 +1,13 @@
 import React,{useEffect,useRef,useState}from'react';
 import{createRoot}from'react-dom/client';
-import{Send,Mic,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug,WandSparkles}from'lucide-react';
+import{Send,Mic,Activity as ActivityIcon,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug,WandSparkles}from'lucide-react';
 import'./styles.css';
 import OwnerPanel from'./OwnerPanel.jsx';
 import ConnectPanel from'./ConnectPanel.jsx';
 import SettingsPanel from'./SettingsPanel.jsx';
 import CodeFixPanel from'./CodeFixPanel.jsx';
 import GeneratorPanel from'./GeneratorPanel.jsx';
+import SystemPanel from'./SystemPanel.jsx';
 
 const API_BASE='https://bhai-ai-vpna.onrender.com';
 const apiUrl=p=>API_BASE+p;
@@ -30,7 +31,7 @@ function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),[doIt,setDoIt]=useState(true);
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
- const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false);
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false);
  const end=useRef(null),recognition=useRef(null);
 
  useEffect(()=>{if(!sessions.length){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);
@@ -56,7 +57,7 @@ function App(){
    setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
    upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}]);
-   try{const sr=await fetch(apiUrl('/api/suggestions'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal:t,completed:d.completed||[],remaining:d.remaining||[]})});const sd=await sr.json();if(Array.isArray(sd.suggestions)&&sd.suggestions.length)upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'💡 SMART SUGGESTIONS\\n\\n'+sd.suggestions.map(x=>'• '+x).join('\\n')}]);}catch{}
+   try{const sr=await fetch(apiUrl('/api/suggestions'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal:t,completed:d.completed||[],remaining:d.remaining||[]})});const sd=await sr.json();if(Array.isArray(sd.suggestions)&&sd.suggestions.length)upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'💡 SMART SUGGESTIONS\n\n'+sd.suggestions.map(x=>'• '+x).join('\n')}]);}catch{}
   }catch(e){try{const rr=await fetch(apiUrl("/api/control"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"recovery_plan",error:e.message,stage:"agent"})});const rp=await rr.json();upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted\n\nProblem: "+e.message+"\n\n🛡️ Recovery plan: "+(rp.plan||[]).map(x=>x.action).join(" → ")+"\n\nBHAI X will not mark this task complete without verification."}])}catch{upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted: "+e.message+"\n\nRecovery check unavailable."}])}setActivity(a=>a.map(x=>({...x,state:"failed"})))}finally{setRunning(false)}
  }
 
@@ -75,6 +76,7 @@ function App(){
   if(label==='codefix'){setCodeFixOpen(true);setToolsOpen(false);return}
   if(label==='generator'){setGeneratorOpen(true);setToolsOpen(false);return}
   if(label==='mission'){setMissionMode(true);setToolsOpen(false);return}
+  if(label==='system'){setSystemOpen(true);setToolsOpen(false);return}
   const prompts={generator:'AI code generator kholo: ',web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: '};
   const prompt=prompts[label]; if(!prompt)return;
   setInput(v=>(v?v+'\n':'')+prompt);setToolsOpen(false);
@@ -84,11 +86,11 @@ function App(){
   setRunning(true);setToolsOpen(false);setActivityOpen(false);
   try{
    const pf=await fetch(apiUrl('/api/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'preflight'})}).then(r=>r.json()).catch(e=>({ready:false,risks:[{message:e.message}]}));
-   if(!pf.ready){upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:'🛡️ PRE-FLIGHT STOP\\n\\n'+(pf.risks||[]).map(x=>'⚠️ '+x.message).join('\\n')+'\\n\\nMission ko predictable failure se pehle rok diya gaya.'}]);return;}
+   if(!pf.ready){upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:'🛡️ PRE-FLIGHT STOP\n\n'+(pf.risks||[]).map(x=>'⚠️ '+x.message).join('\n')+'\n\nMission ko predictable failure se pehle rok diya gaya.'}]);return;}
    const r=await fetch(apiUrl('/api/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'compile_goal',goal})});
    const d=await r.json(); if(!r.ok)throw new Error(d.error||'Mission compile failed');
    const m=d.mission;
-   const plan='🎯 MISSION MODE\\n\\nGoal: '+m.goal+'\\n\\n'+m.steps.map((s,i)=>(i+1)+'. '+s.name).join('\\n')+'\\n\\nStatus: '+m.steps.length+' steps compiled.'+(doIt?'\\n\\nDO IT ON — mission execution start ho raha hai.':'\\n\\nDO IT OFF — plan ready hai; execute karne ke liye DO IT ON karo.');
+   const plan='🎯 MISSION MODE\\n\\nGoal: '+m.goal+'\\n\\n'+m.steps.map((s,i)=>(i+1)+'. '+s.name).join('\n')+'\n\nStatus: '+m.steps.length+' steps compiled.'+(doIt?'\\n\\nDO IT ON — mission execution start ho raha hai.':'\\n\\nDO IT OFF — plan ready hai; execute karne ke liye DO IT ON karo.');
    const userMsg={id:crypto.randomUUID(),role:'user',text:goal};
    const planMsg={id:crypto.randomUUID(),role:'assistant',text:plan};
    const next=[...chat.messages,userMsg,planMsg];
@@ -138,7 +140,7 @@ function App(){
     <div className="composerTools">
      <div className="toolMenuWrap">
       <button className="roundBtn" onClick={()=>setToolsOpen(v=>!v)}><Plus size={20}/></button>
-      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('generator')}><Code2 size={15}/> AI Code Generator</button><button onClick={()=>useTool('codefix')}><WandSparkles/> AI Code Fixer</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button><button onClick={()=>useTool('mission')}><Target/> Mission Mode</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button></div>}
+      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('generator')}><Code2 size={15}/> AI Code Generator</button><button onClick={()=>useTool('codefix')}><WandSparkles/> AI Code Fixer</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button><button onClick={()=>useTool('mission')}><Target/> Mission Mode</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button><button onClick={()=>useTool('system')}><ActivityIcon/> System Center</button></div>}
      </div>
      <label className="roundBtn attach"><Paperclip size={19}/><input type="file" hidden onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setFileInfo({name:f.name,text:(await f.text()).slice(0,50000)})}}/></label>
      <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message BHAI X..." rows="1"/>
@@ -149,6 +151,6 @@ function App(){
     <div className="composerHint">BHAI X can search, code, generate images, work with files and execute tasks. <b>Check important results.</b></div>
    </div>
   </main>
- {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} \n </div>
+ {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} \n </div>
 }
 createRoot(document.getElementById('root')).render(<App/>);

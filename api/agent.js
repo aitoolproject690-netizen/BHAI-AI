@@ -140,16 +140,21 @@ EXECUTION POLICY:
     }
     const result=name==="web_search"?await webSearch(a.query):await github(name,{...a,path:normalizedPath});
     if(name==="github_read" && result?.type==="directory"){
-     if(normalizedPath===""){
-      rootListed=true;
-      for(const item of result.items||[]) knownPaths.add(item.path);
-     }
+     if(normalizedPath==="") rootListed=true;
+     for(const item of result.items||[]) knownPaths.add(item.path);
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
+    const msg=String(e?.message||e);
+    const isGitHubReadMiss=name==="github_read" && /not found|path.*not|does not exist/i.test(msg);
+    if(isGitHubReadMiss){
+     activity[activity.length-1].state="skipped";
+     responseParts.push({functionResponse:{name,response:{result:{skipped:true,reason:msg}}}});
+     continue;
+    }
     failedCalls.add(cacheKey);consecutiveFailures++;activity[activity.length-1].state="failed";
-    responseParts.push({functionResponse:{name,response:{error:e.message}}});
+    responseParts.push({functionResponse:{name,response:{error:msg}}});
    }
   }
   if(calls.length>allowedCalls.length) responseParts.push({functionResponse:{name:"tool_budget_guard",response:{error:"At most 2 tool calls are allowed per model round. Continue from returned results instead of issuing parallel calls."}}});

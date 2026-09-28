@@ -58,10 +58,10 @@ export default async function handler(req,res){
   return json(res,200,{features:catalog,connectors});
  }
  if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});
- if(!ownerGuard(req,res))return;
  const action=req.body?.action;
  if(action==="compile_goal")return json(res,200,{ok:true,mission:basePlan(req.body?.goal)});
  if(action==="connector_catalog")return json(res,200,{ok:true,connectors});
+ if(!ownerGuard(req,res))return;
  if(action==="security_snapshot")return json(res,200,{ok:true,serverMode:s.serverMode,emergencyLock:s.emergencyLock,releaseLocked:s.releaseLocked,modules:s.modules,databaseConfigured:!!process.env.DATABASE_URL});
  return json(res,400,{error:"Unknown control action"});
 }

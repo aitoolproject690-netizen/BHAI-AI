@@ -18,6 +18,7 @@ import capabilities from "./api/capabilities.js";
 import generate from "./api/generate.js";
 import analyze from "./api/analyze.js";
 import suggestions from "./api/suggestions.js";
+import system from "./api/system.js";
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT)||10000;
 const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions};

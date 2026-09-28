@@ -56,6 +56,7 @@ function App(){
    setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
    upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}]);
+   try{const sr=await fetch(apiUrl('/api/suggestions'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal:t,completed:d.completed||[],remaining:d.remaining||[]})});const sd=await sr.json();if(Array.isArray(sd.suggestions)&&sd.suggestions.length)upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'💡 SMART SUGGESTIONS\\n\\n'+sd.suggestions.map(x=>'• '+x).join('\\n')}]);}catch{}
   }catch(e){try{const rr=await fetch(apiUrl("/api/control"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"recovery_plan",error:e.message,stage:"agent"})});const rp=await rr.json();upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted\n\nProblem: "+e.message+"\n\n🛡️ Recovery plan: "+(rp.plan||[]).map(x=>x.action).join(" → ")+"\n\nBHAI X will not mark this task complete without verification."}])}catch{upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted: "+e.message+"\n\nRecovery check unavailable."}])}setActivity(a=>a.map(x=>({...x,state:"failed"})))}finally{setRunning(false)}
  }
 
@@ -82,6 +83,8 @@ function App(){
   const goal=(goalOverride??input).trim(); if(!goal||running)return;
   setRunning(true);setToolsOpen(false);setActivityOpen(false);
   try{
+   const pf=await fetch(apiUrl('/api/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'preflight'})}).then(r=>r.json()).catch(e=>({ready:false,risks:[{message:e.message}]}));
+   if(!pf.ready){upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:'🛡️ PRE-FLIGHT STOP\\n\\n'+(pf.risks||[]).map(x=>'⚠️ '+x.message).join('\\n')+'\\n\\nMission ko predictable failure se pehle rok diya gaya.'}]);return;}
    const r=await fetch(apiUrl('/api/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'compile_goal',goal})});
    const d=await r.json(); if(!r.ok)throw new Error(d.error||'Mission compile failed');
    const m=d.mission;

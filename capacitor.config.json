@@ -1,0 +1,9 @@
+{
+  "appId": "com.bhaix.app",
+  "appName": "BHAI X",
+  "webDir": "dist",
+  "server": {
+    "url": "https://bhai-ai-vpna.onrender.com",
+    "cleartext": false
+  }
+}

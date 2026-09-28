@@ -53,7 +53,9 @@ jobs:
           retention-days: 7
 
   official-release:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.official_release == true && secrets.BHAI_OWNER_RELEASE == 'AUTHORIZED' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.official_release == true && env.BHAI_OWNER_RELEASE == 'AUTHORIZED' }}
+    env:
+      BHAI_OWNER_RELEASE: ${{ secrets.BHAI_OWNER_RELEASE }}
     needs: build
     runs-on: ubuntu-latest
     steps:

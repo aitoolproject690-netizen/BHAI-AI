@@ -4,6 +4,14 @@ const state={
   serverMode:"online",
   emergencyLock:false,
   releaseLocked:true,
+  modules:{
+    agent:true,
+    coding:true,
+    builds:true,
+    connectors:true,
+    social:true,
+    marketplace:true
+  },
   delegatedAdmins:[],
   audit:[],
   connectors:{total:0,connected:0},
@@ -45,6 +53,13 @@ export default async function handler(req,res){
   if(action==="set_release_lock"){
     state.releaseLocked=b.locked!==false;audit("release_lock_changed",{locked:state.releaseLocked});return res.json({ok:true,state});
   }
+  if(action==="set_module"){
+    const moduleName=String(b.module||"");
+    if(!(moduleName in state.modules))return res.status(400).json({error:"Unknown module"});
+    state.modules[moduleName]=!!b.enabled;
+    audit("module_changed",{module:moduleName,enabled:state.modules[moduleName]});
+    return res.json({ok:true,state});
+  }
   if(action==="delegate_add"){
     const name=String(b.name||"").trim();
     const permissions=Array.isArray(b.permissions)?b.permissions.slice(0,30):[];
@@ -59,7 +74,10 @@ export default async function handler(req,res){
     audit("delegated_admin_revoked",{id:b.id});return res.json({ok:true,state});
   }
   if(action==="audit_clear"){
-    state.audit=[];state.updatedAt=new Date().toISOString();return res.json({ok:true,state});
+    audit("audit_cleared");
+    state.audit=[];
+    state.updatedAt=new Date().toISOString();
+    return res.json({ok:true,state});
   }
   return res.status(400).json({error:"Unknown owner action"});
 }

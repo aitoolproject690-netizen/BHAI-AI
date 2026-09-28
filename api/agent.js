@@ -163,6 +163,15 @@ EXECUTION POLICY:
    if(totalToolCalls>=maxToolCalls) break;
    const name=call.name,a={...(call.args||{}),doIt},cacheKey=name+":"+JSON.stringify(a);
    activity.push({tool:name,state:"running"}); totalToolCalls++;
+   if((name==="github_update" || (name==="github_actions" && a.operation==="dispatch")) && !control.modules.builds){
+    const msg="Owner has disabled build/core execution module."; activity[activity.length-1].state="blocked"; responseParts.push({functionResponse:{name,response:{error:msg}}}); continue;
+   }
+   if(name==="github_update" && !control.modules.coding){
+    const msg="Owner has disabled coding module."; activity[activity.length-1].state="blocked"; responseParts.push({functionResponse:{name,response:{error:msg}}}); continue;
+   }
+   if(name==="web_search" && !control.modules.agent){
+    const msg="Owner has disabled AI Agent module."; activity[activity.length-1].state="blocked"; responseParts.push({functionResponse:{name,response:{error:msg}}}); continue;
+   }
    try{
     if(seenCalls.has(cacheKey)){const cached=seenCalls.get(cacheKey);activity[activity.length-1].state="cached";responseParts.push({functionResponse:{name,response:{result:cached,cached:true}}});continue;}
     if(failedCalls.has(cacheKey)) throw new Error("Smart retry guard: this exact failed tool call will not be retried.");

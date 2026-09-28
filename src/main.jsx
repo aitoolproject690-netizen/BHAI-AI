@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState}from'react';
 import{createRoot}from'react-dom/client';
-import{Send,Mic,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug}from'lucide-react';
+import{Send,Mic,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug,WandSparkles}from'lucide-react';
 import'./styles.css';
 import OwnerPanel from'./OwnerPanel.jsx';
 import ConnectPanel from'./ConnectPanel.jsx';
@@ -25,7 +25,7 @@ function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),[doIt,setDoIt]=useState(true);
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
- const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false);
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false);
  const end=useRef(null),recognition=useRef(null);
 
  useEffect(()=>{if(!sessions.length){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);
@@ -65,6 +65,7 @@ function App(){
  }
  function useTool(label){
   if(label==='connect'){setConnectOpen(true);setToolsOpen(false);return}
+  if(label==='codefix'){setCodeFixOpen(true);setToolsOpen(false);return}
   if(label==='mission'){setMissionMode(true);setToolsOpen(false);return}
   const prompts={web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: '};
   const prompt=prompts[label]; if(!prompt)return;
@@ -127,7 +128,7 @@ function App(){
     <div className="composerTools">
      <div className="toolMenuWrap">
       <button className="roundBtn" onClick={()=>setToolsOpen(v=>!v)}><Plus size={20}/></button>
-      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button><button onClick={()=>useTool('mission')}><Target/> Mission Mode</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button></div>}
+      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('codefix')}><WandSparkles/> AI Code Fixer</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button><button onClick={()=>useTool('mission')}><Target/> Mission Mode</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button></div>}
      </div>
      <label className="roundBtn attach"><Paperclip size={19}/><input type="file" hidden onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setFileInfo({name:f.name,text:(await f.text()).slice(0,50000)})}}/></label>
      <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message BHAI X..." rows="1"/>
@@ -138,6 +139,6 @@ function App(){
     <div className="composerHint">BHAI X can search, code, generate images, work with files and execute tasks. <b>Check important results.</b></div>
    </div>
   </main>
- {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n </div>
+ {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>}\n </div>
 }
 createRoot(document.getElementById('root')).render(<App/>);

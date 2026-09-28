@@ -15,6 +15,8 @@ import ConnectPanel from'./ConnectPanel.jsx';
 import SettingsPanel from'./SettingsPanel.jsx';
 import ConnectPanel from'./ConnectPanel.jsx';
 import SettingsPanel from'./SettingsPanel.jsx';
+import ConnectPanel from'./ConnectPanel.jsx';
+import SettingsPanel from'./SettingsPanel.jsx';
 
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};
@@ -136,7 +138,9 @@ function App(){
     <div className="composerHint">BHAI X can search, code, generate images, work with files and execute tasks. <b>Check important results.</b></div>
    </div>
   </main>
- {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>} {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>} {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>} 
+ {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>} 
+ {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>} 
+ {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}  {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>} {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>} 
  {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>} 
  {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>} 
  </div>

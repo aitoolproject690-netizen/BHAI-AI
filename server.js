@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import {requireSession} from "./api/_utils.js";
 import agent from "./api/agent.js";
 import health from "./api/health.js";
 import build from "./api/build.js";
@@ -45,7 +46,11 @@ function runApi(fn,req,res){
 }
 http.createServer((req,res)=>{
   const u=new URL(req.url||"/","http://localhost");
-  if(routes[u.pathname])return runApi(routes[u.pathname],req,res);
+  if(routes[u.pathname]){
+    const fn=routes[u.pathname];
+    if(u.pathname==="/api/tests")return runApi(async(req,res)=>{if(!await requireSession(req,res))return;return fn(req,res);},req,res);
+    return runApi(fn,req,res);
+  }
   let p=decodeURIComponent(u.pathname);if(p==="/")p="/index.html";
   const root=path.join(__dirname,"dist"),file=path.join(root,p.replace(/^\//,""));
   if(!file.startsWith(root+path.sep)&&file!==root){res.statusCode=403;return res.end("Forbidden");}

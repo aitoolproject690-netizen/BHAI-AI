@@ -23,6 +23,38 @@ async function generateImage(prompt,aspectRatio="16:9"){
  const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;
  const height=aspectRatio==="9:16"?1365:aspectRatio==="1:1"?768:576;
  const errors=[];
+ const maxBytes=12*1024*1024;
+ const findImageUrl=(value,depth=0)=>{
+  if(depth>5||value==null)return null;
+  if(typeof value==="string"&&/^https?:\\/\\//i.test(value)&&/\\.(png|jpe?g|webp)(\\?|$)/i.test(value))return value;
+  if(typeof value!=="object")return null;
+  for(const key of ["image_url","imageUrl","url","image","output_url","outputUrl","download_url","downloadUrl"]){
+   const hit=findImageUrl(value[key],depth+1); if(hit)return hit;
+  }
+  for(const v of Object.values(value)){const hit=findImageUrl(v,depth+1);if(hit)return hit;}
+  return null;
+ };
+ const pixazoKey=process.env.PIXAZO_API_KEY;
+ if(pixazoKey){
+  try{
+   const r=await fetch("https://gateway.pixazo.ai/flux/text-to-image",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Ocp-Apim-Subscription-Key":pixazoKey},
+    body:JSON.stringify({prompt,width,height}),
+    signal:timeout(60000)
+   });
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok) throw new Error(d?.message||d?.error||"Pixazo returned HTTP "+r.status);
+   const url=findImageUrl(d);
+   if(!url) throw new Error("Pixazo returned no image URL.");
+   const img=await fetch(url,{signal:timeout(30000)});
+   if(!img.ok) throw new Error("Pixazo image download returned HTTP "+img.status);
+   const b=Buffer.from(await img.arrayBuffer());
+   if(!b.length) throw new Error("Pixazo returned an empty image.");
+   if(b.length>maxBytes) throw new Error("Pixazo returned an image larger than 12 MB.");
+   return {mimeType:img.headers.get("content-type")||"image/png",data:b.toString("base64"),provider:"pixazo"};
+  }catch(e){errors.push("Pixazo: "+String(e?.message||e).slice(0,500));}
+ }
  const pollinationsKey=process.env.POLLINATIONS_API_KEY;
  try{
   const base=pollinationsKey
@@ -36,11 +68,9 @@ async function generateImage(prompt,aspectRatio="16:9"){
   if(!r.ok) throw new Error("Pollinations returned HTTP "+r.status);
   const b=Buffer.from(await r.arrayBuffer());
   if(!b.length) throw new Error("Pollinations returned an empty image.");
-  if(b.length>12*1024*1024) throw new Error("Pollinations returned an image larger than 12 MB.");
+  if(b.length>maxBytes) throw new Error("Pollinations returned an image larger than 12 MB.");
   return {mimeType:r.headers.get("content-type")||"image/jpeg",data:b.toString("base64"),provider:"pollinations"};
- }catch(e){
-  errors.push("Pollinations: "+String(e?.message||e).slice(0,500));
- }
+ }catch(e){errors.push("Pollinations: "+String(e?.message||e).slice(0,500));}
  const hf=process.env.HF_TOKEN;
  const hfModel=process.env.HF_IMAGE_MODEL||"black-forest-labs/FLUX.1-dev";
  if(hf){
@@ -51,31 +81,28 @@ async function generateImage(prompt,aspectRatio="16:9"){
    if(!image||typeof image.arrayBuffer!=="function") throw new Error("Hugging Face returned an invalid image response.");
    const b=Buffer.from(await image.arrayBuffer());
    if(!b.length) throw new Error("Hugging Face returned an empty image.");
-   if(b.length>12*1024*1024) throw new Error("Hugging Face returned an image larger than 12 MB.");
+   if(b.length>maxBytes) throw new Error("Hugging Face returned an image larger than 12 MB.");
    return {mimeType:"image/png",data:b.toString("base64"),provider:"huggingface"};
-  }catch(e){
-   errors.push("Hugging Face: "+String(e?.message||e).slice(0,500));
-  }
+  }catch(e){errors.push("Hugging Face: "+String(e?.message||e).slice(0,500));}
  }
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
- if(!key) throw new Error("No image provider configured. "+errors.join(" | "));
- const model=process.env.GEMINI_IMAGE_MODEL||"gemini-3.1-flash-image";
- try{
-  const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{
-   method:"POST",
-   headers:{"Content-Type":"application/json","x-goog-api-key":key},
-   body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],imageConfig:{aspectRatio}}}),
-   signal:timeout(60000)
-  });
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(d?.error?.message||"Gemini image generation failed");
-  const p=(d?.candidates?.[0]?.content?.parts||[]).find(x=>x.inlineData?.data);
-  if(!p?.inlineData?.data) throw new Error("Gemini image model returned no image.");
-  return {mimeType:p.inlineData.mimeType||"image/png",data:p.inlineData.data,provider:"gemini"};
- }catch(e){
-  errors.push("Gemini: "+String(e?.message||e).slice(0,500));
-  throw new Error("Image generation failed after provider fallback. "+errors.join(" | "));
+ if(key){
+  const model=process.env.GEMINI_IMAGE_MODEL||"gemini-3.1-flash-image";
+  try{
+   const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-goog-api-key":key},
+    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],imageConfig:{aspectRatio}}}),
+    signal:timeout(60000)
+   });
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok) throw new Error(d?.error?.message||"Gemini image generation failed");
+   const p=(d?.candidates?.[0]?.content?.parts||[]).find(x=>x.inlineData?.data);
+   if(!p?.inlineData?.data) throw new Error("Gemini image model returned no image.");
+   return {mimeType:p.inlineData.mimeType||"image/png",data:p.inlineData.data,provider:"gemini"};
+  }catch(e){errors.push("Gemini: "+String(e?.message||e).slice(0,500));}
  }
+ throw new Error("Image generation failed: all configured image providers are unavailable. "+errors.join(" | ")); 
 }
 
 async function github(action,a){
@@ -118,7 +145,7 @@ async function github(action,a){
 }
 
 const toolDefinitions=[
- {name:"generate_image",description:"Generate an actual image. Prefer Hugging Face Inference Providers when HF_TOKEN is configured; fall back to Gemini when available. Use this when the user asks to create, draw, generate, make, design, or visualize an image. Do not merely write an image prompt when this tool is available.",parameters:{type:"OBJECT",properties:{prompt:{type:"STRING",description:"Detailed image-generation prompt based on the user's request"},aspectRatio:{type:"STRING",description:"Output aspect ratio, usually 1:1, 16:9, or 9:16"}},required:["prompt"]}},
+ {name:"generate_image",description:"Generate an actual image. Prefer Pixazo Flux Schnell when PIXAZO_API_KEY is configured, then Pollinations, Hugging Face, and Gemini as fallbacks. Pixazo free API requires a user-provided API key. Use this when the user asks to create, draw, generate, make, design, or visualize an image. Do not merely write an image prompt when this tool is available.",parameters:{type:"OBJECT",properties:{prompt:{type:"STRING",description:"Detailed image-generation prompt based on the user's request"},aspectRatio:{type:"STRING",description:"Output aspect ratio, usually 1:1, 16:9, or 9:16"}},required:["prompt"]}},
  {name:"web_search",description:"Search public web for current information. Use only when the task genuinely needs current external information.",parameters:{type:"OBJECT",properties:{query:{type:"STRING",description:"Search query"}},required:["query"]}},
  {name:"github_info",description:"Get GitHub repository information. Use once to verify the repository before repository work.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"}},required:["owner","repo"]}},
  {name:"github_create_repo",description:"Create a real GitHub repository for the user. Only use when DO IT is ON and the user explicitly asks BHAI X to create a repository. Never claim creation unless the GitHub API confirms it.",parameters:{type:"OBJECT",properties:{name:{type:"STRING"},description:{type:"STRING"},private:{type:"BOOLEAN"}},required:["name"]}},

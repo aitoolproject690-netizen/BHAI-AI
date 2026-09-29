@@ -1,5 +1,7 @@
 import { selectSkillsForTask, getSkillPromptContext } from "../src/skillsRouter.js";
 import { ownerState, ownerReady } from "./owner.js";
+import { getDb } from "./db.js";
+import { getSession } from "./accounts.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -122,6 +124,10 @@ async function geminiGenerate(apiKey,model,system,contents,useTools=true,activeD
 
 export default async function handler(req,res){
  await ownerReady;
+ const db=await getDb();
+ if(!db) return json(res,503,{error:"DATABASE_URL is required"});
+ const account=await getSession(req,db);
+ if(!account) return json(res,401,{error:"Login required. Open Account and login before using BHAI X Agent."});
  const control=ownerState();
  if(control.serverMode==="maintenance") return json(res,503,{error:"BHAI X is in owner maintenance mode.",maintenance:true});
  if(control.emergencyLock) return json(res,423,{error:"BHAI X is temporarily locked by the owner.",locked:true});

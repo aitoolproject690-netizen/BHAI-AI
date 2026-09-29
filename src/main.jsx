@@ -17,7 +17,7 @@ const authToken=()=>localStorage.getItem('bhai_user_session')||sessionStorage.ge
 const authHeaders=()=>{const h={'Content-Type':'application/json'},t=authToken();if(t)h.Authorization='Bearer '+t;return h;}
 
 const K='bhai_x_v3';
-const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};
+const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.\n\nMain sirf jawab dene wala chatbot nahi hoon — project ka context yaad rakhkar bataunga ki kya complete hua, kya baaki hai, aur next mein kya add/fix karna useful rahega.'};
 
 function renderText(text=''){
  const urlRe=/(https?:\/\/[^\s<]+|www\.[^\s<]+)/g;
@@ -49,7 +49,7 @@ function App(){
   if(fileInfo)t=t+'\n\n[Attached file: '+fileInfo.name+']\n'+fileInfo.text;
   if(!t||running||!chat)return;
   if(missionMode){await compileMission(t);return;}
-  setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(false);
+  setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
   const id=crypto.randomUUID();
   setActivity([{id:id+'1',step:'Planning',text:'Planning task requirements...',state:'running'},{id:id+'2',step:'Tools',text:'Selecting tools...',state:'pending'},{id:id+'3',step:'Working',text:'Executing task...',state:'pending'},{id:id+'4',step:'Done',text:'Finalizing response...',state:'pending'}]);
   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t}];
@@ -150,10 +150,10 @@ function App(){
        {m.role==='assistant'&&!running&&<div className="messageActions"><button onClick={()=>copyText(m.text,m.id)}>{copied===m.id?<Check size={13}/>:<Copy size={13}/>} {copied===m.id?'Copied':'Copy'}</button></div>}
       </div>
     </div>)}
-    {running&&<div className="row"><div className="bubble working"><Loader2 className="spin" size={16}/> BHAI X is working...</div></div>}
+    {running&&<div className="row"><div className="bubble working"><Loader2 className="spin" size={16}/> BHAI X is working... <span className="workingHint">Task steps neeche update honge</span></div></div>}
     <div ref={end}/>
    </section>
-   {activityOpen&&<section className="activity"><div className="activityHead"><b>Task steps</b><button onClick={()=>setActivityOpen(false)}><X size={14}/></button></div>{activity.map(x=><div className="activityItem" key={x.id}><span className={x.state==='done'?'ok':''}>{x.state==='done'?<Check size={12}/>:<Loader2 size={12} className={x.state==='running'?'spin':''}/>}</span><b>{x.step}</b><span>{x.text}</span></div>)}</section>}
+   {activityOpen&&<section className="activity"><div className="activityHead"><b>🔧 BHAI X ka kaam</b><span className="activityLive">LIVE</span><button onClick={()=>setActivityOpen(false)}><X size={14}/></button></div>{activity.map(x=><div className="activityItem" key={x.id}><span className={x.state==='done'?'ok':''}>{x.state==='done'?<Check size={12}/>:<Loader2 size={12} className={x.state==='running'?'spin':''}/>}</span><b>{x.step}</b><span>{x.text}</span></div>)}</section>}
    {resumeMission&&<div className="resumeBar"><span>🔄 Previous mission checkpoint saved</span><button onClick={async()=>{setInput(resumeMission.goal);setResumeMission(null);setMissionMode(true);}}>Resume mission</button><button onClick={()=>{localStorage.removeItem('bhai_x_checkpoint');setResumeMission(null)}}>Dismiss</button></div>}
    <div className="composerWrap">
     <div className="composerTools">

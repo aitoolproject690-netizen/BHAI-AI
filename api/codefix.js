@@ -8,7 +8,8 @@ async function call(key,model,prompt){
  return d?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
 }
 export default async function handler(req,res){
- if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});\n const account=await requireSession(req,res);if(!account)return;
+ if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});
+ const account=await requireSession(req,res);if(!account)return;
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;if(!key)return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
  const {code="",language="javascript",mode="fix",filename=""}=req.body||{};
  if(typeof code!=="string"||!code.trim())return json(res,400,{error:"Code is required"});if(code.length>200000)return json(res,413,{error:"Code is too large. Maximum 200,000 characters."});

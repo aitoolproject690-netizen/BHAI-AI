@@ -173,7 +173,7 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
  let rootListed=false;
- const maxGithubReads=10,maxToolCalls=16,maxRounds=12;
+ const maxGithubReads=8,maxToolCalls=12,maxRounds=6;
 
  for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
   let d; try{d=await generateWithFallback(true)}catch(e){return json(res,502,{error:e.message,activity})}
@@ -184,7 +184,7 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
    return json(res,200,{text:text||"Image ready.",activity,images:generatedImages});
   }
   contents.push(candidate.content);
-  const allowedCalls=calls.slice(0,2),responseParts=[];
+  const allowedCalls=calls.slice(0,3),responseParts=[];
   for(const call of allowedCalls){
    if(totalToolCalls>=maxToolCalls) break;
    const name=call.name,a={...(call.args||{}),doIt},cacheKey=name+":"+JSON.stringify(a);
@@ -246,7 +246,7 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
     responseParts.push({functionResponse:{name,response:{error:msg}}});
    }
   }
-  if(calls.length>allowedCalls.length) responseParts.push({functionResponse:{name:"tool_budget_guard",response:{error:"At most 2 tool calls are allowed per model round. Continue from returned results instead of issuing parallel calls."}}});
+  if(calls.length>allowedCalls.length) responseParts.push({functionResponse:{name:"tool_budget_guard",response:{error:"At most 3 tool calls are allowed per model round. Continue from returned results instead of issuing parallel calls."}}});
   contents.push({role:"user",parts:responseParts});
   contents=compactContents(contents);
   if(consecutiveFailures>=2) break;

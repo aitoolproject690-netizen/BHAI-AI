@@ -9,6 +9,7 @@ import SettingsPanel from'./SettingsPanel.jsx';
 import CodeFixPanel from'./CodeFixPanel.jsx';
 import GeneratorPanel from'./GeneratorPanel.jsx';
 import SystemPanel from'./SystemPanel.jsx';
+import ResellerPanel from'./ResellerPanel.jsx';
 
 const API_BASE='https://bhai-ai-vpna.onrender.com';
 const apiUrl=p=>API_BASE+p;
@@ -32,7 +33,7 @@ function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),[doIt,setDoIt]=useState(true);
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
- const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null);
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false);
  const end=useRef(null),recognition=useRef(null); const[resumeMission,setResumeMission]=useState(null);
 
  useEffect(()=>{if(!sessions.length){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);
@@ -126,7 +127,7 @@ function App(){
    <button className="newChat" onClick={newChat}><Plus size={17}/> New chat</button>
    <div className="searchBox"><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search chats"/></div>
    <div className="history">{filtered.map(s=><button className={s.id===active?'chat active':'chat'} onClick={()=>setActive(s.id)} key={s.id}>{s.title}</button>)}</div>
-   <div className="sideBottom"><div className="status"><span/> Agent online</div><button className="accountOpenBtn" onClick={()=>setAccountOpen(true)}><UserCircle size={15}/> {account?account.email:"Account"}</button><button className="ownerOpenBtn" onClick={()=>setOwnerOpen(true)}><ShieldCheck size={15}/> Owner Control</button><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><button className="settingsBtn" aria-label="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={16}/></button></div></div>
+   <div className="sideBottom"><div className="status"><span/> Agent online</div><button className="accountOpenBtn" onClick={()=>setAccountOpen(true)}><UserCircle size={15}/> {account?account.email:"Account"}</button><button className="accountOpenBtn" onClick={()=>setResellerOpen(true)}>🧾 Reseller</button><button className="ownerOpenBtn" onClick={()=>setOwnerOpen(true)}><ShieldCheck size={15}/> Owner Control</button><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><button className="settingsBtn" aria-label="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={16}/></button></div></div>
   </aside>
   <main>
    <header>
@@ -163,6 +164,6 @@ function App(){
     <div className="composerHint">BHAI X can search, code, generate images, work with files and execute tasks. <b>Check important results.</b></div>
    </div>
   </main>
- {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>}\n </div>
+ {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false)}/>}\n </div>
 }
 createRoot(document.getElementById('root')).render(<App/>);

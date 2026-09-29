@@ -21,7 +21,7 @@ export default async function handler(req,res){
  if(!ownerGuard(req,res))return;
  const s=ownerState();
  if(s.emergencyLock)return json(res,423,{error:"Emergency lock is active"});
- const db=await initDb().catch(()=>false)?await getDb():null;
+ const ok=await initDb().catch(()=>false); const db=ok?await getDb():null; if(db)await db.query("CREATE TABLE IF NOT EXISTS bhai_vault (key TEXT PRIMARY KEY,data JSONB NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
  if(!db)return json(res,503,{error:"Database is required for the secure vault"});
  if(!key())return json(res,503,{error:"Set VAULT_MASTER_KEY (or OWNER_ACCESS_KEY) in Render Environment"});
  if(req.method==="GET"){
@@ -32,7 +32,6 @@ export default async function handler(req,res){
  const name=String(req.body?.key||"").trim().slice(0,120),value=req.body?.value;
  if(!name||value===undefined)return json(res,400,{error:"key and value are required"});
  const box=enc(value);
- await db.query("CREATE TABLE IF NOT EXISTS bhai_vault (key TEXT PRIMARY KEY,data JSONB NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
  await db.query("INSERT INTO bhai_vault(key,data,updated_at) VALUES($1,$2,NOW()) ON CONFLICT(key) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",[name,box]);
  return json(res,200,{ok:true,key:name,stored:true,encrypted:true});
 }

@@ -25,15 +25,36 @@ async function generateImage(prompt,aspectRatio="16:9"){
  const errors=[];
  const maxBytes=12*1024*1024;
  const findImageUrl=(value,depth=0)=>{
-  if(depth>5||value==null)return null;
-  if(typeof value==="string"&&value.startsWith("http"))return value;
+  if(depth>7||value==null)return null;
+  if(typeof value==="string"&&/^https?:\\/\\//i.test(value))return value;
   if(typeof value!=="object")return null;
-  for(const key of ["image_url","imageUrl","url","image","output_url","outputUrl","download_url","downloadUrl"]){
-   const hit=findImageUrl(value[key],depth+1); if(hit)return hit;
+  for(const key of ["url","image_url","imageUrl","output_url","outputUrl","download_url","downloadUrl","path"]){
+   const hit=findImageUrl(value[key],depth+1); if(hit&&/^https?:\\/\\//i.test(hit))return hit;
   }
-  for(const v of Object.values(value)){const hit=findImageUrl(v,depth+1);if(hit)return hit;}
+  for(const v of Object.values(value)){const hit=findImageUrl(v,depth+1);if(hit&&/^https?:\\/\\//i.test(hit))return hit;}
   return null;
  };
+ const hfSpace=process.env.HF_IMAGE_SPACE||"black-forest-labs/FLUX.1-schnell";
+ try{
+  const {Client}=await import("@gradio/client");
+  const app=await Client.connect(hfSpace);
+  const result=await app.predict("/infer",{
+   prompt,
+   seed:0,
+   randomize_seed:true,
+   width,
+   height,
+   num_inference_steps:4
+  });
+  const url=findImageUrl(result?.data);
+  if(!url) throw new Error("Hugging Face Space returned no image URL.");
+  const img=await fetch(url,{signal:timeout(30000)});
+  if(!img.ok) throw new Error("Hugging Face Space image download returned HTTP "+img.status);
+  const b=Buffer.from(await img.arrayBuffer());
+  if(!b.length) throw new Error("Hugging Face Space returned an empty image.");
+  if(b.length>maxBytes) throw new Error("Hugging Face Space returned an image larger than 12 MB.");
+  return {mimeType:img.headers.get("content-type")||"image/png",data:b.toString("base64"),provider:"huggingface-space"};
+ }catch(e){errors.push("Hugging Face Space: "+String(e?.message||e).slice(0,500));}
  const pixazoKey=process.env.PIXAZO_API_KEY;
  if(pixazoKey){
   try{
@@ -78,12 +99,12 @@ async function generateImage(prompt,aspectRatio="16:9"){
    const {InferenceClient}=await import("@huggingface/inference");
    const client=new InferenceClient(hf);
    const image=await client.textToImage({model:hfModel,provider:"auto",inputs:prompt,width,height},{outputType:"blob",signal:timeout(30000)});
-   if(!image||typeof image.arrayBuffer!=="function") throw new Error("Hugging Face returned an invalid image response.");
+   if(!image||typeof image.arrayBuffer!=="function") throw new Error("Hugging Face Inference returned an invalid image response.");
    const b=Buffer.from(await image.arrayBuffer());
-   if(!b.length) throw new Error("Hugging Face returned an empty image.");
-   if(b.length>maxBytes) throw new Error("Hugging Face returned an image larger than 12 MB.");
+   if(!b.length) throw new Error("Hugging Face Inference returned an empty image.");
+   if(b.length>maxBytes) throw new Error("Hugging Face Inference returned an image larger than 12 MB.");
    return {mimeType:"image/png",data:b.toString("base64"),provider:"huggingface"};
-  }catch(e){errors.push("Hugging Face: "+String(e?.message||e).slice(0,500));}
+  }catch(e){errors.push("Hugging Face Inference: "+String(e?.message||e).slice(0,500));}
  }
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
  if(key){
@@ -102,7 +123,7 @@ async function generateImage(prompt,aspectRatio="16:9"){
    return {mimeType:p.inlineData.mimeType||"image/png",data:p.inlineData.data,provider:"gemini"};
   }catch(e){errors.push("Gemini: "+String(e?.message||e).slice(0,500));}
  }
- throw new Error("Image generation failed: all configured image providers are unavailable. "+errors.join(" | ")); 
+ throw new Error("Image generation failed: no available provider could render the image. "+errors.join(" | "));
 }
 
 async function github(action,a){

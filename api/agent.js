@@ -18,7 +18,7 @@ async function webSearch(q){
  } return out;
 }
 
-async function generateImage(prompt,aspectRatio="16:9"){
+async function generateImage(prompt,aspectRatio="16:9"){\n const timeout=(ms)=>AbortSignal.timeout(ms);
  const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;
  const height=aspectRatio==="9:16"?1365:aspectRatio==="1:1"?768:576;
  const hf=process.env.HF_TOKEN;
@@ -27,7 +27,7 @@ async function generateImage(prompt,aspectRatio="16:9"){
   try{
    const {InferenceClient}=await import("@huggingface/inference");
    const client=new InferenceClient(hf);
-   const image=await client.textToImage({model:hfModel,provider:"auto",inputs:prompt,width,height},{outputType:"blob"});
+   const image=await client.textToImage({model:hfModel,provider:"auto",inputs:prompt,width,height},{outputType:"blob",signal:timeout(45000)});
    const b=Buffer.from(await image.arrayBuffer());
    return {mimeType:"image/png",data:b.toString("base64"),provider:"huggingface"};
   }catch(e){
@@ -40,7 +40,7 @@ async function generateImage(prompt,aspectRatio="16:9"){
  const model=process.env.GEMINI_IMAGE_MODEL||"gemini-3.1-flash-image";
  const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{
   method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},
-  body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],imageConfig:{aspectRatio}}})
+  body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],imageConfig:{aspectRatio}}}),signal:timeout(45000)
  });
  const d=await r.json(); if(!r.ok) throw new Error(d?.error?.message||"Image generation failed");
  const p=(d?.candidates?.[0]?.content?.parts||[]).find(x=>x.inlineData?.data);
@@ -173,7 +173,7 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
  let rootListed=false;
- const maxGithubReads=8,maxToolCalls=12,maxRounds=6;
+ const maxGithubReads=6,maxToolCalls=8,maxRounds=4;
 
  for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
   let d; try{d=await generateWithFallback(true)}catch(e){return json(res,502,{error:e.message,activity})}
@@ -184,7 +184,7 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
    return json(res,200,{text:text||"Image ready.",activity,images:generatedImages});
   }
   contents.push(candidate.content);
-  const allowedCalls=calls.slice(0,3),responseParts=[];
+  const allowedCalls=calls.slice(0,2),responseParts=[];
   for(const call of allowedCalls){
    if(totalToolCalls>=maxToolCalls) break;
    const name=call.name,a={...(call.args||{}),doIt},cacheKey=name+":"+JSON.stringify(a);
@@ -246,7 +246,7 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
     responseParts.push({functionResponse:{name,response:{error:msg}}});
    }
   }
-  if(calls.length>allowedCalls.length) responseParts.push({functionResponse:{name:"tool_budget_guard",response:{error:"At most 3 tool calls are allowed per model round. Continue from returned results instead of issuing parallel calls."}}});
+  if(calls.length>allowedCalls.length) responseParts.push({functionResponse:{name:"tool_budget_guard",response:{error:"At most 2 tool calls are allowed per model round. Continue from returned results instead of issuing parallel calls."}}});
   contents.push({role:"user",parts:responseParts});
   contents=compactContents(contents);
   if(consecutiveFailures>=2) break;

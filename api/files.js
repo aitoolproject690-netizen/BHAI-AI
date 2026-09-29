@@ -1,5 +1,6 @@
+import {requireSession} from "./_utils.js";
 export default async function handler(req,res){
-  if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"});
+  if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"}); if(!await requireSession(req,res))return;
   const {name,content}=req.body||{};
   if(!name||typeof content!=="string") return res.status(400).json({error:"name and text content are required"});
   if(content.length>100000) return res.status(413).json({error:"File too large"});

@@ -168,12 +168,12 @@ const preferred=["gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemin
 models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return (ai<0?999:ai)-(bi<0?999:bi);});
  const isTransientModelError=(e)=>/429|RESOURCE_EXHAUSTED|quota|rate.?limit|high demand|temporarily unavailable|try again later|overloaded/i.test(String(e?.message||e));
  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
- const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<5;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<4) await sleep(Math.min(8000,1500*Math.pow(2,attempt)));}}}throw last;};
+ const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<4) await sleep(Math.min(5000,1200*Math.pow(2,attempt)));}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
  let rootListed=false;
- const maxGithubReads=10,maxToolCalls=20,maxRounds=25;
+ const maxGithubReads=10,maxToolCalls=16,maxRounds=12;
 
  for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
   let d; try{d=await generateWithFallback(true)}catch(e){return json(res,502,{error:e.message,activity})}

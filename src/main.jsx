@@ -98,6 +98,7 @@ function App(){
    if(d.usage)setUsage(d.usage); setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
    upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}]);
+   if(casualChat)return;
    try{await fetch(apiUrl('/api/diff'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:'agent-task',summary:t,files:(d.activity||[]).map(x=>x.tool||'tool'),commit:d.commit||null,verification:d.verified||d.verification||null})})}catch{}
    try{await fetch(apiUrl('/api/dna'),{method:'POST',headers:authHeaders(),body:JSON.stringify({project:'default',data:{lastGoal:t,lastResult:String(d.text||'').slice(0,2500),lastVerified:d.verified||d.verification||null,lastUpdated:new Date().toISOString()}})})}catch{}
    try{const sr=await fetch(apiUrl('/api/suggestions'),{method:'POST',headers:authHeaders(),body:JSON.stringify({goal:t,completed:d.completed||[],remaining:d.remaining||[]})});const sd=await sr.json();if(Array.isArray(sd.suggestions)&&sd.suggestions.length){const suggestionText='💡 SMART SUGGESTIONS\\n\\n'+sd.suggestions.map(x=>'• '+x).join('\\n');upd(m=>{const last=m[m.length-1];if(last?.text===suggestionText)return m;return [...m,{id:crypto.randomUUID(),role:'assistant',text:suggestionText}]});}}catch{}

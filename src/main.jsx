@@ -121,7 +121,7 @@ function App(){
   if(instantMessage){
    const id=crypto.randomUUID();
    setInput('');setFileInfo(null);setToolsOpen(false);
-   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id,role:'assistant',text:instantCasual[casualKey]}];
+   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id,role:'assistant',text:instantReply}];
    upd(()=>next);
    if(chat.title==='New chat')setSessions(a=>a.map(s=>s.id===active?{...s,title:t.slice(0,32)}:s));
    return;

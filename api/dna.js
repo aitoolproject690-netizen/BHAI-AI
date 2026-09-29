@@ -1,4 +1,5 @@
-import crypto from "node:crypto";\nimport {requireSession} from "./_utils.js";
+import crypto from "node:crypto";
+import {requireSession} from "./_utils.js";
 import {getDb,initDb} from "./db.js";
 const json=(res,s,d)=>res.status(s).json(d);
 const keyOf=v=>String(v||"default").trim().slice(0,200)||"default";
@@ -21,7 +22,8 @@ export default async function handler(req,res){
  await initDb().catch(()=>false);
  const key=keyOf(req.query?.project||req.body?.project);
  const db=await getDb();
- if(req.method==="GET"){\n  const account=await requireSession(req,res);if(!account)return;
+ if(req.method==="GET"){
+  const account=await requireSession(req,res);if(!account)return;
   if(db){const r=await db.query("SELECT data,updated_at FROM bhai_dna WHERE project_key=$1",[key]);return json(res,200,{ok:true,project:key,data:r.rows[0]?.data||{},updatedAt:r.rows[0]?.updated_at||null,persistent:true});}
   return json(res,200,{ok:true,project:key,data:{},updatedAt:null,persistent:false});
  }

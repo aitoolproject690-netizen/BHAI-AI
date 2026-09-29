@@ -4,11 +4,14 @@ const now=()=>new Date().toISOString();
 
 export default async function handler(req,res){
   if(req.method!=="POST")return res.status(405).json({error:"Method not allowed"});
+  const expected=String(process.env.BHAI_WORKER_SECRET||"");
+  const supplied=String(req.headers["x-bhai-worker"]||req.body?.workerSecret||"");
+  if(!expected||supplied!==expected)return res.status(401).json({ok:false,error:"Worker authentication required."});
   await initDb();
   const db=await getDb();
   if(!db)return res.status(503).json({ok:false,error:"DATABASE_URL is required for the persistent worker."});
 
-  const max=Number(req.body?.limit||5);
+  const max=Math.min(Math.max(Number(req.body?.limit||5),1),20);
   const leaseSeconds=Math.min(Math.max(Number(req.body?.leaseSeconds||300),30),1800);
   const client=await db.connect();
   try{

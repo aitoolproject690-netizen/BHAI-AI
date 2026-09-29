@@ -1,8 +1,10 @@
 import {getDb,initDb} from "./db.js";
+import {requireSession} from "./_utils.js";
 const json=(res,s,d)=>res.status(s).json(d);
 async function check(url,name){try{const r=await fetch(url,{signal:AbortSignal.timeout(5000)});return{name,ok:r.ok,status:r.status};}catch(e){return{name,ok:false,error:String(e.message||e)}}}
 export default async function handler(req,res){
  if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});
+ if(!await requireSession(req,res))return;
  const base=String(req.body?.url||"").replace(/\/$/,""); const checks=[];
  if(base)checks.push(await check(base+"/api/health","backend"));
  checks.push({name:"node",ok:Number(process.versions.node.split(".")[0])>=20});

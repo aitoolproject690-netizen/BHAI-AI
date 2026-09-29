@@ -335,7 +335,7 @@ async function getModelsFast(){
   return list;
 }
 const latestText=String(latestUserMessage||"").trim();
-const quickChat=/^(hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya kar rahe ho|thanks|thank you|thik hai|theek hai|ok|okay|bye|goodbye)(\\s+bhai)?[!?., ]*$/i.test(latestText);
+const quickChat=/^(hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya chal raha|kya chal rha|kya kar rahe ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|😂|😄|bye|goodbye)(\\s+bhai)?[!?., ]*$/i.test(latestText);
 const quickChatMode=quickChat;
 if(quickChat){
  const playful={
@@ -351,7 +351,16 @@ if(quickChat){
   goodbye:"Theek hai bhai 😂 Milte hain! Jab bulaoge, BHAI X ready milega. 🚀"
  };
  const k=latestText.toLowerCase().replace(/\\s+bhai[!?., ]*$/i,"").trim();
- const reply=playful[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
+ const casualReplies={
+  "kya chal raha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
+  "kya chal rha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
+  "kya scene hai":"Sab mast bhai 😄 BHAI X ready hai. Batao aaj kya kaam pakadna hai? 🚀",
+  "kya hua":"Kuch nahi bhai 😄 Main ekdum ready hoon. Batao kya hua?",
+  "kaise ho":"Ekदम badhiya bhai 😎 Ready and online! Tum batao kya scene hai? 🚀",
+  "kaisa hai":"Badhiya bhai 😎 BHAI X full ready hai. Batao kya karna hai? 🚀",
+  "kya haal":"Mast bhai 😄 Tum batao, kya haal hai? Aaj kya kaam karein? 🚀"
+ };
+ const reply=playful[k]||casualReplies[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
 const models=quickChat

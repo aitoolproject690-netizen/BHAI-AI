@@ -32,6 +32,7 @@ import resellers from "./api/resellers.js";
 import billing from "./api/billing.js";
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT)||10000;
+const allowedOrigin="*";
 const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/worker":worker,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests,"/api/dna":dna,"/api/vault":vault,"/api/accounts":accounts,"/api/resellers":resellers,"/api/billing":billing};
 function runApi(fn,req,res){
   let body="";
@@ -41,10 +42,14 @@ function runApi(fn,req,res){
     req.query=Object.fromEntries(new URL(req.url||"/","http://localhost").searchParams);
     res.json=x=>{res.setHeader("Content-Type","application/json");res.end(JSON.stringify(x));};
     res.status=code=>{res.statusCode=code;return res;};
-    await fn(req,res);
+    console.log("[API]",req.method,req.url); await fn(req,res);
   }catch(e){res.statusCode=500;res.setHeader("Content-Type","application/json");res.end(JSON.stringify({error:e.message||"Server error"}));}});
 }
 http.createServer((req,res)=>{
+  res.setHeader("Access-Control-Allow-Origin",allowedOrigin);
+  res.setHeader("Access-Control-Allow-Headers","Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Methods","GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  if(req.method==="OPTIONS"){res.statusCode=204;return res.end();}
   const u=new URL(req.url||"/","http://localhost");
   if(routes[u.pathname]){
     const fn=routes[u.pathname];

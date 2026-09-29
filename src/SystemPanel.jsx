@@ -13,6 +13,8 @@ export default function SystemPanel({onClose}){
   <div className="utilityBody">
    <div className="systemActions">
     <button onClick={()=>run("self_audit")} disabled={busy}><ClipboardCheck size={14}/> Self Audit</button>
+    <button onClick={()=>run("doctor",{url:API})} disabled={busy}><Activity size={14}/> Health Doctor</button>
+    <button onClick={dna} disabled={busy}><ClipboardCheck size={14}/> Project DNA</button>
     <button onClick={()=>run("build_doctor")} disabled={busy}><Activity size={14}/> Build Doctor</button>
     <button onClick={()=>run("test",{url:API+"/api/health"})} disabled={busy}><Play size={14}/> Test Backend</button>
     <button onClick={()=>run("post_deploy",{url:API+"/api/health"})} disabled={busy}><ShieldCheck size={14}/> Verify Deploy</button>

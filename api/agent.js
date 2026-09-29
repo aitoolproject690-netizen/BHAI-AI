@@ -31,11 +31,12 @@ async function generateImage(prompt,aspectRatio="16:9"){
   const qs=new URLSearchParams({model:"flux",width:String(width),height:String(height),nologo:"true"});
   const r=await fetch(base+"?"+qs.toString(),{
    headers:pollinationsKey?{Authorization:"Bearer "+pollinationsKey}:{"User-Agent":"BHAI-X/1.0"},
-   signal:timeout(90000)
+   signal:timeout(45000)
   });
   if(!r.ok) throw new Error("Pollinations returned HTTP "+r.status);
   const b=Buffer.from(await r.arrayBuffer());
   if(!b.length) throw new Error("Pollinations returned an empty image.");
+  if(b.length>12*1024*1024) throw new Error("Pollinations returned an image larger than 12 MB.");
   return {mimeType:r.headers.get("content-type")||"image/jpeg",data:b.toString("base64"),provider:"pollinations"};
  }catch(e){
   errors.push("Pollinations: "+String(e?.message||e).slice(0,500));
@@ -46,10 +47,11 @@ async function generateImage(prompt,aspectRatio="16:9"){
   try{
    const {InferenceClient}=await import("@huggingface/inference");
    const client=new InferenceClient(hf);
-   const image=await client.textToImage({model:hfModel,provider:"auto",inputs:prompt,width,height},{outputType:"blob",signal:timeout(45000)});
+   const image=await client.textToImage({model:hfModel,provider:"auto",inputs:prompt,width,height},{outputType:"blob",signal:timeout(30000)});
    if(!image||typeof image.arrayBuffer!=="function") throw new Error("Hugging Face returned an invalid image response.");
    const b=Buffer.from(await image.arrayBuffer());
    if(!b.length) throw new Error("Hugging Face returned an empty image.");
+   if(b.length>12*1024*1024) throw new Error("Hugging Face returned an image larger than 12 MB.");
    return {mimeType:"image/png",data:b.toString("base64"),provider:"huggingface"};
   }catch(e){
    errors.push("Hugging Face: "+String(e?.message||e).slice(0,500));
@@ -145,7 +147,8 @@ function compactContents(messages){
 async function geminiGenerate(apiKey,model,system,contents,useTools=true,activeDefinitions=toolDefinitions){
  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{
   method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-  body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,...(useTools?{tools:[{functionDeclarations:activeDefinitions}]}:{}),generationConfig:{temperature:0.2}})
+  body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,...(useTools?{tools:[{functionDeclarations:activeDefinitions}]}:{}),generationConfig:{temperature:0.2}}),
+   signal:AbortSignal.timeout(45000)
  });
  const d=await r.json(); if(!r.ok) throw new Error(d?.error?.message||"Gemini API request failed"); return d;
 }
@@ -183,7 +186,7 @@ EXECUTION POLICY:
  let contents=compactContents(toGeminiContents(messages));
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
  async function getAvailableModels(){
- const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key}});
+ const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key},signal:AbortSignal.timeout(20000)});
  const d=await r.json();
  if(!r.ok) throw new Error(d?.error?.message||"Unable to list Gemini models");
  return (d.models||[])

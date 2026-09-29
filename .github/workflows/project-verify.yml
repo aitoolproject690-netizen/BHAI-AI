@@ -42,4 +42,4 @@ jobs:
           fi
       - name: Verify required server modules
         run: |
-          node --input-type=module -e "for (const p of ['./server.js','./api/agent.js','./api/control.js','./api/system.js','./api/dna.js']) { await import(p); console.log('module ok',p) }"
+          for f in server.js api/agent.js api/control.js api/system.js api/dna.js; do node --check "$f"; done

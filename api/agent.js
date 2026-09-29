@@ -296,6 +296,8 @@ EXECUTION POLICY:
 
  let contents=compactContents(toGeminiContents(messages));
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
+const quickChatMode=quickChat;
+
  async function getAvailableModels(){
  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key},signal:AbortSignal.timeout(20000)});
  const d=await r.json();
@@ -305,9 +307,25 @@ EXECUTION POLICY:
   .map(m=>String(m.name||"").replace(/^models\//,""))
   .filter(Boolean);
 }
-const models=await getAvailableModels();
 const preferred=["gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash","gemini-3.5-flash-lite","gemini-3.1-pro-preview"];
-models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return (ai<0?999:ai)-(bi<0?999:bi);});
+let modelCache=globalThis.__bhaiGeminiModels||null;
+const now=Date.now();
+if(!modelCache||now-modelCache.at>300000){
+  modelCache={at:now,models:null};
+  globalThis.__bhaiGeminiModels=modelCache;
+}
+async function getModelsFast(){
+  if(Array.isArray(modelCache.models)&&modelCache.models.length)return modelCache.models;
+  const list=await getAvailableModels();
+  list.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return (ai<0?999:ai)-(bi<0?999:bi);});
+  modelCache.models=list;
+  return list;
+}
+const latestText=String(latestUserMessage||"").trim();
+const quickChat=/^(hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya kar rahe ho|thanks|thank you|thik hai|theek hai|ok|okay|bye|goodbye)(\\s+bhai)?[!?., ]*$/i.test(latestText);
+const models=quickChat
+  ? [process.env.GEMINI_FAST_MODEL||preferred[0]]
+  : await getModelsFast();
  const isTransientModelError=(e)=>/429|RESOURCE_EXHAUSTED|quota|rate.?limit|high demand|temporarily unavailable|try again later|overloaded/i.test(String(e?.message||e));
  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<4) await sleep(Math.min(5000,1200*Math.pow(2,attempt)));}}}throw last;};
@@ -318,7 +336,12 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
  const maxGithubReads=6,maxToolCalls=8,maxRounds=4;
 
  for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
-  let d; try{d=await generateWithFallback(true)}catch(e){return json(res,502,{error:e.message,activity})}
+  let d; try{d=await generateWithFallback(!quickChatMode)}catch(e){
+   if(quickChatMode){
+    try{modelCache.models=null; const fallbackModels=await getModelsFast(); const oldModels=models.splice(0,models.length,...fallbackModels); d=await generateWithFallback(false);}
+    catch(e2){return json(res,502,{error:e2.message||e.message,activity})}
+   }else return json(res,502,{error:e.message,activity});
+  }
   const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){

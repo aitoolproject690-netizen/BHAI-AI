@@ -10,7 +10,8 @@ price = item["price"]
 total += price
 return total`};
 export default function CodeFixPanel({onClose}){
- const API='https://bhai-ai-vpna.onrender.com';const token=()=>localStorage.getItem('bhai_user_session')||sessionStorage.getItem('bhai_user_session')||'';\n const[language,setLanguage]=useState("javascript"),[mode,setMode]=useState("fix"),[code,setCode]=useState(sample.javascript),[out,setOut]=useState(""),[meta,setMeta]=useState(null),[busy,setBusy]=useState(false),[copied,setCopied]=useState(false),[file,setFile]=useState("");
+ const API='https://bhai-ai-vpna.onrender.com';const token=()=>localStorage.getItem('bhai_user_session')||sessionStorage.getItem('bhai_user_session')||'';
+ const[language,setLanguage]=useState("javascript"),[mode,setMode]=useState("fix"),[code,setCode]=useState(sample.javascript),[out,setOut]=useState(""),[meta,setMeta]=useState(null),[busy,setBusy]=useState(false),[copied,setCopied]=useState(false),[file,setFile]=useState("");
  const run=async()=>{if(!code.trim()||busy)return;setBusy(true);setMeta(null);try{const r=await fetch(API+"/api/codefix",{method:"POST",headers:{...{"Content-Type":"application/json"},...(token()?{Authorization:"Bearer "+token()}:{})},body:JSON.stringify({code,language,mode,filename:file})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Code fix failed");setOut(d.fixedCode||"");setMeta(d)}catch(e){setMeta({error:e.message})}finally{setBusy(false)}};
  const copy=async()=>{if(!out)return;await navigator.clipboard.writeText(out);setCopied(true);setTimeout(()=>setCopied(false),1200)};
  const download=()=>{if(!out)return;const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([out],{type:"text/plain"}));a.download=file||"fixed-code.txt";a.click();URL.revokeObjectURL(a.href)};

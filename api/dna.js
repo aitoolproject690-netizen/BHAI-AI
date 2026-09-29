@@ -25,7 +25,8 @@ export default async function handler(req,res){
   if(db){const r=await db.query("SELECT data,updated_at FROM bhai_dna WHERE project_key=$1",[key]);return json(res,200,{ok:true,project:key,data:r.rows[0]?.data||{},updatedAt:r.rows[0]?.updated_at||null,persistent:true});}
   return json(res,200,{ok:true,project:key,data:{},updatedAt:null,persistent:false});
  }
- if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});\n const account=await requireSession(req,res);if(!account)return;
+ if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});
+ const account=await requireSession(req,res);if(!account)return;
  const incoming=req.body?.data;
  if(!incoming||typeof incoming!=="object"||Array.isArray(incoming))return json(res,400,{error:"data object is required"});
  const current=db?(await db.query("SELECT data FROM bhai_dna WHERE project_key=$1",[key])).rows[0]?.data||{}:{};

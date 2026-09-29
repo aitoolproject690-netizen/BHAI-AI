@@ -11,30 +11,32 @@ async function save(job){
  else memory.set(job.id,job);
  return !!db;
 }
-async function get(id){
+const ownerKey=(account)=>String(account?.id||account?.email||"").slice(0,300);
+async function get(id,account){
  const db=await getDb();
- if(db){const r=await db.query("SELECT data FROM bhai_jobs WHERE id=$1",[id]);return r.rows[0]?.data;}
- return memory.get(id);
+ if(db){const r=await db.query("SELECT data FROM bhai_jobs WHERE id=$1",[id]);const job=r.rows[0]?.data;return job&&job.owner===ownerKey(account)?job:undefined;}
+ const job=memory.get(id);return job&&job.owner===ownerKey(account)?job:undefined;
 }
 export default async function handler(req,res){
  if(!await requireSession(req,res))return;
  await boot();
+ const owner=ownerKey(account);
  if(req.method==="POST"){
   const body=req.body||{}, id=crypto.randomUUID();
-  const job={id,type:String(body.type||"general"),payload:body.payload||{},status:"queued",attempts:0,createdAt:now(),updatedAt:now()};
+  const job={id,owner,type:String(body.type||"general"),payload:body.payload||{},status:"queued",attempts:0,createdAt:now(),updatedAt:now()};
   const persistent=await save(job);
   return res.status(202).json({...job,persistent});
  }
  if(req.method==="GET"){
   const id=req.query?.id;
   if(!id)return res.status(400).json({error:"id is required"});
-  const job=await get(id);
+  const job=await get(id,account);
   return res.status(200).json(job||{id,status:"unknown"});
  }
  if(req.method==="PATCH"){
   const id=String(req.body?.id||""); if(!id)return res.status(400).json({error:"id is required"});
-  const current=await get(id); if(!current)return res.status(404).json({error:"job not found"});
-  const job={...current,...(req.body?.patch||{}),id,updatedAt:now()};
+  const current=await get(id,account); if(!current)return res.status(404).json({error:"job not found"});
+  const job={...current,...(req.body?.patch||{}),id,owner,updatedAt:now()};
   const persistent=await save(job); return res.status(200).json({ok:true,job,persistent});
  }
  return res.status(405).json({error:"Method not allowed"});

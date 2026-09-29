@@ -33,7 +33,8 @@ async function loadHistory(){
 export default async function handler(req,res){
  await dbReady();
  if(req.method==="GET")return json(res,200,{ok:true,service:"BHAI X System Center",persistent:!!process.env.DATABASE_URL,features:["tests","build-doctor","cost-guardian","queue","checkpoint","self-audit","post-deploy-verify","history"]});
- if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});\n const account=await requireSession(req,res);if(!account)return;
+ if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});
+ const account=await requireSession(req,res);if(!account)return;
  const a=req.body?.action;
  if(a==="doctor"){const base=String(req.body?.url||"").replace(/\/$/,"");const checks=[];if(base){try{const r=await fetch(base+"/api/health",{signal:AbortSignal.timeout(5000)});checks.push({name:"backend",ok:r.ok,status:r.status});}catch(e){checks.push({name:"backend",ok:false,error:e.message})}}checks.push({name:"node",ok:Number(process.versions.node.split(".")[0])>=20});checks.push({name:"ai-key",ok:!!(process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY)});checks.push({name:"database",ok:!!process.env.DATABASE_URL});return json(res,200,{ok:checks.every(x=>x.ok),checks,verifiedAt:now()});}
  if(a==="test"){const results=[];if(req.body?.url)results.push({name:"HTTP health",...(await health(req.body.url))});results.push({name:"AI configured",ok:!!(process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY)});results.push({name:"GitHub configured",ok:!!process.env.GITHUB_TOKEN});return json(res,200,{ok:results.every(x=>x.ok),results,verifiedAt:now()});}

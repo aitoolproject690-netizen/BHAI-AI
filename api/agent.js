@@ -18,7 +18,8 @@ async function webSearch(q){
  } return out;
 }
 
-async function generateImage(prompt,aspectRatio="16:9"){\n const timeout=(ms)=>AbortSignal.timeout(ms);
+async function generateImage(prompt,aspectRatio="16:9"){
+ const timeout=(ms)=>AbortSignal.timeout(ms);
  const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;
  const height=aspectRatio==="9:16"?1365:aspectRatio==="1:1"?768:576;
  const hf=process.env.HF_TOKEN;

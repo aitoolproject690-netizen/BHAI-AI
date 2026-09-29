@@ -22,7 +22,7 @@ export default function SystemPanel({onClose}){
    {busy&&<div className="utilityLoading"><RefreshCw className="spin"/> Checking...</div>}
    {note&&<div className="utilityNote">{note}</div>}
    {data&&<pre className="systemResult">{JSON.stringify(data,null,2)}</pre>}
-   <div className="utilityNote">ℹ️ Queue/checkpoint/history storage abhi service memory mein hai; Render restart/redeploy ke baad reset ho sakta hai. Cost Guardian calculation-only foundation hai, provider billing telemetry nahi.</div>
+   <div className="utilityNote">ℹ️ Queue/checkpoint/history database available hone par persistent hain; database na ho to temporary in-memory fallback use hota hai. Cost Guardian calculation-only foundation hai, provider billing telemetry nahi.</div>
   </div>
  </div></div>
 }

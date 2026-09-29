@@ -7,6 +7,7 @@ import health from "./api/health.js";
 import build from "./api/build.js";
 import files from "./api/files.js";
 import jobs from "./api/jobs.js";
+import worker from "./api/worker.js";
 import search from "./api/search.js";
 import task from "./api/task.js";
 import github from "./api/github.js";
@@ -27,7 +28,7 @@ import dna from "./api/dna.js";
 import vault from "./api/vault.js";
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT)||10000;
-const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests,"/api/dna":dna,"/api/vault":vault};
+const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/worker":worker,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests,"/api/dna":dna,"/api/vault":vault};
 function runApi(fn,req,res){
   let body="";
   req.on("data",c=>{body+=c;if(body.length>2000000){res.statusCode=413;req.destroy();}});

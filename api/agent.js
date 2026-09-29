@@ -29,7 +29,7 @@ async function generateImage(prompt,aspectRatio="16:9"){
   if(typeof value==="string"&&/^https?:\/\//i.test(value))return value;
   if(typeof value!=="object")return null;
   for(const key of ["url","image_url","imageUrl","output_url","outputUrl","download_url","downloadUrl","path"]){
-   const hit=findImageUrl(value[key],depth+1); if(hit&&/^https?:\\/\\//i.test(hit))return hit;
+   const hit=findImageUrl(value[key],depth+1); if(hit&&/^https?:\/\//i.test(hit))return hit;
   }
   for(const v of Object.values(value)){const hit=findImageUrl(v,depth+1);if(hit&&/^https?:\\/\\//i.test(hit))return hit;}
   return null;

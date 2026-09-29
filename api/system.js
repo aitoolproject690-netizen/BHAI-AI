@@ -40,8 +40,13 @@ export default async function handler(req,res){
  if(a==="build_doctor"){const checks=[{name:"Node runtime",ok:Number(process.versions.node.split(".")[0])>=20},{name:"package manifest",ok:true},{name:"AI config",ok:!!(process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY)}];return json(res,200,{ok:checks.every(x=>x.ok),checks,fixes:checks.filter(x=>!x.ok).map(x=>"Fix: "+x.name),verifiedAt:now()});}
  if(a==="cost"){const input=Number(req.body?.estimatedTokens||0),price=Number(req.body?.pricePerMillion||0);return json(res,200,{ok:true,estimatedTokens:input,estimatedCostUSD:Number((input/1000000*price).toFixed(6)),budgetUSD:req.body?.budgetUSD??null,withinBudget:req.body?.budgetUSD==null?true:(input/1000000*price)<=Number(req.body.budgetUSD)});}
  if(a==="queue_add"){
-  const id=crypto.randomUUID(),maxAttempts=Math.min(Math.max(Number(req.body?.maxAttempts||3),1),10);
-  const job={id,status:"queued",goal:String(req.body?.goal||""),payload:req.body?.payload||{},createdAt:now(),updatedAt:now(),attempts:0,maxAttempts};
+  const id=crypto.randomUUID(),type=String(req.body?.type||"agent").toLowerCase(),allowed=["agent","health"];
+  if(!allowed.includes(type))return json(res,400,{error:"Unsupported queue type. Allowed: agent, health."});
+  const maxAttempts=Math.min(Math.max(Number(req.body?.maxAttempts||3),1),10);
+  const payload=req.body?.payload&&typeof req.body.payload==="object"?req.body.payload:{};
+  if(type==="agent"&&!String(req.body?.goal||payload.goal||"").trim())return json(res,400,{error:"Agent queue job requires a goal."});
+  if(type==="health"&&!String(payload.url||"").trim())return json(res,400,{error:"Health queue job requires payload.url."});
+  const job={id,type,status:"queued",goal:String(req.body?.goal||payload.goal||""),payload,createdAt:now(),updatedAt:now(),attempts:0,maxAttempts};
   await saveJob(job); return json(res,202,job);
  }
  if(a==="queue")return json(res,200,{ok:true,jobs:await loadJobs(),persistent:!!process.env.DATABASE_URL});
@@ -49,11 +54,8 @@ export default async function handler(req,res){
   const id=String(req.body?.id||"");if(!id)return json(res,400,{error:"id is required"});
   const current=(await loadJobs()).find(x=>x.id===id);if(!current)return json(res,404,{error:"job not found"});
   const patch=req.body?.patch||{}, nextStatus=String(patch.status||"");
-  if(nextStatus==="done"||nextStatus==="failed"){
-   patch.leaseUntil=null;patch.finishedAt=now();
-  }
-  const job={...current,...patch,id,updatedAt:now()};
-  await saveJob(job);return json(res,200,{ok:true,job,persistent:!!process.env.DATABASE_URL});
+  if(nextStatus==="done"||nextStatus==="failed"){patch.leaseUntil=null;patch.finishedAt=now();}
+  const job={...current,...patch,id,updatedAt:now()};await saveJob(job);return json(res,200,{ok:true,job,persistent:!!process.env.DATABASE_URL});
  }
  if(a==="checkpoint"){const id=req.body?.id||crypto.randomUUID();const cp={id,goal:req.body?.goal||"",state:req.body?.state||{},createdAt:now()};await saveCheckpoint(cp);return json(res,200,{ok:true,checkpoint:cp,persistent:!!process.env.DATABASE_URL});}
  if(a==="resume"){const cp=await loadCheckpoint(req.body?.id);return cp?json(res,200,{ok:true,resumable:true,checkpoint:cp}):json(res,404,{ok:false,error:"Checkpoint not found"});}

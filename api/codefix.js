@@ -1,4 +1,4 @@
-import {json} from "./_utils.js";
+import {json,requireSession} from "./_utils.js";
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const models=()=>[process.env.GEMINI_MODEL,"gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash","gemini-3.5-flash-lite"].filter((m,i,a)=>m&&!a.slice(0,i).includes(m));
 const transient=e=>/429|RESOURCE_EXHAUSTED|quota|rate.?limit|high demand|temporarily unavailable|try again later|overloaded/i.test(String(e?.message||e));
@@ -8,7 +8,7 @@ async function call(key,model,prompt){
  return d?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
 }
 export default async function handler(req,res){
- if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});
+ if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});\n const account=await requireSession(req,res);if(!account)return;
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;if(!key)return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
  const {code="",language="javascript",mode="fix",filename=""}=req.body||{};
  if(typeof code!=="string"||!code.trim())return json(res,400,{error:"Code is required"});if(code.length>200000)return json(res,413,{error:"Code is too large. Maximum 200,000 characters."});

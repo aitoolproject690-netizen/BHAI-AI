@@ -2,22 +2,25 @@
  * BHAI AI Skill Selector & Router
  * Supports ordered multi-skill chains for complex tasks.
  */
-export const SKILLS={GITHUB:"github",WEB_RESEARCH:"web-research",CODING:"coding",FILE:"file",IMAGE:"image",BUILD:"build",AUTOMATION:"automation"};
+export const SKILLS={GITHUB:"github",WEB_RESEARCH:"web-research",CODING:"coding",FILE:"file",IMAGE:"image",BUILD:"build",AUTOMATION:"automation",HEALTH:"health",SUPPORT:"support"};
+
 export function selectSkillsForTask(taskText=""){
  const text=taskText.toLowerCase(),skills=[];
  const add=s=>{if(!skills.includes(s))skills.push(s)};
- if(text.includes("search")||text.includes("web")||text.includes("lookup")||text.includes("find online")||text.includes("latest")||text.includes("documentation")||text.includes("research"))add(SKILLS.WEB_RESEARCH);
- if(text.includes("code")||text.includes("fix")||text.includes("bug")||text.includes("implement")||text.includes("refactor")||text.includes("function")||text.includes("component")||text.includes("script")||text.includes("build"))add(SKILLS.CODING);
- if(text.includes("file")||text.includes("directory")||text.includes("folder")||text.includes("read file")||text.includes("create file")||text.includes("list"))add(SKILLS.FILE);
- if(text.includes("github")||text.includes("repo")||text.includes("commit")||text.includes("pull request")||text.includes("branch")||text.includes("repository"))add(SKILLS.GITHUB);
- if(text.includes("image")||text.includes("photo")||text.includes("picture")||text.includes("draw")||text.includes("generate"))add(SKILLS.IMAGE);
- if(text.includes("apk")||text.includes("android")||text.includes("build app")||text.includes("compile"))add(SKILLS.BUILD);
- if(text.includes("schedule")||text.includes("remind")||text.includes("every day")||text.includes("automate"))add(SKILLS.AUTOMATION);
+ if(/search|web|lookup|find online|latest|today|current|news|documentation|research|price|availability|doctor near|hospital near/.test(text))add(SKILLS.WEB_RESEARCH);
+ if(/dawai|medicine|tablet|capsule|syrup|dose|dosage|side effect|symptom|fever|cough|cold|pain|bleeding|pregnan|baby|doctor|hospital|report|blood test|lab test|health/.test(text))add(SKILLS.HEALTH);
+ if(/sad|dukhi|upset|tension|stress|anxious|anxiety|lonely|ro raha|rona|depressed|depression|pareshan|bura lag|mann nahi/.test(text))add(SKILLS.SUPPORT);
+ if(/code|fix|bug|implement|refactor|function|component|script|build|error|deploy/.test(text))add(SKILLS.CODING);
+ if(/file|directory|folder|read file|create file|list|pdf|document/.test(text))add(SKILLS.FILE);
+ if(/github|repo|commit|pull request|branch|repository/.test(text))add(SKILLS.GITHUB);
+ if(/image|photo|picture|draw|generate/.test(text))add(SKILLS.IMAGE);
+ if(/apk|android|build app|compile/.test(text))add(SKILLS.BUILD);
+ if(/schedule|remind|every day|automate/.test(text))add(SKILLS.AUTOMATION);
  return skills.length?skills:[SKILLS.CODING];
 }
 export function selectSkillForTask(taskText=""){return selectSkillsForTask(taskText)[0];}
 export function getSkillPromptContext(skillNames){
  const names=Array.isArray(skillNames)?skillNames:[skillNames],valid=names.filter(Boolean);
  if(!valid.length)return "[Skill Chain: General Agent]";
- return "[Skill Chain: "+valid.join(" → ")+"] Execute the selected skills in this order. Web Research gathers current facts first when needed; Coding analyzes/implements; File handles file-level work; GitHub inspects and commits repository changes last; Image handles visual generation; Build handles app/build requests; Automation handles scheduled/background tasks.";
+ return "[Skill Chain: "+valid.join(" → ")+"] Execute the selected skills in this order. Web Research gathers current facts first when needed; Health handles medical-information safety; Support handles empathetic conversation; Coding analyzes/implements; File handles file-level work; GitHub inspects and commits repository changes last; Image handles visual generation; Build handles app/build requests; Automation handles scheduled/background tasks.";
 }

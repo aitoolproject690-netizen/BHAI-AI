@@ -81,7 +81,44 @@ function App(){
   if(fileInfo)t=t+'\n\n[Attached file: '+fileInfo.name+']\n'+fileInfo.text;
   if(!t||running||!chat)return;
   if(missionMode){await compileMission(t);return;}
-  const casualChat=/^(hi|hello|hey|hii|helo|namaste|salam|kaise ho|kaisa hai|kya haal|kya chal raha|kya chal rha|kya kar rahe ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|😂|😄|bye|goodbye)(\s+bhai)?[!?., ]*$/i.test(t);
+  const casualKey=t.toLowerCase().replace(/\s+bhai[!?., ]*$/i,'').trim();
+  const instantCasual={
+   "hi":"Arre bhai! 😄 Main yahin hoon. Batao kya scene hai? 🚀",
+   "hello":"Hello bhai! 😎 BHAI X ready hai. Batao kya karna hai? 🚀",
+   "hey":"Hey bhai! 😄 Kya chal raha hai? 🚀",
+   "hii":"Hii bhai! 😄 Batao kya karna hai? 🚀",
+   "helo":"Hello bhai! 😄 Main ready hoon. 🚀",
+   "namaste":"Namaste bhai! 🙏 Batao kya kaam karein?",
+   "salam":"Walaikum salam bhai! 😄 Batao kya scene hai?",
+   "kaise ho":"Ekdum badhiya bhai 😎 Tum batao?",
+   "kaisa hai":"Badhiya bhai 😎 Main full ready hoon!",
+   "kya haal":"Mast bhai 😄 Tum batao kya haal?",
+   "kya chal raha":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?",
+   "kya chal rha":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?",
+   "kya kar rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀",
+   "kya scene hai":"Sab mast bhai 😄 Batao aaj kya kaam pakadna hai? 🚀",
+   "kya hua":"Kuch nahi bhai 😄 Main ekdum ready hoon. Batao kya hua?",
+   "thanks":"Arey bhai, anytime! 😎❤️",
+   "thank you":"Arey bhai, anytime! 😎❤️",
+   "thik hai":"Theek hai bhai 😄👍",
+   "theek hai":"Theek hai bhai 😄👍",
+   "ok":"Done bhai 😎👍",
+   "okay":"Done bhai 😎👍",
+   "nice":"Hehe 😄🔥",
+   "wah":"😄🔥 Bas bhai!",
+   "haha":"😂😂 Bhai, hasi rukni nahi chahiye!",
+   "bye":"Bye bhai! 👋😄",
+   "goodbye":"Bye bhai! 👋😄"
+  };
+  const casualChat=Object.prototype.hasOwnProperty.call(instantCasual,casualKey);
+  if(casualChat){
+   const id=crypto.randomUUID();
+   setInput('');setFileInfo(null);setToolsOpen(false);
+   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id,role:'assistant',text:instantCasual[casualKey]}];
+   upd(()=>next);
+   if(chat.title==='New chat')setSessions(a=>a.map(s=>s.id===active?{...s,title:t.slice(0,32)}:s));
+   return;
+  }
   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
   const id=crypto.randomUUID();
   setActivity([{id:id+'1',step:'Planning',text:'Planning task requirements...',state:'running'},{id:id+'2',step:'Tools',text:'Selecting tools...',state:'pending'},{id:id+'3',step:'Working',text:'Executing task...',state:'pending'},{id:id+'4',step:'Done',text:'Finalizing response...',state:'pending'}]);

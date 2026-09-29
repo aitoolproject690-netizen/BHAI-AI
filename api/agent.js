@@ -323,6 +323,23 @@ async function getModelsFast(){
 const latestText=String(latestUserMessage||"").trim();
 const quickChat=/^(hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya kar rahe ho|thanks|thank you|thik hai|theek hai|ok|okay|bye|goodbye)(\\s+bhai)?[!?., ]*$/i.test(latestText);
 const quickChatMode=quickChat;
+if(quickChat){
+ const playful={
+  hi:"Arre bhai, hello! 😄 Phir se hello! 😂 Lagta hai connection check chal raha hai. Main yahin hoon bhai—full ready! 🚀 Batao, aaj kya karna hai?",
+  hello:"Arre bhai, hello! 😄 Phir se hello! 😂 Lagta hai connection check chal raha hai. Main yahin hoon bhai—full ready! 🚀 Batao, aaj kya karna hai?",
+  hey:"Oho bhai! 😄 Hey received! Connection ekdum zinda hai 😂 Batao, kya kaam pakadna hai? 🚀",
+  hii:"Hii bhai! 😄😂 Main ready hoon. Batao kya scene hai aaj? 🚀",
+  namaste:"Namaste bhai! 🙏😄 Main ready hoon—bolo kya karna hai? 🚀",
+  salam:"Salam bhai! 😄 Main yahin hoon. Batao kya scene hai? 🚀",
+  thanks:"Arey bhai, koi baat nahi! 😄❤️ Batao ab agla kaam kya pakde?",
+  "thank you":"Arey bhai, koi baat nahi! 😄❤️ Batao ab agla kaam kya pakde?",
+  bye:"Theek hai bhai 😂 Milte hain! Jab bulaoge, BHAI X ready milega. 🚀",
+  goodbye:"Theek hai bhai 😂 Milte hain! Jab bulaoge, BHAI X ready milega. 🚀"
+ };
+ const k=latestText.toLowerCase().replace(/\\s+bhai[!?., ]*$/i,"").trim();
+ const reply=playful[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
+ return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
+}
 const models=quickChat
   ? [process.env.GEMINI_FAST_MODEL||preferred[0]]
   : await getModelsFast();

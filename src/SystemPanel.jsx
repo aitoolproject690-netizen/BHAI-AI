@@ -8,6 +8,7 @@ export default function SystemPanel({onClose}){
   try{const r=await fetch(API+"/api/system",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...extra})});const d=await r.json();if(!r.ok)throw new Error(d.error||"System check failed");setData(d);setNote("Verified: "+new Date().toLocaleTimeString());}
   catch(e){setNote("⚠️ "+e.message)}finally{setBusy(false)}
  }
+ async function dna(){setBusy(true);setNote("");try{const r=await fetch(API+"/api/dna?project=BHAI-AI");const d=await r.json();if(!r.ok)throw new Error(d.error||"DNA check failed");setData(d);setNote("Project DNA verified: "+new Date().toLocaleTimeString())}catch(e){setNote("⚠️ "+e.message)}finally{setBusy(false)}}
  return <div className="panelOverlay"><div className="utilityPanel systemPanel">
   <div className="utilityHead"><div><b>🧠 BHAI X — System Center</b><span>Test • Doctor • Cost • Queue • Checkpoint • Audit</span></div><button onClick={onClose}><X/></button></div>
   <div className="utilityBody">

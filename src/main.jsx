@@ -81,14 +81,15 @@ function App(){
   if(fileInfo)t=t+'\n\n[Attached file: '+fileInfo.name+']\n'+fileInfo.text;
   if(!t||running||!chat)return;
   if(missionMode){await compileMission(t);return;}
+  const casualChat=/^(hi|hello|hey|hii|helo|namaste|salam|kaise ho|kaisa hai|kya haal|kya chal raha|kya chal rha|kya kar rahe ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|😂|😄|bye|goodbye)(\s+bhai)?[!?., ]*$/i.test(t);
   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
   const id=crypto.randomUUID();
   setActivity([{id:id+'1',step:'Planning',text:'Planning task requirements...',state:'running'},{id:id+'2',step:'Tools',text:'Selecting tools...',state:'pending'},{id:id+'3',step:'Working',text:'Executing task...',state:'pending'},{id:id+'4',step:'Done',text:'Finalizing response...',state:'pending'}]);
   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t}];
   upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
   try{
-   const pf=await fetch(apiUrl("/api/control"),{method:"POST",headers:authHeaders(),body:JSON.stringify({action:"preflight"})}).then(r=>r.json()).catch(e=>({ready:false,risks:[{message:e.message}]})); if(!pf.ready){upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"🛡️ PRE-FLIGHT STOP\n\n"+(pf.risks||[]).map(x=>"⚠️ "+x.message).join("\n")+"\n\nBHAI X ne predictable failure se pehle task rok diya. Required connection/model fix karo, phir task resume karenge."}]);setActivity(a=>a.map(x=>({...x,state:x.state==="running"?"failed":x.state})));return;} setActivity(a=>a.map(x=>x.id===id+"1"?{...x,state:"done"}:x.id===id+"2"?{...x,state:"running"}:x));
-   let dnaContext=''; try{const dr=await fetch(apiUrl('/api/dna?project=default'),{headers:authHeaders()}).then(x=>x.json()); dnaContext=JSON.stringify(dr.data||{}).slice(0,5000)}catch{}
+   const pf=casualChat?{ready:true}:await fetch(apiUrl("/api/control"),{method:"POST",headers:authHeaders(),body:JSON.stringify({action:"preflight"})}).then(r=>r.json()).catch(e=>({ready:false,risks:[{message:e.message}]})); if(!pf.ready){upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"🛡️ PRE-FLIGHT STOP\n\n"+(pf.risks||[]).map(x=>"⚠️ "+x.message).join("\n")+"\n\nBHAI X ne predictable failure se pehle task rok diya. Required connection/model fix karo, phir task resume karenge."}]);setActivity(a=>a.map(x=>({...x,state:x.state==="running"?"failed":x.state})));return;} setActivity(a=>a.map(x=>x.id===id+"1"?{...x,state:"done"}:x.id===id+"2"?{...x,state:"running"}:x));
+   let dnaContext=''; if(!casualChat){try{const dr=await fetch(apiUrl('/api/dna?project=default'),{headers:authHeaders()}).then(x=>x.json()); dnaContext=JSON.stringify(dr.data||{}).slice(0,5000)}catch{}}
    const agentMessages=dnaContext?[...next,{id:crypto.randomUUID(),role:'user',text:'PROJECT DNA CONTEXT (use as context, do not repeat): '+dnaContext}]:next;
    const agentToken=account?.session||localStorage.getItem("bhai_user_session")||sessionStorage.getItem("bhai_user_session")||""; const agentHeaders={"Content-Type":"application/json"}; if(agentToken)agentHeaders.Authorization="Bearer "+agentToken; const controller=new AbortController(); const agentTimeout=setTimeout(()=>controller.abort(),300000);
    let r; try{r=await fetch(apiUrl('/api/agent'),{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:agentMessages,doIt}),signal:controller.signal});}finally{clearTimeout(agentTimeout)}

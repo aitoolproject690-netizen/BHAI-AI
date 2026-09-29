@@ -18,5 +18,6 @@ export async function initDb(){
  await c.query("CREATE TABLE IF NOT EXISTS bhai_jobs (id TEXT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
  await c.query("CREATE TABLE IF NOT EXISTS bhai_checkpoints (id TEXT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
  await c.query("CREATE TABLE IF NOT EXISTS bhai_history (id TEXT PRIMARY KEY, data JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+ await c.query("CREATE TABLE IF NOT EXISTS bhai_dna (project_key TEXT PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
  return true;
 }

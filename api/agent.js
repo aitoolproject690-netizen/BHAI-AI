@@ -296,7 +296,6 @@ EXECUTION POLICY:
 
  let contents=compactContents(toGeminiContents(messages));
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
-const quickChatMode=quickChat;
 
  async function getAvailableModels(){
  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key},signal:AbortSignal.timeout(20000)});
@@ -323,6 +322,7 @@ async function getModelsFast(){
 }
 const latestText=String(latestUserMessage||"").trim();
 const quickChat=/^(hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya kar rahe ho|thanks|thank you|thik hai|theek hai|ok|okay|bye|goodbye)(\\s+bhai)?[!?., ]*$/i.test(latestText);
+const quickChatMode=quickChat;
 const models=quickChat
   ? [process.env.GEMINI_FAST_MODEL||preferred[0]]
   : await getModelsFast();

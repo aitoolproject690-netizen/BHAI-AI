@@ -1,4 +1,5 @@
-import {requireSession} from "./_utils.js";\nconst json=(res,status,data)=>res.status(status).json(data);
+import {requireSession} from "./_utils.js";
+const json=(res,status,data)=>res.status(status).json(data);
 export default async function handler(req,res){
  if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});
  const account=await requireSession(req,res);if(!account)return;

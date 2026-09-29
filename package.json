@@ -18,7 +18,8 @@
     "@huggingface/inference": "latest",
     "@capacitor/core": "latest",
     "@capacitor/ios": "latest",
-    "pg": "latest"
+    "pg": "latest",
+    "@gradio/client": "latest"
   },
   "devDependencies": {
     "@capacitor/cli": "latest"

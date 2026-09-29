@@ -146,7 +146,7 @@ function App(){
       <div className={m.role==='user'?'bubble userBubble':'bubble'}>
        {m.role==='assistant'&&<div className="assistantLabel"><div className="miniLogo">B</div><b>BHAI X</b></div>}
        <div className="messageText">{renderText(m.text)}</div>
-       {m.images?.map((im,i)=>{const src='data:'+im.mimeType+';base64,'+im.data;return <div className="generatedWrap" key={i}><img className="generatedImage" src={src}/><a className="downloadBtn" href={src} download={'bhai-x-image-'+(i+1)+'.png'}><Download size={14}/> Download</a></div>})}
+       {m.images?.map((im,i)=>{const src='data:'+im.mimeType+';base64,'+im.data;return <div className="generatedWrap" key={i}>{im.video?<video className="generatedImage" src={src} controls playsInline/>:<img className="generatedImage" src={src}/>}<a className="downloadBtn" href={src} download={im.video?'bhai-x-video-'+(i+1)+'.mp4':'bhai-x-image-'+(i+1)+'.png'}><Download size={14}/> Download</a></div>})}
        {m.role==='assistant'&&!running&&<div className="messageActions"><button onClick={()=>copyText(m.text,m.id)}>{copied===m.id?<Check size={13}/>:<Copy size={13}/>} {copied===m.id?'Copied':'Copy'}</button></div>}
       </div>
     </div>)}

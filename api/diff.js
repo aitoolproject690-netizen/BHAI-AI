@@ -1,4 +1,5 @@
-import crypto from "node:crypto";\nimport {requireSession} from "./_utils.js";
+import crypto from "node:crypto";
+import {requireSession} from "./_utils.js";
 import {getDb,initDb} from "./db.js";
 const json=(res,s,d)=>res.status(s).json(d);
 export default async function handler(req,res){

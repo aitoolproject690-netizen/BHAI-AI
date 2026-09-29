@@ -86,7 +86,39 @@ function App(){
    "hi":"Arre bhai! 😄 Main yahin hoon. Batao kya scene hai? 🚀","hello":"Hello bhai! 😎 BHAI X ready hai. Batao kya karna hai? 🚀","hey":"Hey bhai! 😄 Kya chal raha hai? 🚀","hii":"Hii bhai! 😄 Batao kya karna hai? 🚀","helo":"Hello bhai! 😄 Main ready hoon. 🚀","namaste":"Namaste bhai! 🙏 Batao kya kaam karein?","salam":"Walaikum salam bhai! 😄 Batao kya scene hai?","kaise ho":"Ekdum badhiya bhai 😎 Tum batao?","kaisa hai":"Badhiya bhai 😎 Main full ready hoon!","kya haal":"Mast bhai 😄 Tum batao kya haal?","kya chal raha":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?","kya chal rha":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?","kya kar rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya scene hai":"Sab mast bhai 😄 Batao aaj kya kaam pakadna hai? 🚀","kya hua":"Kuch nahi bhai 😄 Main ekdum ready hoon. Batao kya hua?","thanks":"Arey bhai, anytime! 😎❤️","thank you":"Arey bhai, anytime! 😎❤️","thik hai":"Theek hai bhai 😄👍","theek hai":"Theek hai bhai 😄👍","ok":"Done bhai 😎👍","okay":"Done bhai 😎👍","nice":"Hehe 😄🔥","wah":"😄🔥 Bas bhai!","haha":"😂😂 Bhai, hasi rukni nahi chahiye!","bye":"Bye bhai! 👋😄","goodbye":"Bye bhai! 👋😄"
   };
   const casualChat=Object.prototype.hasOwnProperty.call(instantCasual,casualKey);
-  if(casualChat){
+  const fastLocal={
+   "good morning":"Good morning bhai! ☀️😎 Aaj kya kaam pakadna hai? 🚀",
+   "good evening":"Good evening bhai! 😄🌆 Batao kya scene hai?",
+   "good night":"Good night bhai! 😴🌙 Kal phir dhamaka karenge! 🚀",
+   "shukriya":"Arey bhai, anytime! ❤️😎",
+   "dhanyawad":"Arey bhai, anytime! 🙏😄",
+   "cool":"😎🔥 Bilkul bhai!",
+   "perfect":"Perfect bhai! 😎🔥",
+   "mast":"Mast bhai! 😂🔥",
+   "sahi":"Sahi hai bhai! 😎👍",
+   "haan":"Haan bhai 😄👍",
+   "han":"Haan bhai 😄👍",
+   "yes":"Yes bhai! 😎🚀",
+   "no":"Theek hai bhai 😄",
+   "nahi":"Theek hai bhai 😄👍",
+   "lol":"😂😂 Bhai!",
+   "😂":"😂😂",
+   "🤣":"🤣🤣 Bhai, kya scene hai!",
+   "😎":"😎🔥",
+   "❤️":"❤️ Bhai!",
+   "love you":"❤️😂 Bhai, same energy!",
+   "kya karu":"Bata bhai, jo kaam hai seedha bol 😎🚀",
+   "help":"Haan bhai, bol kya help chahiye? 🛠️",
+   "help bhai":"Haan bhai, bol kya help chahiye? 🛠️",
+   "sun":"Haan bhai, sun raha hoon 😄",
+   "ek baat bol":"Bol bhai 😄",
+   "bata":"Haan bhai, bataata hoon 😎",
+   "ruko":"Theek hai bhai, ruk gaya 😄✋"
+  };
+  const fastKey=casualKey;
+  const instantReply=instantCasual[fastKey]||fastLocal[fastKey];
+  const instantMessage=Boolean(instantReply);
+  if(instantMessage){
    const id=crypto.randomUUID();
    setInput('');setFileInfo(null);setToolsOpen(false);
    const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id,role:'assistant',text:instantCasual[casualKey]}];

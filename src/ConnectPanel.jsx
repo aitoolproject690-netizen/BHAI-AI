@@ -1,5 +1,5 @@
 import React,{useEffect,useState}from"react";
-import{X,Plug,Check,Loader2,RefreshCw,ExternalLink}from"lucide-react";
+import{X,Plug,Check,Loader2,RefreshCw,ExternalLink,KeyRound}from"lucide-react";
 
 const FALLBACK=[
  ["github","GitHub","Coding / Repository"],["gitlab","GitLab","Coding / Repository"],["bitbucket","Bitbucket","Coding / Repository"],["replit","Replit","Coding / App"],["render","Render","Hosting / Deploy"],["vercel","Vercel","Hosting / Deploy"],["netlify","Netlify","Hosting / Deploy"],["railway","Railway","Hosting / Deploy"],["cloudflare","Cloudflare","Hosting / DNS"],["firebase","Firebase","Cloud / App"],["aws","AWS","Cloud"],["gcp","Google Cloud","Cloud"],["azure","Azure","Cloud"],["openai","OpenAI","AI"],["anthropic","Anthropic","AI"],["google-ai","Google AI","AI"],["huggingface","Hugging Face","AI"],["discord","Discord","Social"],["telegram","Telegram","Social"]
@@ -7,7 +7,7 @@ const FALLBACK=[
 
 export default function ConnectPanel({onClose}){
  const API_BASE="https://bhai-ai-vpna.onrender.com";
- const[items,setItems]=useState(FALLBACK),[busy,setBusy]=useState(true),[error,setError]=useState("");
+ const[items,setItems]=useState(FALLBACK),[busy,setBusy]=useState(true),[error,setError]=useState(""),[selected,setSelected]=useState(null);
  async function load(){
   setBusy(true);setError("");
   try{
@@ -24,15 +24,11 @@ export default function ConnectPanel({onClose}){
   finally{setBusy(false)}
  }
  useEffect(()=>{load()},[]);
- function configure(x){
-  const message=x.configured
-   ? x.name+" is connected on the BHAI X server."
-   : x.name+" is available, but its server-side credential/OAuth is not configured yet.";
-  setError(message);
- }
+ function configure(x){setSelected(x);setError("");}
+ function closeSetup(){setSelected(null)}
  return <div className="panelOverlay"><div className="utilityPanel connectorPanel">
   <div className="utilityHead"><div><b>🔌 Connect App / Service</b><span>Apps BHAI X ke saath connect karo</span></div><button onClick={onClose}><X/></button></div>
-  <div className="utilityBody">
+  <div className="utilityBody">{selected&&<div className="utilityNote"><KeyRound size={14}/> <b>{selected.name}</b> — {selected.configured?"Connected server-side.":"Connection setup is not configured yet."} {selected.configured&&"BHAI X can use this provider in supported tasks."}<button className="connectBtn" style={{marginLeft:8}} onClick={closeSetup}>Close</button></div>}
    <button className="connectBtn" onClick={load} disabled={busy}><RefreshCw size={13}/> Refresh status</button>
    <p className="utilityIntro">App select karo. Sirf real server-side connection ko Connected dikhaya jayega.</p>
    {busy&&<div className="utilityLoading"><Loader2 className="spin"/> Apps load ho rahe hain...</div>}

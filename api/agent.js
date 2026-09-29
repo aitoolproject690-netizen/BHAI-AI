@@ -26,7 +26,7 @@ async function generateImage(prompt,aspectRatio="16:9"){
  const maxBytes=12*1024*1024;
  const findImageUrl=(value,depth=0)=>{
   if(depth>5||value==null)return null;
-  if(typeof value==="string"&&/^https?:\\/\\//i.test(value)&&/\\.(png|jpe?g|webp)(\\?|$)/i.test(value))return value;
+  if(typeof value==="string"&&value.startsWith("http"))return value;
   if(typeof value!=="object")return null;
   for(const key of ["image_url","imageUrl","url","image","output_url","outputUrl","download_url","downloadUrl"]){
    const hit=findImageUrl(value[key],depth+1); if(hit)return hit;

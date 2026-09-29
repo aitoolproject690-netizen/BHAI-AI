@@ -68,7 +68,7 @@ function App(){
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),[doIt,setDoIt]=useState(true);
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
  const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3});
- const end=useRef(null),recognition=useRef(null); const[resumeMission,setResumeMission]=useState(null);
+ const end=useRef(null),recognition=useRef(null),workTicker=useRef(null); const[resumeMission,setResumeMission]=useState(null);
 
  useEffect(()=>{if(!sessions.length){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);
  useEffect(()=>{localStorage.setItem(K,JSON.stringify(sessions));end.current?.scrollIntoView({behavior:'smooth'})},[sessions]);
@@ -128,7 +128,10 @@ function App(){
   }
   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
   const id=crypto.randomUUID();
-  setActivity([{id:id+'1',step:'Planning',text:'Planning task requirements...',state:'running'},{id:id+'2',step:'Tools',text:'Selecting tools...',state:'pending'},{id:id+'3',step:'Working',text:'Executing task...',state:'pending'},{id:id+'4',step:'Done',text:'Finalizing response...',state:'pending'}]);
+  const workSteps=[['Planning','🧠 Bhai, request samajh raha hoon...','running'],['Checking','🔎 Project aur required context check kar raha hoon...','pending'],['Tools','🛠️ Sahi tools select kar raha hoon...','pending'],['Working','⚙️ Ab actual kaam execute ho raha hai...','pending'],['Verifying','✅ Result verify kar raha hoon...','pending'],['Done','🚀 Final result ready kar raha hoon...','pending']];
+  setActivity(workSteps.map((x,n)=>({id:id+n,step:x[0],text:x[1],state:x[2]})));
+  clearInterval(workTicker.current); let tick=0;
+  workTicker.current=setInterval(()=>{tick++;setActivity(a=>a.map((x,n)=>{const activeIndex=Math.min(Math.floor(tick/2),workSteps.length-1);return {...x,state:n<activeIndex?'done':n===activeIndex?'running':'pending',text:workSteps[n][1]};}));},1400);
   const replyId=id+'-reply';
   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'⚡ Bhai, dekh raha hoon...'}];
   upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
@@ -158,7 +161,7 @@ function App(){
      }
     }catch{}
    })();
-  }catch(e){const msg=e?.name==='AbortError'?'Agent request timed out after 300 seconds. Checkpoint/retry can resume the task.':e.message;try{const rr=await fetch(apiUrl("/api/control"),{method:"POST",headers:authHeaders(),body:JSON.stringify({action:"recovery_plan",error:msg,stage:"agent"})});const rp=await rr.json();upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted\n\nProblem: "+msg+"\n\n🛡️ Recovery plan: "+(rp.plan||[]).map(x=>x.action).join(" → ")+"\n\nBHAI X will not mark this task complete without verification."}])}catch{upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted: "+msg+"\n\nRecovery check unavailable."}])}setActivity(a=>a.map(x=>({...x,state:"failed"})))}finally{setRunning(false)}
+  }catch(e){const msg=e?.name==='AbortError'?'Agent request timed out after 300 seconds. Checkpoint/retry can resume the task.':e.message;try{const rr=await fetch(apiUrl("/api/control"),{method:"POST",headers:authHeaders(),body:JSON.stringify({action:"recovery_plan",error:msg,stage:"agent"})});const rp=await rr.json();upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted\n\nProblem: "+msg+"\n\n🛡️ Recovery plan: "+(rp.plan||[]).map(x=>x.action).join(" → ")+"\n\nBHAI X will not mark this task complete without verification."}])}catch{upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"⚠️ Task interrupted: "+msg+"\n\nRecovery check unavailable."}])}setActivity(a=>a.map(x=>({...x,state:"failed"})))}finally{clearInterval(workTicker.current);workTicker.current=null;setRunning(false)}
  }
 
  function newChat(){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions(a=>[s,...a]);setActive(s.id);setInput('');setFileInfo(null);setActivity([]);setActivityOpen(false)}

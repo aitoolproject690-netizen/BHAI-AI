@@ -22,6 +22,7 @@ async function generateImage(prompt,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
  const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;
  const height=aspectRatio==="9:16"?1365:aspectRatio==="1:1"?768:576;
+ const errors=[];
  const hf=process.env.HF_TOKEN;
  const hfModel=process.env.HF_IMAGE_MODEL||"black-forest-labs/FLUX.1-dev";
  if(hf){
@@ -29,24 +30,33 @@ async function generateImage(prompt,aspectRatio="16:9"){
    const {InferenceClient}=await import("@huggingface/inference");
    const client=new InferenceClient(hf);
    const image=await client.textToImage({model:hfModel,provider:"auto",inputs:prompt,width,height},{outputType:"blob",signal:timeout(45000)});
+   if(!image||typeof image.arrayBuffer!=="function") throw new Error("Hugging Face returned an invalid image response.");
    const b=Buffer.from(await image.arrayBuffer());
+   if(!b.length) throw new Error("Hugging Face returned an empty image.");
    return {mimeType:"image/png",data:b.toString("base64"),provider:"huggingface"};
   }catch(e){
-   const msg=String(e?.message||e);
-   if(!/401|403|402|unauthorized|forbidden|payment|quota|credit/i.test(msg)) throw new Error("Hugging Face image generation failed: "+msg.slice(0,500));
+   errors.push("Hugging Face: "+String(e?.message||e).slice(0,500));
   }
  }
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
- if(!key) throw new Error("No image provider configured. Add HF_TOKEN (recommended) or GEMINI_API_KEY in Render Environment.");
+ if(!key) throw new Error("No image provider configured. "+errors.join(" | "));
  const model=process.env.GEMINI_IMAGE_MODEL||"gemini-3.1-flash-image";
- const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{
-  method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},
-  body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],imageConfig:{aspectRatio}}}),signal:timeout(45000)
- });
- const d=await r.json(); if(!r.ok) throw new Error(d?.error?.message||"Image generation failed");
- const p=(d?.candidates?.[0]?.content?.parts||[]).find(x=>x.inlineData?.data);
- if(!p?.inlineData?.data) throw new Error("Image model returned no image.");
- return {mimeType:p.inlineData.mimeType||"image/png",data:p.inlineData.data,provider:"gemini"};
+ try{
+  const r=await fetch("https://generativelanguage.googleapis.com/v1/models/"+encodeURIComponent(model)+":generateContent",{
+   method:"POST",
+   headers:{"Content-Type":"application/json","x-goog-api-key":key},
+   body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["IMAGE"],imageConfig:{aspectRatio}}}),
+   signal:timeout(60000)
+  });
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d?.error?.message||"Gemini image generation failed");
+  const p=(d?.candidates?.[0]?.content?.parts||[]).find(x=>x.inlineData?.data);
+  if(!p?.inlineData?.data) throw new Error("Gemini image model returned no image.");
+  return {mimeType:p.inlineData.mimeType||"image/png",data:p.inlineData.data,provider:"gemini"};
+ }catch(e){
+  errors.push("Gemini: "+String(e?.message||e).slice(0,500));
+  throw new Error("Image generation failed after provider fallback. "+errors.join(" | "));
+ }
 }
 
 async function github(action,a){

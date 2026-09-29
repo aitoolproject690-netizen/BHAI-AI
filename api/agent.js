@@ -126,6 +126,50 @@ async function generateImage(prompt,aspectRatio="16:9"){
  throw new Error("Image generation failed: no available provider could render the image. "+errors.join(" | "));
 }
 
+async function ensureUsageTable(db){
+ await db.query("CREATE TABLE IF NOT EXISTS bhai_media_usage (account_id TEXT NOT NULL, usage_date DATE NOT NULL, images INTEGER NOT NULL DEFAULT 0, videos INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(account_id,usage_date))");
+}
+async function reserveMedia(db,accountId,type,limit){
+ await ensureUsageTable(db);
+ const col=type==="video"?"videos":"images";
+ await db.query("INSERT INTO bhai_media_usage(account_id,usage_date) VALUES($1,(NOW() AT TIME ZONE 'Asia/Kolkata')::date) ON CONFLICT(account_id,usage_date) DO NOTHING",[accountId]);
+ const q=await db.query("UPDATE bhai_media_usage SET "+col+"="+col+"+1 WHERE account_id=$1 AND usage_date=(NOW() AT TIME ZONE 'Asia/Kolkata')::date AND "+col+"<$2 RETURNING "+col,[accountId,limit]);
+ if(!q.rows[0]) throw new Error(type==="video"?"Daily video limit reached (3/3). Try again after 12:00 AM IST.":"Daily image limit reached (10/10). Try again after 12:00 AM IST.");
+ return q.rows[0][col];
+}
+async function releaseMedia(db,accountId,type){
+ const col=type==="video"?"videos":"images";
+ await ensureUsageTable(db);
+ await db.query("UPDATE bhai_media_usage SET "+col+"=GREATEST("+col+"-1,0) WHERE account_id=$1 AND usage_date=(NOW() AT TIME ZONE 'Asia/Kolkata')::date",[accountId]);
+}
+async function getMediaUsage(db,accountId){
+ await ensureUsageTable(db);
+ const q=await db.query("SELECT images,videos FROM bhai_media_usage WHERE account_id=$1 AND usage_date=(NOW() AT TIME ZONE 'Asia/Kolkata')::date",[accountId]);
+ const x=q.rows[0]||{images:0,videos:0};
+ return {images:Number(x.images||0),videos:Number(x.videos||0),imageLimit:10,videoLimit:3};
+}
+
+async function generateVideo(prompt,duration=5,aspectRatio="16:9"){
+ const timeout=(ms)=>AbortSignal.timeout(ms);
+ const key=process.env.POLLINATIONS_API_KEY;
+ if(!key) throw new Error("POLLINATIONS_API_KEY is not configured.");
+ const seconds=Math.min(5,Math.max(1,Number(duration)||5));
+ const model=process.env.POLLINATIONS_VIDEO_MODEL||"veo";
+ const qs=new URLSearchParams({model,duration:String(seconds)});
+ if(aspectRatio==="9:16")qs.set("aspectRatio","9:16");
+ else if(aspectRatio==="1:1")qs.set("aspectRatio","1:1");
+ const url="https://gen.pollinations.ai/video/"+encodeURIComponent(String(prompt).trim())+"?"+qs.toString();
+ const r=await fetch(url,{headers:{Authorization:"Bearer "+key},signal:timeout(300000)});
+ if(!r.ok){
+  const body=await r.text().catch(()=> "");
+  throw new Error("Pollinations video returned HTTP "+r.status+(body?" — "+body.slice(0,300):""));
+ }
+ const b=Buffer.from(await r.arrayBuffer());
+ if(!b.length)throw new Error("Pollinations returned an empty video.");
+ if(b.length>20*1024*1024)throw new Error("Pollinations returned a video larger than 20 MB.");
+ return {mimeType:r.headers.get("content-type")||"video/mp4",data:b.toString("base64"),duration:seconds,provider:"pollinations"};
+}
+
 async function github(action,a){
  const token=process.env.GITHUB_TOKEN;
  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
@@ -166,6 +210,7 @@ async function github(action,a){
 }
 
 const toolDefinitions=[
+ {name:"generate_video",description:"Generate an actual short video using Pollinations. Maximum duration is 5 seconds; use this when the user asks to create, generate, or make a video.",parameters:{type:"OBJECT",properties:{prompt:{type:"STRING",description:"Detailed video-generation prompt"},duration:{type:"NUMBER",description:"Video duration in seconds; maximum 5"},aspectRatio:{type:"STRING",description:"1:1, 16:9, or 9:16"}},required:["prompt"]}},
  {name:"generate_image",description:"Generate an actual image. Prefer Pixazo Flux Schnell when PIXAZO_API_KEY is configured, then Pollinations, Hugging Face, and Gemini as fallbacks. Pixazo free API requires a user-provided API key. Use this when the user asks to create, draw, generate, make, design, or visualize an image. Do not merely write an image prompt when this tool is available.",parameters:{type:"OBJECT",properties:{prompt:{type:"STRING",description:"Detailed image-generation prompt based on the user's request"},aspectRatio:{type:"STRING",description:"Output aspect ratio, usually 1:1, 16:9, or 9:16"}},required:["prompt"]}},
  {name:"web_search",description:"Search public web for current information. Use only when the task genuinely needs current external information.",parameters:{type:"OBJECT",properties:{query:{type:"STRING",description:"Search query"}},required:["query"]}},
  {name:"github_info",description:"Get GitHub repository information. Use once to verify the repository before repository work.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"}},required:["owner","repo"]}},
@@ -260,7 +305,7 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){
    const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
-   return json(res,200,{text:text||"Image ready.",activity,images:generatedImages});
+   return json(res,200,{text:text||"Media ready.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   }
   contents.push(candidate.content);
   const allowedCalls=calls.slice(0,2),responseParts=[];
@@ -305,8 +350,19 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
      responseParts.push({functionResponse:{name,response:{result:{skipped:true,reason:"Path is not in the authoritative repository listing. Use an exact returned path."}}}});
      continue;
     }
-    const result=name==="web_search"?await webSearch(a.query):name==="generate_image"?await generateImage(a.prompt,a.aspectRatio||"16:9"):await github(name,{...a,path:normalizedPath});
+    let result;
+    if(name==="web_search") result=await webSearch(a.query);
+    else if(name==="generate_image"){
+     await reserveMedia(db,account.id,"image",10);
+     try{result=await generateImage(a.prompt,a.aspectRatio||"16:9");}
+     catch(e){await releaseMedia(db,account.id,"image");throw e;}
+    } else if(name==="generate_video"){
+     await reserveMedia(db,account.id,"video",3);
+     try{result=await generateVideo(a.prompt,Math.min(5,Number(a.duration)||5),a.aspectRatio||"16:9");}
+     catch(e){await releaseMedia(db,account.id,"video");throw e;}
+    } else result=await github(name,{...a,path:normalizedPath});
     if(name==="generate_image") generatedImages.push({mimeType:result.mimeType,data:result.data});
+    if(name==="generate_video") generatedImages.push({mimeType:result.mimeType,data:result.data,video:true,duration:result.duration});
     if(name==="github_read" && result?.type==="directory"){
      if(normalizedPath==="") rootListed=true;
      for(const item of result.items||[]) knownPaths.add(item.path);
@@ -335,6 +391,6 @@ models.sort((a,b)=>{const ai=preferred.indexOf(a),bi=preferred.indexOf(b);return
  try{
   const fd=await (async()=>{let last;for(const m of models){for(let attempt=0;attempt<4;attempt++){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<3) await sleep(Math.min(6000,1500*Math.pow(2,attempt)));}}}throw last;})();
   const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
-  return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages});
+  return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }

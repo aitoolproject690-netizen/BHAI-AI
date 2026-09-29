@@ -20,16 +20,47 @@ const authHeaders=()=>{const h={'Content-Type':'application/json'},t=authToken()
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.\n\nMain sirf jawab dene wala chatbot nahi hoon — project ka context yaad rakhkar bataunga ki kya complete hua, kya baaki hai, aur next mein kya add/fix karna useful rahega.'};
 
-function renderText(text=''){
- const urlRe=/(https?:\/\/[^\s<]+|www\.[^\s<]+)/g;
- return text.split(urlRe).map((part,i)=>{
+function renderInline(text=''){
+ const parts=text.split(/(\\*\\*[^*]+\\*\\*|__[^_]+__|\\*[^*]+\\*|_[^_]+_|`[^`]+`|https?:\\/\\/[^\\s<]+|www\\.[^\\s<]+)/g);
+ return parts.map((part,i)=>{
+  if(!part)return null;
   const clean=part.replace(/[.,!?;:]+$/,'');const trailing=part.slice(clean.length);
-  if(clean.startsWith('http://')||clean.startsWith('https://')||clean.startsWith('www.')){
+  let node=part;
+  if(part.startsWith('**')&&part.endsWith('**')) node=<strong>{part.slice(2,-2)}</strong>;
+  else if(part.startsWith('__')&&part.endsWith('__')) node=<strong>{part.slice(2,-2)}</strong>;
+  else if(part.startsWith('*')&&part.endsWith('*')) node=<em>{part.slice(1,-1)}</em>;
+  else if(part.startsWith('_')&&part.endsWith('_')) node=<em>{part.slice(1,-1)}</em>;
+  else if(part.startsWith('`')&&part.endsWith('`')) node=<code className="inlineCode">{part.slice(1,-1)}</code>;
+  else if(clean.startsWith('http://')||clean.startsWith('https://')||clean.startsWith('www.')){
    const href=clean.startsWith('www.')?'https://'+clean:clean;
-   return <React.Fragment key={i}><a className="messageLink" href={href} target="_blank" rel="noopener noreferrer">{clean}</a>{trailing}</React.Fragment>;
+   node=<a className="messageLink" href={href} target="_blank" rel="noopener noreferrer">{clean}</a>;
+   return <React.Fragment key={i}>{node}{trailing}</React.Fragment>;
   }
-  return <React.Fragment key={i}>{part}</React.Fragment>;
+  return <React.Fragment key={i}>{node}</React.Fragment>;
  });
+}
+
+function renderText(text='',onCopy){
+ const lines=String(text).replace(/\r/g,'').split('\n');
+ const out=[]; let i=0, listType=null, listItems=[];
+ const flushList=()=>{if(!listItems.length)return;const Tag=listType==='ol'?'ol':'ul';out.push(<Tag className="mdList" key={'list-'+i}>{listItems.map((x,j)=><li key={j}>{renderInline(x)}</li>)}</Tag>);listItems=[];listType=null;};
+ while(i<lines.length){
+  const line=lines[i];
+  if(/^\s*```/.test(line)){
+   flushList();const lang=line.replace(/^\s*```/,'').trim();const code=[];i++;
+   while(i<lines.length&&!/^\s*```\s*$/.test(lines[i])){code.push(lines[i]);i++;}
+   if(i<lines.length)i++;
+   const value=code.join('\n');out.push(<div className="codeBlock" key={'code-'+i}><div className="codeHead"><span>{lang||'code'}</span><button onClick={()=>onCopy?.(value)}><Copy size={13}/> Copy</button></div><pre><code>{value}</code></pre></div>);continue;
+  }
+  const h=line.match(/^\s*(#{1,6})\s+(.+)$/);
+  if(h){flushList();const level=Math.min(h[1].length,6);const Tag='h'+level;out.push(React.createElement(Tag,{className:'mdHeading',key:i},renderInline(h[2])));i++;continue;}
+  const bullet=line.match(/^\s*[-*+]\s+(.+)$/);
+  const num=line.match(/^\s*\d+[.)]\s+(.+)$/);
+  if(bullet||num){const type=bullet?'ul':'ol';if(listType&&listType!==type)flushList();listType=type;listItems.push((bullet||num)[1]);i++;continue;}
+  if(!line.trim()){flushList();out.push(<div className="mdSpacer" key={i}/>);i++;continue;}
+  flushList();out.push(<p className="mdParagraph" key={i}>{renderInline(line)}</p>);i++;
+ }
+ flushList();return out;
 }
 
 function App(){
@@ -146,7 +177,7 @@ function App(){
     {chat?.messages.map(m=><div className={m.role==='user'?'row user':'row'} key={m.id}>
       <div className={m.role==='user'?'bubble userBubble':'bubble'}>
        {m.role==='assistant'&&<div className="assistantLabel"><div className="miniLogo">B</div><b>BHAI X</b></div>}
-       <div className="messageText">{renderText(m.text)}</div>
+       <div className="messageText">{renderText(m.text,v=>copyText(v,'code-'+m.id))}</div>
        {m.images?.map((im,i)=>{const src='data:'+im.mimeType+';base64,'+im.data;return <div className="generatedWrap" key={i}>{im.video?<video className="generatedImage" src={src} controls playsInline/>:<img className="generatedImage" src={src}/>}<a className="downloadBtn" href={src} download={im.video?'bhai-x-video-'+(i+1)+'.mp4':'bhai-x-image-'+(i+1)+'.png'}><Download size={14}/> Download</a></div>})}
        {m.role==='assistant'&&!running&&<div className="messageActions"><button onClick={()=>copyText(m.text,m.id)}>{copied===m.id?<Check size={13}/>:<Copy size={13}/>} {copied===m.id?'Copied':'Copy'}</button></div>}
       </div>

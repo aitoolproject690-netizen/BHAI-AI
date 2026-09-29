@@ -7,6 +7,8 @@ const MODULES=[
  ["connectors","Connectors",Globe2],["social","Social",Users],["marketplace","Marketplace",ImageIcon]
 ];
 
+function ResellerManager({ownerKey}){const[list,setList]=useState([]),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[selected,setSelected]=useState(""),[amount,setAmount]=useState("");const h={"Content-Type":"application/json","x-owner-key":ownerKey};const load=async()=>{const r=await fetch("/api/resellers",{headers:h});const d=await r.json();setList(d.resellers||[])};useEffect(()=>{load()},[]);const act=async(action,extra={})=>{await fetch("/api/resellers",{method:"POST",headers:h,body:JSON.stringify({action,...extra})});setEmail("");setPassword("");setAmount("");load()};return <div><div className="delegateForm"><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="Reseller email"/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password (8+)"/><button className="addAdmin" disabled={!email||password.length<8} onClick={()=>act("create",{email,password})}>＋ Create Reseller</button></div>{list.map(r=><div className="delegateRow" key={r.id}><div><b>{r.email}</b><span>Balance: {r.balance} • {r.blocked?"BLOCKED":"ACTIVE"}</span></div><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><button onClick={()=>act("block",{id:r.id})}>{r.blocked?"Unblock":"Block"}</button><button onClick={()=>{setSelected(r.id);setAmount(prompt("Balance adjustment (+/-):")||"")}}>Wallet</button>{selected===r.id&&amount&&<button onClick={()=>act("balance",{id:r.id,amount:Number(amount)})}>Apply</button>}</div></div>)}</div>}
+
 export default function OwnerPanel({onClose}){
  const[key,setKey]=useState(()=>sessionStorage.getItem("bhai_owner_key")||"");
  const[authed,setAuthed]=useState(false),[state,setState]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState("");
@@ -47,6 +49,8 @@ export default function OwnerPanel({onClose}){
       {(state.delegatedAdmins||[]).map(a=><div className="delegateRow" key={a.id}><div><b>{a.name}</b><span>{a.permissions.join(" • ")||"No permissions"}{a.expiresAt?" • expires "+new Date(a.expiresAt).toLocaleString():""}</span></div><button onClick={()=>action("delegate_revoke",{id:a.id})}>Revoke</button></div>)}
     </section>
 
+
+    <section className="ownerSection"><div className="sectionTitle"><Users/><b>Reseller Management</b></div><ResellerManager ownerKey={key}/></section>
     <section className="ownerSection"><div className="sectionTitle"><Lock/><b>Owner rules</b></div><div className="ruleGrid"><div>🔒 Core updates <b>Owner only</b></div><div>🌐 Server control <b>Owner only</b></div><div>📦 Official APK release <b>Owner only</b></div><div>🛡️ Delegation <b>Owner only</b></div></div></section>
     <section className="ownerSection"><div className="sectionTitle"><Activity/><b>Recent audit</b></div>{state.audit.slice(0,12).map(x=><div className="auditRow" key={x.id}><span>{new Date(x.at).toLocaleString()}</span><b>{x.action}</b></div>)}</section>
    </div>}

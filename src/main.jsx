@@ -96,7 +96,8 @@ function App(){
    const next=[...chat.messages,userMsg,planMsg];
    upd(()=>next);setInput('');setMissionMode(false);
    if(doIt){
-    const execMessages=[...next,{id:crypto.randomUUID(),role:'user',text:'MISSION EXECUTION: Ab compiled mission ko end-to-end execute karo. Required files/code changes/build/test/deploy jo possible ho actual tools se karo. Har step verify karo; kaam complete hone tak execute karo.'}];
+    try{await fetch(apiUrl('/api/system'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'checkpoint',goal,state:{missionId:m.id,steps:m.steps.map(s=>({id:s.id,name:s.name,state:s.state})),messages:next.slice(-6)}})});}catch{}
+    const execMessages=[...next,{id:crypto.randomUUID(),role:'user',text:'MISSION EXECUTION: Ab compiled mission ko end-to-end execute karo. Required files/code changes/build/test/deploy jo possible ho actual tools se karo. Har step verify karo; kaam complete hone tak execute karo. Agar execution interrupt ho to last checkpoint se resume karne ke liye state preserve karo.'}];
     const er=await fetch(apiUrl('/api/agent'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:execMessages,doIt:true})});
     const ed=await er.json();
     upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:ed.text||('⚠️ '+(ed.error||'Mission execution failed')),images:ed.images||[]}]);

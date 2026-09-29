@@ -113,8 +113,8 @@ function App(){
     const er=await fetch(apiUrl('/api/agent'),{method:'POST',headers:missionHeaders,body:JSON.stringify({messages:execMessages,doIt:true})});
     const ed=await er.json();
     upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:ed.text||('⚠️ '+(ed.error||'Mission execution failed')),images:ed.images||[]}]);
-    try{await fetch(apiUrl('/api/diff'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'mission',summary:goal,files:(ed.activity||[]).map(x=>x.tool||'mission-step'),commit:ed.commit||null,verification:ed.verified||ed.verification||null})})}catch{}
-    try{await fetch(apiUrl('/api/dna'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:'default',data:{lastMission:goal,lastMissionResult:String(ed.text||'').slice(0,2500),lastMissionVerified:ed.verified||ed.verification||null,lastUpdated:new Date().toISOString()}})})}catch{}
+    try{await fetch(apiUrl('/api/diff'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:'mission',summary:goal,files:(ed.activity||[]).map(x=>x.tool||'mission-step'),commit:ed.commit||null,verification:ed.verified||ed.verification||null})})}catch{}
+    try{await fetch(apiUrl('/api/dna'),{method:'POST',headers:authHeaders(),body:JSON.stringify({project:'default',data:{lastMission:goal,lastMissionResult:String(ed.text||'').slice(0,2500),lastMissionVerified:ed.verified||ed.verification||null,lastUpdated:new Date().toISOString()}})})}catch{}
     if(ed.verified===true||/verified|successfully completed|all steps complete/i.test(String(ed.text||''))){localStorage.removeItem('bhai_x_checkpoint');setResumeMission(null)}
     if(Array.isArray(ed.activity)&&ed.activity.length)setActivity(ed.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Mission',text:x.state||'done',state:x.state||'done'})));
    }

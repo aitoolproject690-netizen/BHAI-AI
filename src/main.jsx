@@ -21,7 +21,7 @@ const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.\n\nMain sirf jawab dene wala chatbot nahi hoon — project ka context yaad rakhkar bataunga ki kya complete hua, kya baaki hai, aur next mein kya add/fix karna useful rahega.'};
 
 function renderInline(text=''){
- const parts=text.split(/(\\*\\*[^*]+\\*\\*|__[^_]+__|\\*[^*]+\\*|_[^_]+_|`[^`]+`|https?:\\/\\/[^\\s<]+|www\\.[^\\s<]+)/g);
+ const parts=text.split(/(\\*\\*[^*]+\\*\\*|__[^_]+__|\\*[^*]+\\*|_[^_]+_|`[^`]+`)/g);
  return parts.map((part,i)=>{
   if(!part)return null;
   const clean=part.replace(/[.,!?;:]+$/,'');const trailing=part.slice(clean.length);

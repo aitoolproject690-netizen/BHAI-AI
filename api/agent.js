@@ -23,6 +23,23 @@ async function generateImage(prompt,aspectRatio="16:9"){
  const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;
  const height=aspectRatio==="9:16"?1365:aspectRatio==="1:1"?768:576;
  const errors=[];
+ const pollinationsKey=process.env.POLLINATIONS_API_KEY;
+ try{
+  const base=pollinationsKey
+   ?"https://gen.pollinations.ai/image/"+encodeURIComponent(prompt)
+   :"https://image.pollinations.ai/prompt/"+encodeURIComponent(prompt);
+  const qs=new URLSearchParams({model:"flux",width:String(width),height:String(height),nologo:"true"});
+  const r=await fetch(base+"?"+qs.toString(),{
+   headers:pollinationsKey?{Authorization:"Bearer "+pollinationsKey}:{"User-Agent":"BHAI-X/1.0"},
+   signal:timeout(90000)
+  });
+  if(!r.ok) throw new Error("Pollinations returned HTTP "+r.status);
+  const b=Buffer.from(await r.arrayBuffer());
+  if(!b.length) throw new Error("Pollinations returned an empty image.");
+  return {mimeType:r.headers.get("content-type")||"image/jpeg",data:b.toString("base64"),provider:"pollinations"};
+ }catch(e){
+  errors.push("Pollinations: "+String(e?.message||e).slice(0,500));
+ }
  const hf=process.env.HF_TOKEN;
  const hfModel=process.env.HF_IMAGE_MODEL||"black-forest-labs/FLUX.1-dev";
  if(hf){

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import {requireSession} from "./_utils.js";
 import {getDb,initDb} from "./db.js";
 const memory=new Map();
 let ready=null;
@@ -16,6 +17,7 @@ async function get(id){
  return memory.get(id);
 }
 export default async function handler(req,res){
+ if(!await requireSession(req,res))return;
  await boot();
  if(req.method==="POST"){
   const body=req.body||{}, id=crypto.randomUUID();

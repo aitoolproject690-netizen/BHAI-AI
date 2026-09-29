@@ -129,10 +129,11 @@ function App(){
   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
   const id=crypto.randomUUID();
   setActivity([{id:id+'1',step:'Planning',text:'Planning task requirements...',state:'running'},{id:id+'2',step:'Tools',text:'Selecting tools...',state:'pending'},{id:id+'3',step:'Working',text:'Executing task...',state:'pending'},{id:id+'4',step:'Done',text:'Finalizing response...',state:'pending'}]);
-  const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t}];
+  const replyId=id+'-reply';
+  const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'⚡ Bhai, dekh raha hoon...'}];
   upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
   try{
-   const pf=casualChat?{ready:true}:await fetch(apiUrl("/api/control"),{method:"POST",headers:authHeaders(),body:JSON.stringify({action:"preflight"})}).then(r=>r.json()).catch(e=>({ready:false,risks:[{message:e.message}]})); if(!pf.ready){upd(m=>[...m,{id:crypto.randomUUID(),role:"assistant",text:"🛡️ PRE-FLIGHT STOP\n\n"+(pf.risks||[]).map(x=>"⚠️ "+x.message).join("\n")+"\n\nBHAI X ne predictable failure se pehle task rok diya. Required connection/model fix karo, phir task resume karenge."}]);setActivity(a=>a.map(x=>({...x,state:x.state==="running"?"failed":x.state})));return;} setActivity(a=>a.map(x=>x.id===id+"1"?{...x,state:"done"}:x.id===id+"2"?{...x,state:"running"}:x));
+   const pf=casualChat?{ready:true}:await fetch(apiUrl("/api/control"),{method:"POST",headers:authHeaders(),body:JSON.stringify({action:"preflight"})}).then(r=>r.json()).catch(e=>({ready:false,risks:[{message:e.message}]})); if(!pf.ready){upd(m=>m.map(x=>x.id===replyId?{...x,text:"🛡️ PRE-FLIGHT STOP\n\n"+(pf.risks||[]).map(x=>"⚠️ "+x.message).join("\n")+"\n\nBHAI X ne predictable failure se pehle task rok diya. Required connection/model fix karo, phir task resume karenge."}:x));setActivity(a=>a.map(x=>({...x,state:x.state==="running"?"failed":x.state})));return;} setActivity(a=>a.map(x=>x.id===id+"1"?{...x,state:"done"}:x.id===id+"2"?{...x,state:"running"}:x));
    let dnaContext=''; if(!casualChat){try{const dr=await fetch(apiUrl('/api/dna?project=default'),{headers:authHeaders()}).then(x=>x.json()); dnaContext=JSON.stringify(dr.data||{}).slice(0,5000)}catch{}}
    const agentMessages=dnaContext?[...next,{id:crypto.randomUUID(),role:'user',text:'PROJECT DNA CONTEXT (use as context, do not repeat): '+dnaContext}]:next;
    const agentToken=account?.session||localStorage.getItem("bhai_user_session")||sessionStorage.getItem("bhai_user_session")||""; const agentHeaders={"Content-Type":"application/json"}; if(agentToken)agentHeaders.Authorization="Bearer "+agentToken; const controller=new AbortController(); const agentTimeout=setTimeout(()=>controller.abort(),300000);
@@ -141,7 +142,7 @@ function App(){
    if(!r.ok||d.error){const rr=await fetch(apiUrl('/api/control'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'recovery_plan',error:d.error||('HTTP '+r.status),stage:'agent'})}).catch(()=>null);const rp=rr?await rr.json().catch(()=>({})):{};upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ ERROR DETECTOR\n\n'+(d.error||('Backend HTTP '+r.status))+'\n\n🛡️ Preventive recovery: '+(rp.plan||[]).map(x=>x.action).join(' → ')+'\n\nBHAI X ne is result ko verified DONE nahi maana.'}]);setActivity(a=>a.map(x=>({...x,state:'failed'})));return;}
    if(d.usage)setUsage(d.usage); setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
-   upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}]);
+   upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}:x));
    if(casualChat)return;
    void (async()=>{
     await Promise.allSettled([

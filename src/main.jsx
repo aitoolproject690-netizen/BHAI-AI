@@ -12,7 +12,9 @@ import SystemPanel from'./SystemPanel.jsx';
 import ResellerPanel from'./ResellerPanel.jsx';
 
 const API_BASE='https://bhai-ai-vpna.onrender.com';
-const apiUrl=p=>API_BASE+p;\nconst authToken=()=>localStorage.getItem('bhai_user_session')||sessionStorage.getItem('bhai_user_session')||'';\nconst authHeaders=()=>{const h={'Content-Type':'application/json'},t=authToken();if(t)h.Authorization='Bearer '+t;return h;}
+const apiUrl=p=>API_BASE+p;
+const authToken=()=>localStorage.getItem('bhai_user_session')||sessionStorage.getItem('bhai_user_session')||'';
+const authHeaders=()=>{const h={'Content-Type':'application/json'},t=authToken();if(t)h.Authorization='Bearer '+t;return h;}
 
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.'};

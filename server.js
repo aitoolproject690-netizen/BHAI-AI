@@ -20,9 +20,12 @@ import analyze from "./api/analyze.js";
 import suggestions from "./api/suggestions.js";
 import system from "./api/system.js";
 import memory from "./api/memory.js";
+import doctor from "./api/doctor.js";
+import diff from "./api/diff.js";
+import tests from "./api/tests.js";
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT)||10000;
-const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory};
+const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests};
 function runApi(fn,req,res){
   let body="";
   req.on("data",c=>{body+=c;if(body.length>2000000){res.statusCode=413;req.destroy();}});

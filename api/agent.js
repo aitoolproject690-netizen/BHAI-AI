@@ -340,13 +340,20 @@ EXECUTION POLICY:
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
 
  async function getAvailableModels(){
- const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key},signal:AbortSignal.timeout(10000)});
- const d=await r.json();
- if(!r.ok) throw new Error(d?.error?.message||"Unable to list Gemini models");
- return (d.models||[])
-  .filter(m=>Array.isArray(m.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent"))
-  .map(m=>String(m.name||"").replace(/^models\//,""))
-  .filter(Boolean);
+ try{
+  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key},signal:AbortSignal.timeout(10000)});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d?.error?.message||"Unable to list Gemini models");
+  const list=(d.models||[])
+   .filter(m=>Array.isArray(m.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent"))
+   .map(m=>String(m.name||"").replace(/^models\//,""))
+   .filter(Boolean);
+  if(list.length)return list;
+  throw new Error("Gemini returned no generateContent models");
+ }catch(e){
+  console.warn("[Gemini] model discovery failed; using known fallback models:",String(e?.message||e));
+  return preferred;
+ } 
 }
 const preferred=["gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash","gemini-3.5-flash-lite","gemini-3.1-pro-preview"];
 let modelCache=globalThis.__bhaiGeminiModels||null;
@@ -396,11 +403,12 @@ if(quickChat){
 const models=quickChatMode
   ? [process.env.GEMINI_FAST_MODEL||preferred[0]]
   : await getModelsFast();
- const isTransientModelError=(e)=>/429|RESOURCE_EXHAUSTED|quota|rate.?limit|high demand|temporarily unavailable|try again later|overloaded/i.test(String(e?.message||e));
+ const isTransientModelError=(e)=>/408|429|500|502|503|504|RESOURCE_EXHAUSTED|UNAVAILABLE|INTERNAL|quota|rate.?limit|high demand|temporarily unavailable|service unavailable|try again later|overloaded|timeout|timed out/i.test(String(e?.message||e));
  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
- const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<2;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<1) await sleep(1200);}}}throw last;};
+ const generateWithFallback=async(useTools=true)=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
- const requiresGithubExecution=/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|index\.html|verify|proof)\b/i.test(latestText)||/do it on/i.test(latestText));
+ const githubLinkRequest=/\bgithub\b/i.test(latestText)&&(/\b(link|url|repo|repository)\b/i.test(latestText));
+ const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
  let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubEvidence=null;
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
@@ -490,7 +498,7 @@ const models=quickChatMode
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
     if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result;}
-    if(name==="github_read" && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result;}
+    if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result;}
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
     const msg=String(e?.message||e);
@@ -512,8 +520,12 @@ const models=quickChatMode
 
  const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains."+ (requiresGithubExecution ? " IMPORTANT: Never claim GitHub completion unless actual GitHub tool results verified the repository/file/commit. If evidence is missing, explicitly say GitHub execution was not verified." : "");
  try{
-  const fd=await (async()=>{let last;for(const m of models){for(let attempt=0;attempt<2;attempt++){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<1) await sleep(1200);}}}throw last;})();
+  const fd=await (async()=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;})();
   const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
+  if(githubLinkRequest&&githubVerificationConfirmed&&githubEvidence?.url){
+   const title=githubEvidence.name||githubEvidence.full_name||"GitHub repository";
+   return json(res,200,{text:"## ✅ GitHub verified\\n\\n🔗 **"+title+"**\\n\\n"+githubEvidence.url+"\\n\\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
+  }
   return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }

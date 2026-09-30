@@ -420,7 +420,7 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   const token=process.env.GITHUB_TOKEN;
   if(!token) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
   const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",Authorization:"Bearer "+token};
-  const me=await fetch("https://api.github.com/user",{headers:authHeaders,signal:AbortSignal.timeout(8000)});
+  const me=await fetch("https://api.github.com/user",{headers:{...h,"User-Agent":"BHAI-X"},signal:AbortSignal.timeout(8000)});
   const md=await me.json().catch(()=>({}));
   if(!me.ok||!md.login) throw new Error(md.message||"Unable to verify GitHub account.");
   const owner=githubTarget.owner||md.login;

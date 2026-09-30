@@ -327,6 +327,10 @@ export default async function handler(req,res){
  const userTaskMessages=routedMessages.filter(m=>m&&m.role==="user").map(m=>String(m.text||"")).filter(Boolean);
  const explicitRepoSource=[...userTaskMessages].reverse().find(t=>/(?:GitHub\s+repository|repository)\s*:\s*[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}/i.test(t))||"";
  const githubTaskText=explicitRepoSource?explicitRepoSource+"\n"+latestUserMessage:latestUserMessage;
+  const latestHasExplicitGithub=/(?:github|git hub|repository|repo\b|\bcreate\s+(?:a\s+)?repo|\bgithub\s+repo)/i.test(latestUserMessage);
+  const latestRequestsProjectExecution=/(?:\bapp\b|\bproject\b|\bwebsite\b|\bapk\b|\bcode\b|\bbuild\b|\bdeploy\b|\bcreate\b|\bmake\b|\bbana\b|\bban[a-z]*\b|\bfix\b|\bupdate\b|\bpublish\b|\bcommit\b|\bpush\b)/i.test(latestUserMessage);
+  const freshTaskIsolation=contextRoute.mode==="fresh_task";
+
  const selectedSkills=selectSkillsForTask(latestUserMessage);
  const skillContext=getSkillPromptContext(selectedSkills);
  const contextNote=`CONTEXT ROUTER: ${contextRoute.mode}. ${contextRoute.reason} Never revive an older Mission, repository, file, commit, or build unless the current user message explicitly refers to that existing task.`;
@@ -488,7 +492,7 @@ if(githubRequestedFile&&githubRequestedRepo){
  const repoAt=githubRequestedFile.toLowerCase().indexOf(repoMarker.toLowerCase());
  if(repoAt>=0) githubRequestedFile=githubRequestedFile.slice(repoAt+repoMarker.length);
 }
-if(githubFileRequest && githubRequestedRepo && githubRequestedFile && autoDoIt){
+if(githubFileRequest && latestHasExplicitGithub && githubRequestedRepo && githubRequestedFile && autoDoIt){
  if(missionMode){ try{missionStep("plan","Mission request accepted; pre-flight completed by authenticated agent entrypoint."); missionStep("execute","Starting repository diagnosis and execution.");}catch{} }
  try{
   const token=process.env.GITHUB_TOKEN;
@@ -701,6 +705,11 @@ const models=quickChatMode
    const explicitToolRepo=githubTaskText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i);
    const explicitToolIndexHtml=/\bindex\.html\b/i.test(githubTaskText);
    if(/^github_/.test(name) && (explicitToolRepo||githubTarget.owner||githubTarget.repo||githubTarget.path)){
+     if(!latestHasExplicitGithub && name!=="github_create_repo"){
+       activity[activity.length-1].state="blocked";
+       responseParts.push({functionResponse:{name,response:{error:"GitHub action blocked: current user message does not explicitly reference GitHub/repository work."}}});
+       continue;
+     }
     if(explicitToolRepo){ a.owner=explicitToolRepo[1]; a.repo=explicitToolRepo[2]; }
     else {
      if(githubTarget.owner) a.owner=githubTarget.owner;
@@ -769,7 +778,11 @@ const models=quickChatMode
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
     if((name==="github_create_repo"||name==="github_update") && recovery.state==="alternate_execution"){ recoveryStep("patch_and_verify","Alternate execution path produced a GitHub change; verification will follow."); if(missionMode&&mission.phase==="recover"){try{missionStep("execute","Recovery checkpoint resumed and alternate execution produced a patch.");}catch{}} }
-    if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
+    if(name==="github_create_repo"||name==="github_update"){
+      if(name==="github_create_repo" && !latestRequestsProjectExecution && !latestHasExplicitGithub){
+        throw new Error("Repository creation blocked: current request is not a project/GitHub task.");
+      }
+      githubExecutionConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
     if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_read" && result?.type==="file"){const p=String(result.path||"").replace(/^\/+/, ""); if(!githubRequestedPath || p.toLowerCase()===githubRequestedPath.toLowerCase()){ githubFileVerified=true; if(missionMode&&mission.phase==="execute"){try{missionStep("verify","Target file was read back after execution.");}catch{}} }}}
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){

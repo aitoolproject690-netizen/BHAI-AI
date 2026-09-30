@@ -553,6 +553,7 @@ const models=quickChatMode
    const title=githubEvidence.name||githubEvidence.full_name||"GitHub repository";
    return json(res,200,{text:"## ✅ GitHub verified\n\n🔗 **"+title+"**\n\n"+githubEvidence.url+"\n\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   }
-  if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified))) return json(res,200,{text:"⚠️ GitHub execution was not fully verified. No completion claim was made. The repository/file/commit evidence is incomplete.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});\n  return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
+  if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified))) return json(res,200,{text:"⚠️ GitHub execution was not fully verified. No completion claim was made. The repository/file/commit evidence is incomplete.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
+  return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }

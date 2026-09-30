@@ -374,6 +374,9 @@ async function getModelsFast(){
   return list;
 }
 const latestText=String(latestUserMessage||"").trim();
+const missionMode=/\b(mission mode|mission|autonomous mode|autonomous|auto mode)\b/i.test(githubTaskText);
+const mission=createMissionController();
+const missionStep=(next,details="")=>{ mission.transition(next); activity.push({tool:"mission:"+next,state:"done",details}); };
 const githubLinkRequest=/\bgithub\b/i.test(githubTaskText)&&(/\b(link|url|repo|repository)\b/i.test(githubTaskText));
 const githubFileRequest=/\bgithub\b/i.test(githubTaskText)&&(/\b(file|index\.html|html|code|page|commit|push|update|create)\b/i.test(githubTaskText));
 let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubFileVerified=false,githubEvidence=null,githubFileEvidence=null;
@@ -420,13 +423,14 @@ const explicitIndexHtml=/\bindex\.html\b/i.test(githubTaskText);
 if(explicitRepoMatch) githubRequestedRepo=explicitRepoMatch[1]+"/"+explicitRepoMatch[2];
 let githubRequestedFile=explicitIndexHtml?"index.html":(githubTarget.path||githubFileMatch);
  const evidence=createEvidence();
- const markEvidence=(name,result)=>{ const owner=result?.owner?.login||result?.owner||githubTarget.owner||""; const repo=result?.repo||result?.name||githubTarget.repo||""; const branch=result?.default_branch||result?.branch||"main"; const path=result?.path||githubTarget.path||"repository"; const commit=result?.commit||result?.sha||""; if(owner&&repo) evidence.set({repository:owner+"/"+repo}); evidence.set({branch,path}); if(commit) evidence.set({commit}); evidence.addTest(name,true,"Verified by GitHub API/read-back"); };
+ const markEvidence=(name,result)=>{ const owner=result?.owner?.login||result?.owner||githubTarget.owner||""; const repo=result?.repo||result?.name||githubTarget.repo||""; const branch=result?.default_branch||result?.branch||"main"; const path=result?.path||githubTarget.path||"repository"; const commit=result?.commit||result?.commitSha||""; if(owner&&repo) evidence.set({repository:owner+"/"+repo}); evidence.set({branch,path}); if(commit) evidence.set({commit}); evidence.addTest(name,true,"Verified by GitHub API"); };
 if(githubRequestedFile&&githubRequestedRepo){
  const repoMarker=githubRequestedRepo+"/";
  const repoAt=githubRequestedFile.toLowerCase().indexOf(repoMarker.toLowerCase());
  if(repoAt>=0) githubRequestedFile=githubRequestedFile.slice(repoAt+repoMarker.length);
 }
 if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
+ if(missionMode){ try{missionStep("plan","Mission request accepted; pre-flight completed by authenticated agent entrypoint."); missionStep("execute","Starting repository diagnosis and execution.");}catch{} }
  try{
   const token=process.env.GITHUB_TOKEN;
   if(!token) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
@@ -503,6 +507,7 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   activity.push({tool:"github:diagnose",state:"done",details:fixes.join(" ")});
   activity.push({tool:"github:patch_and_verify",state:"done",details:"Commit "+commitSha+" read back and content matched exactly."});
   activity.push({tool:"mission:evidence",state:"done",details:"No-proof-no-DONE gate passed for repository, branch, file, commit and read-back verification."});
+  if(missionMode){ try{missionStep("verify","Commit and exact read-back verification passed."); missionStep("complete","Mission completed with verified evidence.");}catch{} }
   return json(res,200,{text:"## ✅ Mission GitHub fix verified\\n\\n**Repository:** "+owner+"/"+repo+"\\n\\n**Branch:** "+branch+"\\n\\n**File:** "+path+"\\n\\n**Diagnosis:** "+fixes.join(" ")+"\\n\\n**Commit:** "+commitSha+"\\n\\n**Verification:** Same file was read back from GitHub after commit and the content matched the patched content exactly.\\n\\n**Evidence:** ✅ No-proof-no-DONE gate passed.",activity,images:[],usage:await getMediaUsage(db,account.id)});
  }catch(e){
   const msg=String(e?.message||"Unknown GitHub error");
@@ -511,6 +516,7 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
    try{ recoveryStep("switch_provider_or_model","Deterministic fixer found no safe patch; routing to alternate recovery path."); }catch{}
    activity.push({tool:"recovery:checkpoint",state:"done",details:"Repository/file inspection preserved; no file mutation was made."});
    try{ recoveryStep("resume_checkpoint","Resuming execution from the preserved repository/file checkpoint."); }catch{}
+   if(missionMode){ try{missionStep("recover","Deterministic fixer could not safely patch; recovery path is now active.");}catch{} }
   }else{
    return json(res,502,{error:"GitHub file execution failed: "+msg,activity});
   }
@@ -653,10 +659,9 @@ const models=quickChatMode
      for(const item of result.items||[]) knownPaths.add(item.path);
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
-    if((name==="github_create_repo"||name==="github_update") && recovery.state==="resume_checkpoint") recoveryStep("patch_and_verify","Alternate execution path produced a GitHub change; verification will follow.");
-    if((name==="github_create_repo"||name==="github_update") && recovery.state==="patch_and_verify") recoveryStep("done","GitHub operation completed and recovery patch was handed to verification.");
+    if((name==="github_create_repo"||name==="github_update") && recovery.state==="resume_checkpoint"){ recoveryStep("patch_and_verify","Alternate execution path produced a GitHub change; verification will follow."); if(missionMode&&mission.phase==="recover"){try{missionStep("execute","Recovery checkpoint resumed and alternate execution produced a patch.");}catch{}} }
     if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
-    if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_read" && result?.type==="file"){const p=String(result.path||"").replace(/^\/+/, ""); if(!githubRequestedPath || p.toLowerCase()===githubRequestedPath.toLowerCase()) githubFileVerified=true;}}
+    if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_read" && result?.type==="file"){const p=String(result.path||"").replace(/^\/+/, ""); if(!githubRequestedPath || p.toLowerCase()===githubRequestedPath.toLowerCase()){ githubFileVerified=true; if(missionMode&&mission.phase==="execute"){try{missionStep("verify","Target file was read back after execution.");}catch{}} }}}
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
     const msg=String(e?.message||e);
@@ -689,7 +694,7 @@ const models=quickChatMode
    return json(res,200,{text:"## ✅ GitHub verified\n\n🔗 **"+title+"**\n\n"+githubEvidence.url+"\n\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   }
   if(missionMode && mission.phase==="verify" && requiresGithubExecution && githubVerificationConfirmed && (!githubFileRequest || githubFileVerified) && evidence.verify()){ try { missionStep("complete","GitHub evidence and test proof verified"); } catch {} }
-  if(requiresGithubExecution && githubVerificationConfirmed && (!githubFileRequest || githubFileVerified) && recovery.state==="diagnose"){ recoveryStep("patch_and_verify","GitHub evidence collected"); if(evidence.verify()) recoveryStep("done","Evidence verified"); }
+  if(requiresGithubExecution && githubVerificationConfirmed && (!githubFileRequest || githubFileVerified)){ if(recovery.state==="diagnose") recoveryStep("patch_and_verify","GitHub evidence collected"); if(recovery.state==="patch_and_verify" && evidence.verify()) recoveryStep("done","Commit and read-back evidence verified."); if(missionMode&&mission.phase==="verify"&&evidence.verify()){try{missionStep("complete","Mission evidence verified.");}catch{}} }
   if(missionMode && mission.phase==="verify" && !mission.canClaimDone(evidence)) return json(res,200,{text:"⚠️ Mission Mode reached verification but could not prove completion. No DONE claim was made.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified) || !evidence.verify())) return json(res,200,{text:"⚠️ GitHub execution was not fully verified. No completion claim was made. The repository/file/commit/test evidence is incomplete.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});

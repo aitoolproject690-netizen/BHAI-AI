@@ -53,3 +53,19 @@ test("AI router honors an explicitly configured provider and exclusion",()=>{
     else process.env.ANTHROPIC_API_KEY=originalAnthropic;
   }
 });
+
+
+test("reviewer routing can choose an independent provider",()=>{
+  const originals={
+    openai:process.env.OPENAI_API_KEY,
+    gemini:process.env.GEMINI_API_KEY
+  };
+  process.env.OPENAI_API_KEY="test-openai";
+  process.env.GEMINI_API_KEY="test-gemini";
+  try{
+    assert.equal(routeAI({task:"review this GitHub fix",role:"reviewer",exclude:["gemini"]}),"openai");
+  }finally{
+    if(originals.openai===undefined)delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY=originals.openai;
+    if(originals.gemini===undefined)delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY=originals.gemini;
+  }
+});

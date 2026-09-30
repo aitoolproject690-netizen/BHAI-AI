@@ -1,5 +1,5 @@
 import {requireSession} from "./_utils.js";
-import {generateWithRouter} from "./aiRouter.js";
+import {generateWithRouter,reviewWithMultiAI} from "./aiRouter.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 const ghHeaders=()=>({Authorization:"Bearer "+process.env.GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","Content-Type":"application/json"});
@@ -16,11 +16,11 @@ async function aiJson(task,system,role="code"){
  let text=String(r.text||"").replace(/^\s*```json\s*/i,"").replace(/\s*```\s*$/,"").trim();
  return {...JSON.parse(text),provider:r.provider,model:r.model};
 }
-async function patchFiles(owner,repo,branch,patches){
+async function patchFiles(owner,repo,branch,patches,allowedPaths=null){
  const applied=[];
  for(const p of Array.isArray(patches)?patches:[]){
   if(!p||typeof p.path!=="string"||typeof p.content!=="string")continue;
-  if(p.path.startsWith(".github/")||p.path.includes("..")||p.path.startsWith("/"))continue;
+  if(p.path.startsWith(".github/")||p.path.includes("..")||p.path.startsWith("/")||(allowedPaths&&!allowedPaths.has(p.path)))continue;
   const current=await gh("/repos/"+owner+"/"+repo+"/contents/"+encodeURIComponent(p.path).replace(/%2F/g,"/")+"?ref="+encodeURIComponent(branch));
   const body={message:"BHAI X autonomous AI fix: "+p.path,content:Buffer.from(p.content,"utf8").toString("base64"),branch,sha:current.sha};
   const out=await gh("/repos/"+owner+"/"+repo+"/contents/"+encodeURIComponent(p.path).replace(/%2F/g,"/"),{method:"PUT",body:JSON.stringify(body)});
@@ -55,7 +55,7 @@ export default async function handler(req,res){
      const review=await reviewWithMultiAI({task:String(task).slice(0,7000),draft:JSON.stringify(coding),exclude:[coding.provider]});
      history.push({stage:"independent-review",provider:review.provider,model:review.model,draft:String(review.text).slice(0,5000)});
     }catch(e){history.push({stage:"independent-review",status:"skipped",reason:String(e.message||e).slice(0,300)});}
-    const applied=await patchFiles(owner,repo,branch,coding.patches);
+    const applied=await patchFiles(owner,repo,branch,coding.patches,new Set(paths));
     history.push({stage:"coding-patch-applied",applied});
     if(!applied.length)return json(res,502,{ok:false,status:"no-patch",history,verification:"AI coding produced no applicable repository patch."});
    }else history.push({stage:"coding-patch-applied",applied:[]});
@@ -85,7 +85,7 @@ export default async function handler(req,res){
     if(!Array.isArray(fix.patches)||!fix.patches.length)break;
     const review=await reviewWithMultiAI({task:"Review this build error fix: "+String(task).slice(0,4000),draft:JSON.stringify(fix),exclude:[fix.provider]});
     history.push({stage:"error-review",attempt,provider:review.provider,model:review.model});
-    const applied=await patchFiles(owner,repo,branch,fix.patches); history.push({stage:"error-patch-applied",attempt,applied});
+    const applied=await patchFiles(owner,repo,branch,fix.patches,new Set(paths)); history.push({stage:"error-patch-applied",attempt,applied});
     if(!applied.length)break;
     await sleep(3000);
     await gh("/repos/"+owner+"/"+repo+"/actions/workflows/"+encodeURIComponent(workflow)+"/dispatches",{method:"POST",body:JSON.stringify({ref:branch,inputs:{platform:String(platform),projectName:String(projectName),sourceUrl:"",official_release:"false"}})});

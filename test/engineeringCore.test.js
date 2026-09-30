@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFilePath, resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence } from "../api/engineeringCore.js";
+import { normalizeFilePath, resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createDeploymentCheckpoint, verifyDeploymentCheckpoint } from "../api/engineeringCore.js";
 
 test("resolves explicit GitHub owner/repo/file target",()=>{
   const x=resolveGithubTarget("fix aitoolproject690-netizen/BHAI-TASK-APP-TEST/index.html");
@@ -45,4 +45,10 @@ test("recovery state machine follows safe recovery order",async()=>{
   const evidence={verified:true};
   m.transition("done");
   assert.equal(m.canClaimDone(evidence),true);
+});
+
+test("deployment checkpoint verifies expected live commit",()=>{
+  const cp=createDeploymentCheckpoint({commit:"abc123",service:"bhai-ai",url:"https://bhai-ai-vpna.onrender.com",status:"live"});
+  assert.equal(verifyDeploymentCheckpoint(cp,{expectedCommit:"abc123"}).ok,true);
+  assert.equal(verifyDeploymentCheckpoint(cp,{expectedCommit:"wrong"}).ok,false);
 });

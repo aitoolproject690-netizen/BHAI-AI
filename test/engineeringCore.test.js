@@ -41,6 +41,7 @@ test("recovery state machine follows safe recovery order",async()=>{
   m.transition("retry");
   m.transition("switch_provider_or_model");
   m.transition("resume_checkpoint");
+  m.transition("alternate_execution");
   m.transition("patch_and_verify");
   const evidence={verified:true};
   m.transition("done");
@@ -66,4 +67,14 @@ test("deployment checkpoint verifies expected live commit",()=>{
   const cp=createDeploymentCheckpoint({commit:"abc123",service:"bhai-ai",url:"https://bhai-ai-vpna.onrender.com",status:"live"});
   assert.equal(verifyDeploymentCheckpoint(cp,{expectedCommit:"abc123"}).ok,true);
   assert.equal(verifyDeploymentCheckpoint(cp,{expectedCommit:"wrong"}).ok,false);
+});
+
+test("Mission recovery requires alternate execution before patch",async()=>{
+  const { createRecoveryStateMachine } = await import("../api/engineeringCore.js");
+  const m=createRecoveryStateMachine();
+  m.transition("switch_provider_or_model");
+  m.transition("resume_checkpoint");
+  assert.throws(()=>m.transition("done"),/Invalid recovery transition/);
+  m.transition("alternate_execution");
+  m.transition("patch_and_verify");
 });

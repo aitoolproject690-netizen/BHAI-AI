@@ -1,3 +1,4 @@
+import { routeConversationContext, shouldCarryPreviousContext } from "../api/contextRouter.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeFilePath, resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createDeploymentCheckpoint, verifyDeploymentCheckpoint, createMissionController } from "../api/engineeringCore.js";
@@ -77,4 +78,31 @@ test("Mission recovery requires alternate execution before patch",async()=>{
   assert.throws(()=>m.transition("done"),/Invalid recovery transition/);
   m.transition("alternate_execution");
   m.transition("patch_and_verify");
+});
+
+
+test("context router isolates a fresh task from an older Mission",()=>{
+  const messages=[
+    {role:"user",text:"GitHub repository: aitoolproject690-netizen/BHAI-TASK-APP-TEST"},
+    {role:"assistant",text:"Mission GitHub fix verified for index.html"},
+    {role:"user",text:"Bhai ek app bana aur build karke de"}
+  ];
+  const r=routeConversationContext(messages,"Bhai ek app bana aur build karke de");
+  assert.equal(r.mode,"fresh_task");
+  assert.equal(r.isolated,true);
+  assert.deepEqual(r.messages,[messages[2]]);
+  assert.equal(shouldCarryPreviousContext("Bhai ek app bana aur build karke de"),false);
+});
+
+test("context router carries context only for explicit follow-ups",()=>{
+  const messages=[
+    {role:"user",text:"GitHub repository: owner/demo"},
+    {role:"assistant",text:"Repo created"},
+    {role:"user",text:"Us repo ko build karke deploy kar"}
+  ];
+  const r=routeConversationContext(messages,"Us repo ko build karke deploy kar");
+  assert.equal(r.mode,"contextual_followup");
+  assert.equal(r.isolated,false);
+  assert.equal(r.messages.length,3);
+  assert.equal(shouldCarryPreviousContext("Us repo ko build karke deploy kar"),true);
 });

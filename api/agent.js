@@ -409,7 +409,9 @@ if(quickChat){
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
 const githubFileMatch=(latestText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";
+const explicitRepoMatch=latestText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i);
 const explicitIndexHtml=/\bindex\.html\b/i.test(latestText);
+let githubRequestedRepo=explicitRepoMatch?(explicitRepoMatch[1]+"/"+explicitRepoMatch[2]):githubRequestedRepo;
 let githubRequestedFile=explicitIndexHtml?"index.html":(githubTarget.path||githubFileMatch);
 if(githubRequestedFile&&githubRequestedRepo){
  const repoMarker=githubRequestedRepo+"/";
@@ -424,9 +426,9 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   const me=await fetch("https://api.github.com/user",{headers:{...h,"User-Agent":"BHAI-X"},signal:AbortSignal.timeout(8000)});
   const md=await me.json().catch(()=>({}));
   if(!me.ok||!md.login) throw new Error(md.message||"Unable to verify GitHub account.");
-  const owner=githubTarget.owner||md.login;
-  const repo=githubTarget.repo||githubRequestedRepo;
-  const path=String(githubTarget.path||githubRequestedFile||"").replace(/^\/+/,"");
+  const owner=explicitRepoMatch?explicitRepoMatch[1]: (githubTarget.owner||md.login);
+  const repo=explicitRepoMatch?explicitRepoMatch[2]: (githubTarget.repo||githubRequestedRepo);
+  const path=String(explicitIndexHtml?"index.html":(githubTarget.path||githubRequestedFile||"")).replace(/^\/+/,"");
   if(!owner||!repo||!path) throw new Error("GitHub target is incomplete: owner, repository, and file path are required.");
   const base="https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo);
   const publicHeaders={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"BHAI-X"};

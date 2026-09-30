@@ -38,7 +38,7 @@ export function createEvidence(){
 
 
 export function createRecoveryStateMachine(){
- const order=["diagnose","patch_and_verify","rollback_if_regression","retry","switch_provider_or_model","resume_checkpoint","done","failed"];
+ const order=["diagnose","patch_and_verify","rollback_if_regression","retry","switch_provider_or_model","resume_checkpoint","alternate_execution","done","failed"];
  let state="diagnose";
  const history=[state];
  return {
@@ -52,7 +52,8 @@ export function createRecoveryStateMachine(){
     rollback_if_regression:["retry","switch_provider_or_model","failed"],
     retry:["patch_and_verify","switch_provider_or_model","failed"],
     switch_provider_or_model:["resume_checkpoint","failed"],
-    resume_checkpoint:["patch_and_verify","done","failed"],
+    resume_checkpoint:["alternate_execution","failed"],
+    alternate_execution:["patch_and_verify","failed"],
     done:[],
     failed:[]
    };

@@ -18,7 +18,8 @@ test("AI router fails clearly when no provider is configured",()=>{
     gemini:process.env.GEMINI_API_KEY,
     google:process.env.GOOGLE_API_KEY,
     openai:process.env.OPENAI_API_KEY,
-    anthropic:process.env.ANTHROPIC_API_KEY
+    anthropic:process.env.ANTHROPIC_API_KEY,
+    hf:process.env.HF_TOKEN
   };
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_API_KEY;
@@ -32,17 +33,22 @@ test("AI router fails clearly when no provider is configured",()=>{
     if(original.google!==undefined)process.env.GOOGLE_API_KEY=original.google;
     if(original.openai!==undefined)process.env.OPENAI_API_KEY=original.openai;
     if(original.anthropic!==undefined)process.env.ANTHROPIC_API_KEY=original.anthropic;
+    if(original.hf!==undefined)process.env.HF_TOKEN=original.hf;
   }
 });
 
 test("AI router honors an explicitly configured provider and exclusion",()=>{
-  const original=process.env.OPENAI_API_KEY;
+  const originalOpenAI=process.env.OPENAI_API_KEY;
+  const originalAnthropic=process.env.ANTHROPIC_API_KEY;
   process.env.OPENAI_API_KEY="test-key";
+  process.env.ANTHROPIC_API_KEY="test-key";
   try{
     assert.equal(routeAI({preferred:"openai"}),"openai");
     assert.notEqual(routeAI({preferred:"openai",exclude:["openai"]}),"openai");
   }finally{
-    if(original===undefined)delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY=original;
+    if(originalOpenAI===undefined)delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY=originalOpenAI;
+    if(originalAnthropic===undefined)delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY=originalAnthropic;
   }
 });

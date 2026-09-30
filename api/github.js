@@ -1,5 +1,5 @@
-import {requireSession} from "./_utils.js";
 export default async function handler(req,res){
+  const account=await requireSession(req,res); if(!account)return;
   if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"});
   const token=process.env.GITHUB_TOKEN; if(!token)return res.status(503).json({error:"GitHub is not configured. Add GITHUB_TOKEN on the server."});
   const {action,owner,repo,path,content,branch="main",doIt=false}=req.body||{};

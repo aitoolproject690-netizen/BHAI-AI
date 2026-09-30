@@ -420,7 +420,7 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   const token=process.env.GITHUB_TOKEN;
   if(!token) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
   const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",Authorization:"Bearer "+token};
-  const me=await fetch("https://api.github.com/user",{headers:h,signal:AbortSignal.timeout(8000)});
+  const me=await fetch("https://api.github.com/user",{headers:authHeaders,signal:AbortSignal.timeout(8000)});
   const md=await me.json().catch(()=>({}));
   if(!me.ok||!md.login) throw new Error(md.message||"Unable to verify GitHub account.");
   const owner=githubTarget.owner||md.login;
@@ -428,14 +428,22 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   const path=String(githubTarget.path||githubRequestedFile||"").replace(/^\/+/,"");
   if(!owner||!repo||!path) throw new Error("GitHub target is incomplete: owner, repository, and file path are required.");
   const base="https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo);
-  let rr=await fetch(base,{headers:h,signal:AbortSignal.timeout(8000)});
+  const publicHeaders={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"BHAI-X"};
+  const authHeaders={...h,"User-Agent":"BHAI-X"};
+  let rr=await fetch(base,{headers:authHeaders,signal:AbortSignal.timeout(8000)});
   let rd=await rr.json().catch(()=>({}));
   if(!rr.ok && rr.status===404){
-   // A scoped token can return 404 for a public repo it cannot see. Verify public existence before blaming the target.
-   const publicRepo=await fetch(base,{headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},signal:AbortSignal.timeout(8000)});
-   const pd=await publicRepo.json().catch(()=>({}));
-   if(publicRepo.ok){ rr=publicRepo; rd=pd; }
-   else throw new Error("GitHub repository lookup failed: HTTP "+rr.status+" — "+(rd.message||"Not Found")+"; public lookup also failed: HTTP "+publicRepo.status+" — "+(pd.message||"Not Found"));
+   const accessible=await fetch("https://api.github.com/user/repos?per_page=100&affiliation=owner,collaborator,organization_member",{headers:authHeaders,signal:AbortSignal.timeout(8000)});
+   const ad=await accessible.json().catch(()=>[]);
+   const visible=Array.isArray(ad)&&ad.some(x=>String(x.full_name||"").toLowerCase()===String(owner+"/"+repo).toLowerCase());
+   const publicPage=await fetch("https://github.com/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo),{headers:{"User-Agent":"BHAI-X"},signal:AbortSignal.timeout(8000)});
+   if(!visible && !publicPage.ok){
+    throw new Error("GitHub repository is not visible to the configured GITHUB_TOKEN: HTTP 404 for "+owner+"/"+repo+" (public page also returned "+publicPage.status+"). Check that the token has access to this repository.");
+   }
+   if(!visible){
+    throw new Error("GitHub repository exists publicly, but the configured GITHUB_TOKEN cannot access "+owner+"/"+repo+". Add this repository to the token's repository access and grant Contents read/write permission.");
+   }
+   throw new Error("GitHub repository lookup returned HTTP 404 even though the token lists the repository. GitHub API access is inconsistent; retry once.");
   }else if(!rr.ok){
    throw new Error("GitHub repository lookup failed: HTTP "+rr.status+" — "+(rd.message||"Not Found"));
   }

@@ -25,6 +25,7 @@ test("AI router fails clearly when no provider is configured",()=>{
   delete process.env.GOOGLE_API_KEY;
   delete process.env.OPENAI_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.HF_TOKEN;
   try{
     assert.deepEqual(getConfiguredAIProviders(),[]);
     assert.throws(()=>routeAI({task:"hello"}),/No AI provider is configured/);

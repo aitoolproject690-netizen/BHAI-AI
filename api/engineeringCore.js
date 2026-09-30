@@ -73,3 +73,30 @@ export function verifyDeploymentCheckpoint(checkpoint,{expectedCommit="",expecte
  const urlOk=!!String(checkpoint?.url||"");
  return {ok:!!(commitOk&&statusOk&&urlOk),commitOk,statusOk,urlOk};
 }
+
+
+export function createMissionController(){
+ const phases=["preflight","plan","execute","verify","recover","complete","failed"];
+ let phase="preflight";
+ const history=[phase];
+ const allowed={
+  preflight:["plan","failed"],
+  plan:["execute","failed"],
+  execute:["verify","recover","failed"],
+  verify:["complete","recover","failed"],
+  recover:["execute","verify","failed"],
+  complete:[],
+  failed:[]
+ };
+ return {
+  get phase(){ return phase; },
+  history(){ return [...history]; },
+  transition(next){
+   if(!allowed[phase]?.includes(next)) throw new Error("Invalid mission transition: "+phase+" -> "+next);
+   phase=next; history.push(next); return phase;
+  },
+  canClaimDone(evidence){
+   return phase==="complete" && !!evidence?.verified;
+  }
+ };
+}

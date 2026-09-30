@@ -521,7 +521,8 @@ const models=quickChatMode
   const allowedCalls=calls.slice(0,2),responseParts=[];
   for(const call of allowedCalls){
    if(totalToolCalls>=maxToolCalls) break;
-   const name=call.name,a={...(call.args||{}),doIt};\n   // Deterministic GitHub target override: explicit user target wins over model guesses.
+   const name=call.name,a={...(call.args||{}),doIt};
+   // Deterministic GitHub target override: explicit user target wins over model guesses.
    if(/^github_/.test(name) && (githubTarget.owner||githubTarget.repo||githubTarget.path)){
     if(githubTarget.owner) a.owner=githubTarget.owner;
     if(githubTarget.repo) a.repo=githubTarget.repo;

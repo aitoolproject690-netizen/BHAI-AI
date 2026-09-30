@@ -428,13 +428,28 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   const path=String(githubTarget.path||githubRequestedFile||"").replace(/^\/+/,"");
   if(!owner||!repo||!path) throw new Error("GitHub target is incomplete: owner, repository, and file path are required.");
   const base="https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo);
-  const rr=await fetch(base,{headers:h,signal:AbortSignal.timeout(8000)});
-  const rd=await rr.json().catch(()=>({}));
-  if(!rr.ok) throw new Error("GitHub repository lookup failed: HTTP "+rr.status+" — "+(rd.message||"Not Found"));
+  let rr=await fetch(base,{headers:h,signal:AbortSignal.timeout(8000)});
+  let rd=await rr.json().catch(()=>({}));
+  if(!rr.ok && rr.status===404){
+   // A scoped token can return 404 for a public repo it cannot see. Verify public existence before blaming the target.
+   const publicRepo=await fetch(base,{headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},signal:AbortSignal.timeout(8000)});
+   const pd=await publicRepo.json().catch(()=>({}));
+   if(publicRepo.ok){ rr=publicRepo; rd=pd; }
+   else throw new Error("GitHub repository lookup failed: HTTP "+rr.status+" — "+(rd.message||"Not Found")+"; public lookup also failed: HTTP "+publicRepo.status+" — "+(pd.message||"Not Found"));
+  }else if(!rr.ok){
+   throw new Error("GitHub repository lookup failed: HTTP "+rr.status+" — "+(rd.message||"Not Found"));
+  }
   const branch=rd.default_branch||"main";
-  const existing=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
-  const ed=await existing.json().catch(()=>({}));
-  if(!existing.ok) throw new Error("GitHub file lookup failed: HTTP "+existing.status+" — "+(ed.message||"Not Found"));
+  let existing=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
+  let ed=await existing.json().catch(()=>({}));
+  if(!existing.ok && existing.status===404){
+   const publicFile=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},signal:AbortSignal.timeout(8000)});
+   const pd=await publicFile.json().catch(()=>({}));
+   if(publicFile.ok){ existing=publicFile; ed=pd; }
+   else throw new Error("GitHub file lookup failed: HTTP "+existing.status+" — "+(ed.message||"Not Found")+"; public lookup also failed: HTTP "+publicFile.status+" — "+(pd.message||"Not Found"));
+  }else if(!existing.ok){
+   throw new Error("GitHub file lookup failed: HTTP "+existing.status+" — "+(ed.message||"Not Found"));
+  }
   if(Array.isArray(ed)) throw new Error("GitHub target is a directory, not a file: "+path);
   const original=Buffer.from(ed.content||"","base64").toString("utf8");
   if(!original) throw new Error("GitHub returned an empty file: "+path);

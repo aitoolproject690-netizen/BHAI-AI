@@ -430,7 +430,9 @@ const models=quickChatMode
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  const githubLinkRequest=/\bgithub\b/i.test(latestText)&&(/\b(link|url|repo|repository)\b/i.test(latestText));
- const githubRequestedRepo=(latestText.match(/\b(?:repo(?:sitory)?\s*(?:name)?\s*[:=]?\s*)?([A-Za-z0-9][A-Za-z0-9._-]{2,99})\b/i)||[])[1]||"";
+ const githubRepoCandidates=latestText.match(/\b[A-Za-z0-9][A-Za-z0-9._-]{2,99}\b/g)||[];
+ const githubRequestedRepo=githubRepoCandidates.find(x=>x.includes("-")&&/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(x))||"";
+
 
  const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
  let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubEvidence=null;

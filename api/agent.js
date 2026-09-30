@@ -521,7 +521,13 @@ const models=quickChatMode
   const allowedCalls=calls.slice(0,2),responseParts=[];
   for(const call of allowedCalls){
    if(totalToolCalls>=maxToolCalls) break;
-   const name=call.name,a={...(call.args||{}),doIt};\n   // Deterministic GitHub target override: explicit user target wins over model guesses.\n   if(/^github_/.test(name) && (githubTarget.owner||githubTarget.repo||githubTarget.path)){\n    if(githubTarget.owner) a.owner=githubTarget.owner;\n    if(githubTarget.repo) a.repo=githubTarget.repo;\n    if(githubTarget.path && /^(github_read|github_update|github_create_file|github_delete_file)$/.test(name)) a.path=githubTarget.path;\n   }\n   const cacheKey=name+":"+JSON.stringify(a);
+   const name=call.name,a={...(call.args||{}),doIt};\n   // Deterministic GitHub target override: explicit user target wins over model guesses.
+   if(/^github_/.test(name) && (githubTarget.owner||githubTarget.repo||githubTarget.path)){
+    if(githubTarget.owner) a.owner=githubTarget.owner;
+    if(githubTarget.repo) a.repo=githubTarget.repo;
+    if(githubTarget.path && /^(github_read|github_update|github_create_file|github_delete_file)$/.test(name)) a.path=githubTarget.path;
+   }
+   const cacheKey=name+":"+JSON.stringify(a);
    activity.push({tool:name,state:"running"}); totalToolCalls++;
    if((name==="github_update" || (name==="github_actions" && a.operation==="dispatch")) && !control.modules.builds){
     const msg="Owner has disabled build/core execution module."; activity[activity.length-1].state="blocked"; responseParts.push({functionResponse:{name,response:{error:msg}}}); continue;

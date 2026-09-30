@@ -493,6 +493,7 @@ const models=quickChatMode
  
  const githubRequestedPath=(latestText.match(/(?:`|\b)(index\.html|[A-Za-z0-9._/-]+\.(?:html|css|js|jsx|ts|tsx|json|md))(?=`|\b)/i)||[])[1]||"";
  let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubFileVerified=false,githubEvidence=null,githubFileEvidence=null;
+ const markEvidence=(name,result)=>{ const owner=result?.owner?.login||result?.owner||githubTarget.owner||""; const repo=result?.repo||result?.name||githubTarget.repo||""; const branch=result?.default_branch||result?.branch||"main"; const path=result?.path||githubTarget.path||githubRequestedPath||"repository"; const commit=result?.commit||result?.sha||""; if(owner&&repo) evidence.set({repository:owner+"/"+repo}); evidence.set({branch,path}); if(commit) evidence.set({commit}); evidence.addTest(name,true,"Verified by GitHub API/read-back"); };
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
  let rootListed=false;
@@ -588,8 +589,8 @@ const models=quickChatMode
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
     if((name==="github_create_repo"||name==="github_update") && recovery.state==="patch_and_verify") recoveryStep("done","GitHub operation completed");
-    if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result; if(result?.commit) evidence.set({commit:result.commit}); if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
-    if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result; if(name==="github_read" && result?.type==="file"){const p=String(result.path||"").replace(/^\/+/, ""); if(!githubRequestedPath || p.toLowerCase()===githubRequestedPath.toLowerCase()) githubFileVerified=true;}}
+    if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
+    if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_read" && result?.type==="file"){const p=String(result.path||"").replace(/^\/+/, ""); if(!githubRequestedPath || p.toLowerCase()===githubRequestedPath.toLowerCase()) githubFileVerified=true;}}
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
     const msg=String(e?.message||e);
@@ -620,7 +621,8 @@ const models=quickChatMode
    const title=githubEvidence.name||githubEvidence.full_name||"GitHub repository";
    return json(res,200,{text:"## ✅ GitHub verified\n\n🔗 **"+title+"**\n\n"+githubEvidence.url+"\n\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   }
-  if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified))) return json(res,200,{text:"⚠️ GitHub execution was not fully verified. No completion claim was made. The repository/file/commit evidence is incomplete.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
+  if(requiresGithubExecution && githubVerificationConfirmed && (!githubFileRequest || githubFileVerified) && recovery.state==="diagnose"){ recoveryStep("patch_and_verify","GitHub evidence collected"); if(evidence.verify()) recoveryStep("done","Evidence verified"); }
+  if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified) || !evidence.verify())) return json(res,200,{text:"⚠️ GitHub execution was not fully verified. No completion claim was made. The repository/file/commit/test evidence is incomplete.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }

@@ -510,7 +510,8 @@ const models=quickChatMode
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){
    const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
-   if(missionMode && mission.phase==="verify" && !requiresGithubExecution) { missionStep("complete","Response produced and no external execution evidence was required"); }\n   if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified))){
+   if(missionMode && mission.phase==="verify" && !requiresGithubExecution) { missionStep("complete","Response produced and no external execution evidence was required"); }
+   if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified))){
     if(totalToolCalls<maxToolCalls){
      contents.push(candidate.content);
      contents.push({role:"user",parts:[{text:"STOP. This is an explicit GitHub execution task. You have not yet produced verified GitHub evidence. Do NOT say Task completed. Use the GitHub tools now to create/update/read the requested repository and verify the result. Final success requires repository URL, requested file/path, commit SHA, and verification."}]});

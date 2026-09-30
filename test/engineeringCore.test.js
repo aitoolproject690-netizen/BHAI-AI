@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFilePath, resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createDeploymentCheckpoint, verifyDeploymentCheckpoint } from "../api/engineeringCore.js";
+import { normalizeFilePath, resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createDeploymentCheckpoint, verifyDeploymentCheckpoint, createMissionController } from "../api/engineeringCore.js";
 
 test("resolves explicit GitHub owner/repo/file target",()=>{
   const x=resolveGithubTarget("fix aitoolproject690-netizen/BHAI-TASK-APP-TEST/index.html");
@@ -45,6 +45,21 @@ test("recovery state machine follows safe recovery order",async()=>{
   const evidence={verified:true};
   m.transition("done");
   assert.equal(m.canClaimDone(evidence),true);
+});
+
+test("Mission Mode follows preflight plan execute verify and recovery",()=>{
+  const m=createMissionController();
+  assert.equal(m.phase,"preflight");
+  m.transition("plan");
+  m.transition("execute");
+  m.transition("verify");
+  m.transition("recover");
+  m.transition("execute");
+  m.transition("verify");
+  m.transition("complete");
+  assert.deepEqual(m.history(),["preflight","plan","execute","verify","recover","execute","verify","complete"]);
+  assert.equal(m.canClaimDone({verified:true}),true);
+  assert.equal(m.canClaimDone({verified:false}),false);
 });
 
 test("deployment checkpoint verifies expected live commit",()=>{

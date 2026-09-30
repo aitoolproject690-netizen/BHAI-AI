@@ -207,7 +207,7 @@ function App(){
     const missionToken=account?.session||localStorage.getItem("bhai_user_session")||sessionStorage.getItem("bhai_user_session")||"";
     const missionHeaders={"Content-Type":"application/json"}; if(missionToken)missionHeaders.Authorization="Bearer "+missionToken;
     const controller=new AbortController(); const missionTimeout=setTimeout(()=>controller.abort(),300000);
-    let er; try{er=await fetch(apiUrl('/api/agent'),{method:'POST',headers:missionHeaders,body:JSON.stringify({messages:execMessages,doIt:true}),signal:controller.signal});}finally{clearTimeout(missionTimeout)}
+    let er; try{er=await fetch(apiUrl('/api/mission'),{method:'POST',headers:missionHeaders,body:JSON.stringify({task:goal,projectName:m.goal||'BHAI-App',platform:'android',branch:'main',doIt:true,maxFixes:2,autoDeploy:true}),signal:controller.signal});}finally{clearTimeout(missionTimeout)}
     const ed=await er.json();
     upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:ed.text||('⚠️ '+(ed.error||'Mission execution failed')),images:ed.images||[]}]);
     try{await fetch(apiUrl('/api/diff'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:'mission',summary:goal,files:(ed.activity||[]).map(x=>x.tool||'mission-step'),commit:ed.commit||null,verification:ed.verified||ed.verification||null})})}catch{}

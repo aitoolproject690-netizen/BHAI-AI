@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm test && vite build",
     "preview": "vite preview",
     "start": "node server.js",
     "test": "node --test test/engineeringCore.test.js"

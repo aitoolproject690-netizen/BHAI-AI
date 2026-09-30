@@ -3,7 +3,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function checkGemini(){
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
  if(!key)return {configured:false,ok:false,reason:"Gemini API key is not configured"};
- try{const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key}});const d=await r.json();if(!r.ok)return {configured:true,ok:false,reason:d?.error?.message||"Gemini model discovery failed"};const models=(d.models||[]).filter(m=>Array.isArray(m.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent")).map(m=>String(m.name||"").replace(/^models\\//,""));return {configured:true,ok:models.length>0,models,selected:models[0]||null};}catch(e){return {configured:true,ok:false,reason:e.message};}
+ try{const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key}});const d=await r.json();if(!r.ok)return {configured:true,ok:false,reason:d?.error?.message||"Gemini model discovery failed"};const models=(d.models||[]).filter(m=>Array.isArray(m.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent")).map(m=>String(m.name||"").replace(/^models\//,""));return {configured:true,ok:models.length>0,models,selected:models[0]||null};}catch(e){return {configured:true,ok:false,reason:e.message};}
 }
 async function checkUrl(url){try{const r=await fetch(url,{method:"GET",signal:AbortSignal.timeout(7000)});return {ok:r.ok,status:r.status};}catch(e){return {ok:false,reason:e.message};}}
 export default async function handler(req,res){

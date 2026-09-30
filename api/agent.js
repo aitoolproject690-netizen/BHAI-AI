@@ -496,9 +496,12 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   githubEvidence=result;
   githubFileEvidence=result;
   markEvidence("github_diagnose_patch_readback",result);
+  const proofVerified=evidence.verify();
+  if(!proofVerified) throw new Error("Evidence engine rejected completion: repository, branch, path, commit and passing verification proof are required.");
   activity.push({tool:"github:diagnose",state:"done",details:fixes.join(" ")});
   activity.push({tool:"github:patch_and_verify",state:"done",details:"Commit "+commitSha+" read back and content matched exactly."});
-  return json(res,200,{text:"## ✅ Mission GitHub fix verified\\n\\n**Repository:** "+owner+"/"+repo+"\\n\\n**File:** "+path+"\\n\\n**Diagnosis:** "+fixes.join(" ")+"\\n\\n**Commit:** "+commitSha+"\\n\\n**Verification:** Same file was read back from GitHub after commit and the content matched the patched content exactly.",activity,images:[],usage:await getMediaUsage(db,account.id)});
+  activity.push({tool:"mission:evidence",state:"done",details:"No-proof-no-DONE gate passed for repository, branch, file, commit and read-back verification."});
+  return json(res,200,{text:"## ✅ Mission GitHub fix verified\\n\\n**Repository:** "+owner+"/"+repo+"\\n\\n**Branch:** "+branch+"\\n\\n**File:** "+path+"\\n\\n**Diagnosis:** "+fixes.join(" ")+"\\n\\n**Commit:** "+commitSha+"\\n\\n**Verification:** Same file was read back from GitHub after commit and the content matched the patched content exactly.\\n\\n**Evidence:** ✅ No-proof-no-DONE gate passed.",activity,images:[],usage:await getMediaUsage(db,account.id)});
  }catch(e){
   return json(res,502,{error:"GitHub file execution failed: "+(e?.message||"Unknown GitHub error"),activity});
  }

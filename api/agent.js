@@ -595,7 +595,8 @@ const models=quickChatMode
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
     const msg=String(e?.message||e);
-    const errorClass=classifyEngineeringError(e);\n    if(missionMode && mission.phase==="recover" && errorClass.retryable){ try { missionStep("execute","Retrying from recovery checkpoint"); } catch {} }
+    const errorClass=classifyEngineeringError(e);
+    if(missionMode && mission.phase==="recover" && errorClass.retryable){ try { missionStep("execute","Retrying from recovery checkpoint"); } catch {} }
     if(recovery.state==="diagnose") activity.push({tool:"recovery:diagnose",state:"done",details:errorClass.type+":"+errorClass.message});
     if(errorClass.retryable && recovery.state==="diagnose") recoveryStep("patch_and_verify","retryable "+errorClass.type);
     const isGitHubReadMiss=name==="github_read" && /not found|path.*not|does not exist/i.test(msg);

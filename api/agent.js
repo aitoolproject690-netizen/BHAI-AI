@@ -484,13 +484,21 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
    if(fixed!==before) fixes.push("Fixed malformed console.log call (missing closing parenthesis).");
   }
   const forceRecoveryTest=missionMode && /(?:force|forced|simulate|test).{0,40}recovery|recovery.{0,40}(?:force|forced|simulate|test)/i.test(githubTaskText);
-  if(forceRecoveryTest){
-   activity.push({tool:"recovery:diagnose",state:"done",details:"Controlled Mission Mode recovery test requested; deterministic patch is intentionally routed through recovery instead of executing directly."});
-   try{ recoveryStep("switch_provider_or_model","Controlled recovery test: switching to the alternate execution path."); }catch{}
+  const missionRecovery=missionMode && fixed!==original;
+  if(missionRecovery){
+   activity.push({tool:"recovery:diagnose",state:"done",details:"Mission Mode detected a deterministic patch and routed it through the recovery checkpoint instead of bypassing recovery."});
+   try{ recoveryStep("switch_provider_or_model","Recovery route selected: alternate GitHub execution path will be used."); }catch{}
    activity.push({tool:"recovery:checkpoint",state:"done",details:"Repository, branch, target file, original content, and target SHA were preserved before alternate execution."});
-   try{ recoveryStep("resume_checkpoint","Controlled recovery test: resuming from the preserved checkpoint."); }catch{}
-   activity.push({tool:"recovery:alternate_execution",state:"done",details:"Alternate execution attempt resumed from checkpoint and will apply the diagnosed patch."});
-   if(missionMode){ try{missionStep("recover","Controlled recovery path is active from the preserved checkpoint.");}catch{} }
+   try{ recoveryStep("resume_checkpoint","Resuming execution from the preserved repository/file checkpoint."); }catch{}
+   try{ recoveryStep("alternate_execution","Alternate GitHub execution path resumed from checkpoint; applying the diagnosed patch."); }catch{}
+   if(missionMode){ try{missionStep("recover","Recovery checkpoint resumed and alternate execution is active.");}catch{} }
+  }else if(forceRecoveryTest && missionMode){
+   activity.push({tool:"recovery:diagnose",state:"done",details:"Controlled Mission Mode recovery test requested."});
+   try{ recoveryStep("switch_provider_or_model","Controlled recovery test: alternate execution route selected."); }catch{}
+   activity.push({tool:"recovery:checkpoint",state:"done",details:"Repository/file inspection preserved before alternate execution."});
+   try{ recoveryStep("resume_checkpoint","Resuming from the preserved checkpoint."); }catch{}
+   try{ recoveryStep("alternate_execution","Alternate execution resumed from checkpoint."); }catch{}
+   if(missionMode){ try{missionStep("recover","Controlled recovery path is active.");}catch{} }
   }else if(fixed===original){
    throw new Error("Diagnosis found no deterministic safe fix for "+path+". Existing content was inspected and left unchanged.");
   }
@@ -670,7 +678,7 @@ const models=quickChatMode
      for(const item of result.items||[]) knownPaths.add(item.path);
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
-    if((name==="github_create_repo"||name==="github_update") && recovery.state==="resume_checkpoint"){ recoveryStep("patch_and_verify","Alternate execution path produced a GitHub change; verification will follow."); if(missionMode&&mission.phase==="recover"){try{missionStep("execute","Recovery checkpoint resumed and alternate execution produced a patch.");}catch{}} }
+    if((name==="github_create_repo"||name==="github_update") && recovery.state==="alternate_execution"){ recoveryStep("patch_and_verify","Alternate execution path produced a GitHub change; verification will follow."); if(missionMode&&mission.phase==="recover"){try{missionStep("execute","Recovery checkpoint resumed and alternate execution produced a patch.");}catch{}} }
     if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
     if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_read" && result?.type==="file"){const p=String(result.path||"").replace(/^\/+/, ""); if(!githubRequestedPath || p.toLowerCase()===githubRequestedPath.toLowerCase()){ githubFileVerified=true; if(missionMode&&mission.phase==="execute"){try{missionStep("verify","Target file was read back after execution.");}catch{}} }}}
     responseParts.push({functionResponse:{name,response:{result}}});

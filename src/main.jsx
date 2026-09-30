@@ -67,7 +67,7 @@ function renderText(text='',onCopy){
 
 function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
- const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),[doIt,setDoIt]=useState(true);
+ const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),doIt=true;
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
  const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3});
  const end=useRef(null),recognition=useRef(null),workTicker=useRef(null); const[resumeMission,setResumeMission]=useState(null);
@@ -82,7 +82,7 @@ function App(){
   let t=(textOverride??input).trim();
   if(fileInfo)t=t+'\n\n[Attached file: '+fileInfo.name+']\n'+fileInfo.text;
   if(!t||running||!chat)return;
-  if(missionMode){await compileMission(t);return;}
+  if(false){await compileMission(t);return;}
   const casualKey=t.toLowerCase().replace(/[!?.,]+/g,' ').replace(/\s+/g,' ').replace(/\s+bhai$/i,'').trim();
   // Casual conversation must stay completely outside the agent/mission execution path.
   // Keep this guard intentionally conservative: only clear social/chat phrases are intercepted.
@@ -145,7 +145,7 @@ function App(){
    let dnaContext=''; if(!casualChat){try{const dr=await fetch(apiUrl('/api/dna?project=default'),{headers:authHeaders()}).then(x=>x.json()); dnaContext=JSON.stringify(dr.data||{}).slice(0,5000)}catch{}}
    const agentMessages=dnaContext?[...next,{id:crypto.randomUUID(),role:'user',text:'PROJECT DNA CONTEXT (use as context, do not repeat): '+dnaContext}]:next;
    const agentToken=account?.session||localStorage.getItem("bhai_user_session")||sessionStorage.getItem("bhai_user_session")||""; const agentHeaders={"Content-Type":"application/json"}; if(agentToken)agentHeaders.Authorization="Bearer "+agentToken; const controller=new AbortController(); const agentTimeout=setTimeout(()=>controller.abort(),300000);
-   let r; try{r=await fetch(apiUrl('/api/agent'),{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:agentMessages,doIt}),signal:controller.signal});}finally{clearTimeout(agentTimeout)}
+   let r; try{r=await fetch(apiUrl('/api/agent'),{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:agentMessages,doIt:true}),signal:controller.signal});}finally{clearTimeout(agentTimeout)}
    const d=await r.json();
    if(!r.ok||d.error){const rr=await fetch(apiUrl('/api/control'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'recovery_plan',error:d.error||('HTTP '+r.status),stage:'agent'})}).catch(()=>null);const rp=rr?await rr.json().catch(()=>({})):{};upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ ERROR DETECTOR\n\n'+(d.error||('Backend HTTP '+r.status))+'\n\n🛡️ Preventive recovery: '+(rp.plan||[]).map(x=>x.action).join(' → ')+'\n\nBHAI X ne is result ko verified DONE nahi maana.'}]);setActivity(a=>a.map(x=>({...x,state:'failed'})));return;}
    if(d.usage)setUsage(d.usage); setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
@@ -281,7 +281,7 @@ function App(){
     <div ref={end}/>
    </section>
    {activityOpen&&<section className="activity"><div className="activityHead"><b>🔧 BHAI X ka kaam</b><span className="activityLive">LIVE</span><button onClick={()=>setActivityOpen(false)}><X size={14}/></button></div>{activity.map(x=><div className="activityItem" key={x.id}><span className={x.state==='done'?'ok':''}>{x.state==='done'?<Check size={12}/>:<Loader2 size={12} className={x.state==='running'?'spin':''}/>}</span><b>{x.step}</b><span>{x.text}</span></div>)}</section>}
-   {resumeMission&&<div className="resumeBar"><span>🔄 Previous mission checkpoint saved</span><button onClick={async()=>{setInput(resumeMission.goal);setResumeMission(null);setMissionMode(true);}}>Resume mission</button><button onClick={()=>{localStorage.removeItem('bhai_x_checkpoint');setResumeMission(null)}}>Dismiss</button></div>}
+   {resumeMission&&<div className="resumeBar"><span>🔄 Previous mission checkpoint saved</span><button onClick={async()=>{setInput(resumeMission.goal);setResumeMission(null);}}>Resume mission</button><button onClick={()=>{localStorage.removeItem('bhai_x_checkpoint');setResumeMission(null)}}>Dismiss</button></div>}
    <div className="composerWrap">
     <div className="composerTools">
      <div className="toolMenuWrap">

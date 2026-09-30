@@ -3,7 +3,7 @@ import { ownerState, ownerReady } from "./owner.js";
 import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
 import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
-import { generateWithRouter } from "./aiRouter.js";
+import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -529,7 +529,38 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   if(!verify.ok) throw new Error("GitHub read-back verification failed: HTTP "+verify.status+" — "+(vd.message||"Not Found"));
   const verifiedContent=vd.content?Buffer.from(vd.content,"base64").toString("utf8"):"";
   if(vd.path!==path||verifiedContent!==fixed) throw new Error("GitHub read-back verification failed: file content does not match the committed fix.");
-  const result={ok:true,owner,repo,default_branch:branch,path,commit:commitSha,sha:vd.sha,diagnosis:fixes,verified:true};
+  let reviewerEvidence=null;
+  const configuredAI=getConfiguredAIProviders();
+  const reviewerCandidate=configuredAI.find(id=>id!=="gemini")||null;
+  if(missionMode && reviewerCandidate){
+   activity.push({tool:"multi-ai:reviewer",state:"running",details:"Independent AI reviewer checking the diagnosed fix and exact GitHub target."});
+   try{
+    reviewerEvidence=await reviewWithMultiAI({
+     task:"GitHub Mission Mode fix for "+owner+"/"+repo+"/"+path+"\nDiagnosis: "+fixes.join(" "),
+     draft:fixed,
+     preferred:reviewerCandidate,
+     exclude:["gemini"]
+    });
+    activity.push({
+     tool:"multi-ai:reviewer",
+     state:"done",
+     details:"Independent reviewer used "+reviewerEvidence.provider+" / "+reviewerEvidence.model+"; repository read-back remains the authoritative verification."
+    });
+   }catch(reviewError){
+    activity.push({
+     tool:"multi-ai:reviewer",
+     state:"fallback",
+     details:"Independent reviewer unavailable: "+String(reviewError?.message||reviewError).slice(0,300)+". Continuing with deterministic GitHub verification."
+    });
+   }
+  }else if(missionMode){
+   activity.push({
+    tool:"multi-ai:reviewer",
+    state:"skipped",
+    details:"No independent second AI provider is configured; deterministic GitHub verification remains authoritative."
+   });
+  }
+  const result={ok:true,owner,repo,default_branch:branch,path,commit:commitSha,sha:vd.sha,diagnosis:fixes,reviewer:reviewerEvidence?{provider:reviewerEvidence.provider,model:reviewerEvidence.model}:null,verified:true};
   githubExecutionConfirmed=true;
   githubVerificationConfirmed=true;
   githubFileVerified=true;

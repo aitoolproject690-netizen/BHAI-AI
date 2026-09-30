@@ -1,3 +1,5 @@
+import {getAIProviderStatus} from "./aiRouter.js";
+
 const json=(res,status,data)=>res.status(status).json(data);
 
 const providers=[
@@ -12,6 +14,7 @@ const providers=[
 
 const features=[
  ["ai-agent","AI Employee / Agent","Natural-language planning and tool execution"],
+ ["multi-ai","Multi-AI Router","Route chat, execution fallback and independent review across configured AI providers"],
  ["code-fixer","AI Code Fixer","Fix, optimize and security analysis"],
  ["code-generator","AI Code Generator","Generate project code from requirements"],
  ["project-analyzer","Project Analyzer","Inspect project structure, dependencies and errors"],
@@ -34,13 +37,20 @@ export default async function handler(req,res){
  if(req.method!=="GET") return json(res,405,{error:"Method not allowed"});
  const checks=providers.map(p=>({id:p.id,name:p.name,type:p.type,configured:!!p.configured(),status:p.configured()?"connected":"not_configured"}));
  const configured=new Set(checks.filter(x=>x.configured).map(x=>x.id));
+ const ai=getAIProviderStatus();
  return json(res,200,{
   ok:true,
   features:features.map(([id,name,description])=>({id,name,description})),
   providers:checks,
+  aiProviders:ai,
   capabilities:{
    github:{read:true,createRepo:configured.has("github"),write:configured.has("github"),actions:configured.has("github")},
-   ai:{gemini:configured.has("google-ai"),openai:configured.has("openai"),anthropic:configured.has("anthropic")},
+   ai:{
+    gemini:configured.has("google-ai"),
+    openai:configured.has("openai"),
+    anthropic:configured.has("anthropic"),
+    multiProvider:ai.filter(x=>x.configured).length>=2
+   },
    deploy:{render:configured.has("render")},
    database:configured.has("database"),
    image:{huggingface:configured.has("huggingface"),gemini:configured.has("google-ai")}

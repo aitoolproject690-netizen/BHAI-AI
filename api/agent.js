@@ -370,6 +370,10 @@ async function getModelsFast(){
   return list;
 }
 const latestText=String(latestUserMessage||"").trim();
+const githubLinkRequest=/\bgithub\b/i.test(latestText)&&(/\b(link|url|repo|repository)\b/i.test(latestText));
+const githubRepoCandidates=latestText.match(/\b[A-Za-z0-9][A-Za-z0-9._-]{2,99}\b/g)||[];
+const githubRequestedRepo=githubRepoCandidates.find(x=>x.includes("-")&&/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(x))||"";
+
 const quickChat=/^(hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya chal raha|kya chal rha|kya kar rahe ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|😂|😄|bye|goodbye)(\\s+bhai)?[!?., ]*$/i.test(latestText);
 const fastMode=/^(bhai\\s+)?(ye|yeh|yah|kuch|sab|mera|meri|mujhe|isko|is|app|code|project|login|payment|error|problem|issue|bug|website|apk|video|image|file|github|render|deploy|api|server|dawa|medicine|tablet|baby|report|phone|mobile|wifi|internet|password|account)\\b.{0,220}$/i.test(latestText)
  || /(nahi ho raha|nahi ho rha|nahin ho raha|nahin ho rha|nahi chal raha|nahi chal rha|kaam nahi kar|problem aa|problem a|error aa|error a|issue aa|issue a|bug aa|bug a|fix kar|fix kaise|kaise fix|kese fix|kya karu|kya kare|kya karna hai|kuch kar|help chahiye|samajh nahi|samajh nhi|bata bhai|batao bhai)/i.test(latestText);
@@ -429,11 +433,6 @@ const models=quickChatMode
  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
- const githubLinkRequest=/\bgithub\b/i.test(latestText)&&(/\b(link|url|repo|repository)\b/i.test(latestText));
- const githubRepoCandidates=latestText.match(/\b[A-Za-z0-9][A-Za-z0-9._-]{2,99}\b/g)||[];
- const githubRequestedRepo=githubRepoCandidates.find(x=>x.includes("-")&&/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(x))||"";
-
-
  const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
  let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubEvidence=null;
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;

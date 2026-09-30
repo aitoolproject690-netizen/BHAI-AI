@@ -69,3 +69,30 @@ test("reviewer routing can choose an independent provider",()=>{
     if(originals.gemini===undefined)delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY=originals.gemini;
   }
 });
+
+
+test("AI router falls back when the primary provider reports high demand",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.GEMINI_API_KEY="test-gemini";
+  process.env.OPENAI_API_KEY="test-openai";
+  try{
+    let calls=0;
+    global.fetch=async(url)=>{
+      calls++;
+      if(String(url).includes("generativelanguage.googleapis.com")){
+        return new Response(JSON.stringify({error:{message:"This model is currently experiencing high demand. Please try again later."}}),{status:503,headers:{"content-type":"application/json"}});
+      }
+      return new Response(JSON.stringify({output_text:"fallback-ok"}),{status:200,headers:{"content-type":"application/json"}});
+    };
+    const {generateWithRouter}=await import("../api/aiRouter.js?fallback="+Date.now());
+    const out=await generateWithRouter({task:"hello",preferred:"gemini",role:"chat"});
+    assert.equal(out.provider,"openai");
+    assert.equal(out.text,"fallback-ok");
+    assert.equal(calls,2);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});

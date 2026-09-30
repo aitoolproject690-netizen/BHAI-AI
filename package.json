@@ -8,7 +8,7 @@
     "build": "npm test && vite build",
     "preview": "vite preview",
     "start": "node server.js",
-    "test": "node --check api/agent.js && node --test test/engineeringCore.test.js test/aiRouter.test.js test/engineeringAi.test.js"
+    "test": "node --check api/agent.js && node --check api/mission.js && node --test test/engineeringCore.test.js test/aiRouter.test.js test/engineeringAi.test.js"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

@@ -408,8 +408,9 @@ if(quickChat){
 const githubFileMatch=(latestText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";
 let githubRequestedFile=githubFileMatch;
 if(githubRequestedFile&&githubRequestedRepo){
- const repoPrefix=new RegExp("^(?:[A-Za-z0-9_.-]+/)?"+githubRequestedRepo.replace(/[\\^$.*+?()[\\]{}|]/g,"\\$&")+"/","i");
- githubRequestedFile=githubRequestedFile.replace(repoPrefix,"");
+ const repoMarker=githubRequestedRepo+"/";
+ const repoAt=githubRequestedFile.toLowerCase().indexOf(repoMarker.toLowerCase());
+ if(repoAt>=0) githubRequestedFile=githubRequestedFile.slice(repoAt+repoMarker.length);
 }
 if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
  try{

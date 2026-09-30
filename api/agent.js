@@ -371,6 +371,7 @@ async function getModelsFast(){
 }
 const latestText=String(latestUserMessage||"").trim();
 const githubLinkRequest=/\bgithub\b/i.test(latestText)&&(/\b(link|url|repo|repository)\b/i.test(latestText));
+const githubFileRequest=/\bgithub\b/i.test(latestText)&&(/\b(file|index\.html|html|code|page|commit|push|update|create)\b/i.test(latestText));
 const githubRepoCandidates=latestText.match(/\b[A-Za-z0-9][A-Za-z0-9._-]{2,99}\b/g)||[];
 const githubRequestedRepo=githubRepoCandidates.find(x=>x.includes("-")&&/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(x)&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x))||"";
 
@@ -404,7 +405,7 @@ if(quickChat){
  const reply=playful[k]||casualReplies[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
-if(githubLinkRequest && githubRequestedRepo && doIt){
+if(githubLinkRequest && githubRequestedRepo && doIt && !githubFileRequest){
  try{
   const token=process.env.GITHUB_TOKEN;
   if(!token) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});

@@ -180,7 +180,7 @@ async function github(action,a){
  if(action==="github_create_repo"){
   if(!token) throw new Error("GitHub write access is not configured. Add GITHUB_TOKEN in Render Environment.");
   if(!a.name) throw new Error("Repository name is required.");
-  if(!a.doIt) throw new Error("DO IT mode is OFF; enable DO IT before creating a repository.");
+  
   const cleanName=String(a.name).trim();
   let owner=a.owner||"";
   if(!owner){
@@ -214,7 +214,7 @@ async function github(action,a){
  if(action==="github_create_repo"){
   if(!token) throw new Error("GitHub write access is not configured. Add GITHUB_TOKEN in Render Environment.");
   if(!a.name) throw new Error("Repository name is required.");
-  if(!a.doIt) throw new Error("DO IT mode is OFF; enable DO IT before creating a repository.");
+  
   const r=await fetch("https://api.github.com/user/repos",{method:"POST",headers:{"Content-Type":"application/json",...h},body:JSON.stringify({name:String(a.name).trim(),description:String(a.description||"Created by BHAI X"),private:!!a.private,auto_init:true})});
   const d=await r.json(); if(!r.ok) throw new Error(d.message||"GitHub repository creation failed");
   return{ok:true,created:true,full_name:d.full_name,default_branch:d.default_branch,url:d.html_url,clone_url:d.clone_url};
@@ -227,7 +227,7 @@ async function github(action,a){
  }
  if(action==="github_actions"){  if(!token) throw new Error("GITHUB_TOKEN is required for workflow/build actions.");  const workflow=a.workflow||a.workflow_id;  if(a.operation==="list"){const r=await fetch(base+"/actions/workflows",{headers:h}),d=await r.json();if(!r.ok)throw new Error(d.message||"GitHub workflows failed");return{workflows:(d.workflows||[]).map(w=>({id:w.id,name:w.name,path:w.path,state:w.state}))};}  if(a.operation==="dispatch"){if(!a.doIt)throw new Error("DO IT mode is OFF.");if(!workflow)throw new Error("workflow is required");const r=await fetch(base+"/actions/workflows/"+encodeURIComponent(workflow)+"/dispatches",{method:"POST",headers:{"Content-Type":"application/json",...h},body:JSON.stringify({ref:branch,inputs:a.inputs||{}})});if(!r.ok)throw new Error((await r.text()).slice(0,500)||"Workflow dispatch failed");return{ok:true,dispatched:true,workflow,branch};}  if(a.operation==="runs"){const r=await fetch(base+"/actions/runs?per_page="+encodeURIComponent(a.limit||5),{headers:h}),d=await r.json();if(!r.ok)throw new Error(d.message||"Workflow runs failed");return{runs:(d.workflow_runs||[]).map(w=>({id:w.id,name:w.name,status:w.status,conclusion:w.conclusion,sha:w.head_sha,created_at:w.created_at,url:w.html_url}))};}  if(a.operation==="jobs"){if(!a.runId)throw new Error("runId is required");const r=await fetch(base+"/actions/runs/"+encodeURIComponent(a.runId)+"/jobs",{headers:h}),d=await r.json();if(!r.ok)throw new Error(d.message||"Workflow jobs failed");return{jobs:(d.jobs||[]).map(j=>({id:j.id,name:j.name,status:j.status,conclusion:j.conclusion,steps:j.steps||[]}))};}  throw new Error("Unsupported GitHub actions operation"); } if(action==="github_update"){
   if(!token) throw new Error("GitHub write access is not configured. Add GITHUB_TOKEN in Render to let BHAI AI modify repositories.");
-  if(!a.doIt) throw new Error("DO IT mode is OFF; enable DO IT before executing GitHub changes.");
+  
   if(!a.path||typeof a.content!=="string") throw new Error("path and content are required");
   if(a.content.length>500000) throw new Error("File is too large for direct agent update.");
   let sha; const c=await fetch(base+"/contents/"+a.path+"?ref="+encodeURIComponent(branch),{headers:h});
@@ -245,10 +245,10 @@ const toolDefinitions=[
  {name:"generate_image",description:"Generate an actual image. Prefer Pixazo Flux Schnell when PIXAZO_API_KEY is configured, then Pollinations, Hugging Face, and Gemini as fallbacks. Pixazo free API requires a user-provided API key. Use this when the user asks to create, draw, generate, make, design, or visualize an image. Do not merely write an image prompt when this tool is available.",parameters:{type:"OBJECT",properties:{prompt:{type:"STRING",description:"Detailed image-generation prompt based on the user's request"},aspectRatio:{type:"STRING",description:"Output aspect ratio, usually 1:1, 16:9, or 9:16"}},required:["prompt"]}},
  {name:"web_search",description:"Search public web for current information. Use only when the task genuinely needs current external information.",parameters:{type:"OBJECT",properties:{query:{type:"STRING",description:"Search query"}},required:["query"]}},
  {name:"github_info",description:"Get GitHub repository information. Use once to verify the repository before repository work.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"}},required:["owner","repo"]}},
- {name:"github_create_repo",description:"Create a real GitHub repository for the user. Only use when DO IT is ON and the user explicitly asks BHAI X to create a repository. Never claim creation unless the GitHub API confirms it.",parameters:{type:"OBJECT",properties:{name:{type:"STRING"},description:{type:"STRING"},private:{type:"BOOLEAN"}},required:["name"]}},
- {name:"github_read",description:"Read a GitHub file or directory. Prefer one root directory read first, then only the minimum key files needed. Never reread a path.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path"]}}, {name:"github_actions",description:"Run and inspect GitHub Actions for builds/tests. Use dispatch only in DO IT mode after code changes or when the user explicitly asks to build/test. Use runs/jobs to verify real results before claiming success.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},branch:{type:"STRING"},operation:{type:"STRING",description:"list, dispatch, runs, or jobs"},workflow:{type:"STRING"},runId:{type:"STRING"},limit:{type:"NUMBER"},inputs:{type:"OBJECT"}},required:["owner","repo","operation"]}}
+ {name:"github_create_repo",description:"Create a real GitHub repository for the user. Only use when the user explicitly asks BHAI X to create a repository. Never claim creation unless the GitHub API confirms it.",parameters:{type:"OBJECT",properties:{name:{type:"STRING"},description:{type:"STRING"},private:{type:"BOOLEAN"}},required:["name"]}},
+ {name:"github_read",description:"Read a GitHub file or directory. Prefer one root directory read first, then only the minimum key files needed. Never reread a path.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path"]}}, {name:"github_actions",description:"Run and inspect GitHub Actions for builds/tests. Use dispatch after code changes or when the user explicitly asks to build/test. Use runs/jobs to verify real results before claiming success.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},branch:{type:"STRING"},operation:{type:"STRING",description:"list, dispatch, runs, or jobs"},workflow:{type:"STRING"},runId:{type:"STRING"},limit:{type:"NUMBER"},inputs:{type:"OBJECT"}},required:["owner","repo","operation"]}}
 ];
-if(process.env.GITHUB_TOKEN) toolDefinitions.push({name:"github_update",description:"Create or replace a GitHub text file. Only use when DO IT is ON and the user clearly requested the change. Prefer one update per changed file after inspection.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},content:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path","content"]}});
+if(process.env.GITHUB_TOKEN) toolDefinitions.push({name:"github_update",description:"Create or replace a GitHub text file. Only use when the user clearly requested the change. Prefer one update per changed file after inspection.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},content:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path","content"]}});
 
 function toGeminiContents(messages){
  return messages.filter(m=>m&&["user","assistant"].includes(m.role)).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:String(m.text||"")}] }));
@@ -289,7 +289,8 @@ export default async function handler(req,res){
  if(req.method!=="POST") return json(res,405,{error:"Method not allowed"});
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
  if(!key) return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
- const {messages=[],doIt=false}=req.body||{},activity=[];
+ const {messages=[]}=req.body||{},activity=[];
+  // Automatic execution: no user-facing DO IT switch is required.
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
  // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
@@ -362,7 +363,7 @@ TROUBLESHOOTING:
 - For "something broke", first identify the exact symptom/error, then give the shortest safe diagnostic path and step-by-step fix. Prefer phone-friendly instructions when the user is on mobile.
 - Never claim a repair, test, diagnosis, commit, deployment, or other real-world action happened unless a tool result confirms it.
 
-Never invent completed work, progress percentages, files, commits, tests, or deployments. If exact progress is not measurable, describe it as a checklist (completed / remaining / next). At the end of a meaningful project task, include a short '📊 Project status' section with: Completed, Remaining, Next recommended step. DO IT mode is ${doIt?"ON":"OFF"}.
+Never invent completed work, progress percentages, files, commits, tests, or deployments. If exact progress is not measurable, describe it as a checklist (completed / remaining / next). At the end of a meaningful project task, include a short '📊 Project status' section with: Completed, Remaining, Next recommended step. Execution mode is AUTOMATIC. The agent selects only the tools required for the current task.
 
 EXECUTION POLICY:
 - First make a compact internal plan: desired outcome, required skills, minimum tools/files. Before execution, perform a pre-flight risk check for API/model availability, credentials, required files, dependencies and target service health whenever relevant. Prevent predictable failures instead of waiting for them.
@@ -371,7 +372,7 @@ EXECUTION POLICY:
 - Do not search the web unless current external information is genuinely required.
 - Do not repeat a failed tool call with the same arguments. If a tool fails, use the error to adjust once; otherwise move forward with gathered information.
 - Prefer implementing once enough context is available. Do not keep reading files just to understand the whole repository.
-- GitHub changes require DO IT mode ON and a clear user request. IMPORTANT: when DO IT is ON and the user explicitly asks you to create an app, repository, file, commit, or push code, you MUST attempt the real GitHub tools instead of telling the user to create a PAT or repository manually. The deployed Render app receives GITHUB_TOKEN from its environment; never ask the user to paste that token into chat. For a new project, call github_create_repo when needed, then github_info, github_read for the repository root, then github_update for the actual files. After writing, read back or use GitHub Actions to verify the result. Only report a credential blocker when the GitHub tool itself returns a credential/configuration error. Never claim a repository, file, commit, build, or deployment exists until a tool result confirms it.- For coding/debugging tasks, inspect the smallest relevant files, identify the root cause, make the complete fix, then use GitHub Actions to build/test when a suitable workflow exists. Never claim code is fixed or built until the repository/tool result confirms it.- When a build/test fails, read the failure result, diagnose it, patch the relevant file, and rerun the workflow. Continue until success or a concrete blocker. For transient API/network/model failures, retry with backoff, use a verified compatible fallback, then resume from the last checkpoint.- For "make an app/APK" tasks, treat source changes, build workflow, build execution, artifact verification, and final delivery as one task when the repository supports them.
+- GitHub changes require a clear user request. IMPORTANT: when the user explicitly asks you to create an app, repository, file, commit, or push code, you MUST attempt the real GitHub tools instead of telling the user to create a PAT or repository manually. The deployed Render app receives GITHUB_TOKEN from its environment; never ask the user to paste that token into chat. For a new project, call github_create_repo when needed, then github_info, github_read for the repository root, then github_update for the actual files. After writing, read back or use GitHub Actions to verify the result. Only report a credential blocker when the GitHub tool itself returns a credential/configuration error. Never claim a repository, file, commit, build, or deployment exists until a tool result confirms it.- For coding/debugging tasks, inspect the smallest relevant files, identify the root cause, make the complete fix, then use GitHub Actions to build/test when a suitable workflow exists. Never claim code is fixed or built until the repository/tool result confirms it.- When a build/test fails, read the failure result, diagnose it, patch the relevant file, and rerun the workflow. Continue until success or a concrete blocker. For transient API/network/model failures, retry with backoff, use a verified compatible fallback, then resume from the last checkpoint.- For "make an app/APK" tasks, treat source changes, build workflow, build execution, artifact verification, and final delivery as one task when the repository supports them.
 - After successful requested changes, stop tools and report changed files and commit result.
 - Never claim an action happened unless a tool result confirms it. Never say DONE when verification is missing. Every final report must state completed work, remaining work, verification performed, and one or more useful next-step recommendations when appropriate.`;
 
@@ -409,11 +410,12 @@ async function getModelsFast(){
   return list;
 }
 const latestText=String(latestUserMessage||"").trim();
-const missionMode=/\b(mission mode|mission|autonomous mode|autonomous|auto mode)\b/i.test(latestText);
+const missionMode=/\b(?:app|project|repo|repository|website|apk)\b/i.test(latestText) && /\b(?:create|make|build|bana|ban[a-z]*|fix|deploy|publish|push|commit|update|repair|test|verify)\b/i.test(latestText);
 const mission=createMissionController();
 const missionStep=(next,details="")=>{ mission.transition(next); activity.push({tool:"mission:"+next,state:"done",details}); };
 const githubLinkRequest=/\bgithub\b/i.test(githubTaskText)&&(/\b(link|url|repo|repository)\b/i.test(githubTaskText));
 const githubFileRequest=/\bgithub\b/i.test(githubTaskText)&&(/\b(file|index\.html|html|code|page|commit|push|update|create)\b/i.test(githubTaskText));
+  const autoDoIt=true;
 let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubFileVerified=false,githubEvidence=null,githubFileEvidence=null;
 const githubTarget=resolveGithubTarget(githubTaskText);
 const githubExplicitRepoMatch=githubTaskText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i)||githubTaskText.match(/\b([A-Za-z0-9][A-Za-z0-9._-]{2,99})\/([A-Za-z0-9][A-Za-z0-9._-]{2,99})(?=\/|\b)/i);
@@ -486,7 +488,7 @@ if(githubRequestedFile&&githubRequestedRepo){
  const repoAt=githubRequestedFile.toLowerCase().indexOf(repoMarker.toLowerCase());
  if(repoAt>=0) githubRequestedFile=githubRequestedFile.slice(repoAt+repoMarker.length);
 }
-if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
+if(githubFileRequest && githubRequestedRepo && githubRequestedFile && autoDoIt){
  if(missionMode){ try{missionStep("plan","Mission request accepted; pre-flight completed by authenticated agent entrypoint."); missionStep("execute","Starting repository diagnosis and execution.");}catch{} }
  try{
   const token=process.env.GITHUB_TOKEN;

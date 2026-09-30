@@ -372,7 +372,7 @@ async function getModelsFast(){
 const latestText=String(latestUserMessage||"").trim();
 const githubLinkRequest=/\bgithub\b/i.test(latestText)&&(/\b(link|url|repo|repository)\b/i.test(latestText));
 const githubRepoCandidates=latestText.match(/\b[A-Za-z0-9][A-Za-z0-9._-]{2,99}\b/g)||[];
-const githubRequestedRepo=githubRepoCandidates.find(x=>x.includes("-")&&/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(x))||"";
+const githubRequestedRepo=githubRepoCandidates.find(x=>x.includes("-")&&/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(x)&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x))||"";
 
 const quickChat=/^(hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya chal raha|kya chal rha|kya kar rahe ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|😂|😄|bye|goodbye)(\\s+bhai)?[!?., ]*$/i.test(latestText);
 const fastMode=/^(bhai\\s+)?(ye|yeh|yah|kuch|sab|mera|meri|mujhe|isko|is|app|code|project|login|payment|error|problem|issue|bug|website|apk|video|image|file|github|render|deploy|api|server|dawa|medicine|tablet|baby|report|phone|mobile|wifi|internet|password|account)\\b.{0,220}$/i.test(latestText)

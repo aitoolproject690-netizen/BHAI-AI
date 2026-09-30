@@ -35,3 +35,30 @@ export function createEvidence(){
  const state={repository:null,branch:null,path:null,commit:null,tests:[],deployment:null,verified:false};
  return {state,set(p={}){Object.assign(state,p);},addTest(name,passed,details=''){state.tests.push({name,passed:!!passed,details});},verify(){state.verified=!!(state.repository&&state.branch&&state.path&&state.commit&&state.tests.length&&state.tests.every(t=>t.passed));return state.verified;},snapshot(){return JSON.parse(JSON.stringify(state));}};
 }
+
+
+export function createRecoveryStateMachine(){
+ const order=["diagnose","patch_and_verify","rollback_if_regression","retry","switch_provider_or_model","resume_checkpoint","done","failed"];
+ let state="diagnose";
+ const history=[state];
+ return {
+  get state(){ return state; },
+  history(){ return [...history]; },
+  transition(next){
+   if(!order.includes(next)) throw new Error("Unknown recovery state: "+next);
+   const allowed={
+    diagnose:["patch_and_verify","switch_provider_or_model","failed"],
+    patch_and_verify:["done","rollback_if_regression","retry","switch_provider_or_model"],
+    rollback_if_regression:["retry","switch_provider_or_model","failed"],
+    retry:["patch_and_verify","switch_provider_or_model","failed"],
+    switch_provider_or_model:["resume_checkpoint","failed"],
+    resume_checkpoint:["patch_and_verify","done","failed"],
+    done:[],
+    failed:[]
+   };
+   if(!allowed[state].includes(next)) throw new Error("Invalid recovery transition: "+state+" -> "+next);
+   state=next; history.push(next); return state;
+  },
+  canClaimDone(evidence){ return state==="done" && !!evidence?.verified; }
+ };
+}

@@ -3,6 +3,7 @@ import { ownerState, ownerReady } from "./owner.js";
 import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
 import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
+import { generateWithRouter } from "./aiRouter.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -412,7 +413,22 @@ if(quickChat){
   "kaisa hai":"Badhiya bhai 😎 BHAI X full ready hai. Batao kya karna hai? 🚀",
   "kya haal":"Mast bhai 😄 Tum batao, kya haal hai? Aaj kya kaam karein? 🚀"
  };
- const reply=playful[k]||casualReplies[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
+ const fallbackReply=playful[k]||casualReplies[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
+ let reply=fallbackReply;
+ try{
+  const routed=await generateWithRouter({
+   task:latestText,
+   system:"You are BHAI X, a friendly fast personal AI assistant. Reply naturally in the user language (Hinglish when they use Hinglish). Keep casual replies short and useful. Do not claim actions you did not perform.",
+   messages:[{role:"user",text:latestText}],
+   preferred:process.env.BHAI_CHAT_PROVIDER||"",
+   role:"chat",
+   fallback:true
+  });
+  if(routed?.text) reply=routed.text;
+  activity.push({tool:"ai-router:"+routed.provider,state:"done",details:"Chat routed through "+routed.provider+" / "+routed.model+"."});
+ }catch(e){
+  activity.push({tool:"ai-router",state:"fallback",details:"Provider routing unavailable; local fast reply used."});
+ }
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
 const recovery=createRecoveryStateMachine();

@@ -33,6 +33,13 @@ const PROVIDERS = {
     env: ["ANTHROPIC_API_KEY"],
     modelEnv: "ANTHROPIC_MODEL",
     defaultModel: "claude-sonnet-5"
+  },
+  huggingface: {
+    id: "huggingface",
+    name: "Hugging Face Inference Providers",
+    env: ["HF_TOKEN"],
+    modelEnv: "HF_CHAT_MODEL",
+    defaultModel: "openai/gpt-oss-120b:fastest"
   }
 };
 
@@ -84,10 +91,10 @@ export function routeAI({ task="", preferred="", role="chat", exclude=[] }={}) {
 
   const lower = String(task).toLowerCase();
   const order = role === "reviewer"
-    ? ["openai", "anthropic", "gemini"]
+    ? ["openai", "anthropic", "huggingface", "gemini"]
     : /code|debug|github|repo|repository|build|test|engineering/.test(lower)
-      ? ["gemini", "openai", "anthropic"]
-      : ["gemini", "openai", "anthropic"];
+      ? ["gemini", "openai", "anthropic", "huggingface"]
+      : ["gemini", "openai", "huggingface", "anthropic"];
 
   return order.find(id => available.includes(id)) || available[0];
 }
@@ -159,6 +166,24 @@ async function callOpenAI({apiKey,model,system,messages}) {
   return {text,provider:"openai",model};
 }
 
+async function callHuggingFace({apiKey,model,system,messages}) {
+  const input = [
+    ...(system ? [{role:"system",content:String(system)}] : []),
+    ...normalizeMessages(messages).map(m=>({role:m.role,content:m.text}))
+  ];
+  const r = await fetch("https://router.huggingface.co/v1/chat/completions",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+    body:JSON.stringify({model,messages:input,stream:false}),
+    signal:timeout(30000)
+  });
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d?.error?.message || "Hugging Face Inference Providers request failed");
+  const text=d?.choices?.[0]?.message?.content;
+  if(typeof text!=="string" || !text.trim()) throw new Error("Hugging Face returned no text.");
+  return {text:text.trim(),provider:"huggingface",model};
+}
+
 async function callAnthropic({apiKey,model,system,messages}) {
   const input = normalizeMessages(messages)
     .filter(m => m.role !== "assistant" || true)
@@ -194,6 +219,7 @@ async function callProvider(id,args) {
   if (id === "gemini") return callGemini({...args,apiKey,model});
   if (id === "openai") return callOpenAI({...args,apiKey,model});
   if (id === "anthropic") return callAnthropic({...args,apiKey,model});
+  if (id === "huggingface") return callHuggingFace({...args,apiKey,model});
   throw new Error("Unsupported AI provider: "+id);
 }
 

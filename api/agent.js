@@ -411,7 +411,7 @@ if(quickChat){
 const githubFileMatch=(latestText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";
 const explicitRepoMatch=latestText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i);
 const explicitIndexHtml=/\bindex\.html\b/i.test(latestText);
-let githubRequestedRepo=explicitRepoMatch?(explicitRepoMatch[1]+"/"+explicitRepoMatch[2]):githubRequestedRepo;
+if(explicitRepoMatch) githubRequestedRepo=explicitRepoMatch[1]+"/"+explicitRepoMatch[2];
 let githubRequestedFile=explicitIndexHtml?"index.html":(githubTarget.path||githubFileMatch);
 if(githubRequestedFile&&githubRequestedRepo){
  const repoMarker=githubRequestedRepo+"/";

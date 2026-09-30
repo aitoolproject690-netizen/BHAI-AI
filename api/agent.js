@@ -423,35 +423,50 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   const me=await fetch("https://api.github.com/user",{headers:h,signal:AbortSignal.timeout(8000)});
   const md=await me.json().catch(()=>({}));
   if(!me.ok||!md.login) throw new Error(md.message||"Unable to verify GitHub account.");
-  const owner=md.login,repo=githubRequestedRepo,path=githubRequestedFile.replace(/^\/+/,"");
+  const owner=githubTarget.owner||md.login;
+  const repo=githubTarget.repo||githubRequestedRepo;
+  const path=String(githubTarget.path||githubRequestedFile||"").replace(/^\/+/,"");
+  if(!owner||!repo||!path) throw new Error("GitHub target is incomplete: owner, repository, and file path are required.");
   const base="https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo);
   const rr=await fetch(base,{headers:h,signal:AbortSignal.timeout(8000)});
   const rd=await rr.json().catch(()=>({}));
-  if(!rr.ok) throw new Error(rd.message||"GitHub repository lookup failed.");
+  if(!rr.ok) throw new Error("GitHub repository lookup failed: HTTP "+rr.status+" — "+(rd.message||"Not Found"));
   const branch=rd.default_branch||"main";
-  let currentSha=null;
-  const existing=await fetch(base+"/contents/"+encodeURIComponent(path)+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
-  if(existing.ok){const ed=await existing.json().catch(()=>({}));currentSha=ed.sha||null;}
-  else if(existing.status!==404){const ed=await existing.json().catch(()=>({}));throw new Error(ed.message||"GitHub file lookup failed.");}
-  let content="";
-  const ext=path.split(".").pop().toLowerCase();
-  if(ext==="html") content="<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>BHAI X Test App</title></head>\n<body><h1>BHAI X GitHub Test</h1><p>File created and verified by BHAI X.</p></body>\n</html>\n";
-  else if(ext==="js") content="console.log(\"BHAI X GitHub test file\");\n";
-  else if(ext==="css") content="body { font-family: sans-serif; }\n";
-  else if(ext==="json") content="{}\n";
-  else content="# BHAI X GitHub Test\n\nFile created and verified by BHAI X.\n";
-  const body={message:"BHAI X: create/update "+path,content:Buffer.from(content,"utf8").toString("base64"),branch};
-  if(currentSha) body.sha=currentSha;
-  const wr=await fetch(base+"/contents/"+encodeURIComponent(path),{method:"PUT",headers:{"Content-Type":"application/json",...h},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});
+  const existing=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
+  const ed=await existing.json().catch(()=>({}));
+  if(!existing.ok) throw new Error("GitHub file lookup failed: HTTP "+existing.status+" — "+(ed.message||"Not Found"));
+  if(Array.isArray(ed)) throw new Error("GitHub target is a directory, not a file: "+path);
+  const original=Buffer.from(ed.content||"","base64").toString("utf8");
+  if(!original) throw new Error("GitHub returned an empty file: "+path);
+  let fixed=original;
+  const fixes=[];
+  if(/\.html?$/i.test(path)){
+   const before=fixed;
+   fixed=fixed.replace(/console\.log\\(([^;\\n]+);/g,"console.log($1);");
+   if(fixed!==before) fixes.push("Fixed malformed console.log call (missing closing parenthesis).");
+  }
+  if(fixed===original) throw new Error("Diagnosis found no deterministic safe fix for "+path+". Existing content was inspected and left unchanged.");
+  const body={message:"BHAI X: diagnose and fix "+path,content:Buffer.from(fixed,"utf8").toString("base64"),branch,sha:ed.sha};
+  const wr=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/"),{method:"PUT",headers:{"Content-Type":"application/json",...h},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});
   const wd=await wr.json().catch(()=>({}));
-  if(!wr.ok) throw new Error(wd.message||"GitHub file write failed.");
+  if(!wr.ok) throw new Error("GitHub file write failed: HTTP "+wr.status+" — "+(wd.message||"Unknown error"));
   const commitSha=wd.commit?.sha||null;
-  const verify=await fetch(base+"/contents/"+encodeURIComponent(path)+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
+  if(!commitSha) throw new Error("GitHub write returned no commit SHA.");
+  const verify=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
   const vd=await verify.json().catch(()=>({}));
-  if(!verify.ok) throw new Error(vd.message||"GitHub file verification read failed.");
+  if(!verify.ok) throw new Error("GitHub read-back verification failed: HTTP "+verify.status+" — "+(vd.message||"Not Found"));
   const verifiedContent=vd.content?Buffer.from(vd.content,"base64").toString("utf8"):"";
-  if(vd.path!==path||verifiedContent!==content) throw new Error("GitHub read-back verification failed: file content does not match.");
-  return json(res,200,{text:"## GitHub file created and verified\n\n**Repository:** "+owner+"/"+repo+"\n\n**File:** "+path+"\n\n**Commit:** "+(commitSha||vd.sha||"verified")+"\n\n**Verification:** GitHub API se file write ke baad same file read-back karke content match confirm kiya gaya.",activity,images:[],usage:await getMediaUsage(db,account.id)});
+  if(vd.path!==path||verifiedContent!==fixed) throw new Error("GitHub read-back verification failed: file content does not match the committed fix.");
+  const result={ok:true,owner,repo,default_branch:branch,path,commit:commitSha,sha:vd.sha,diagnosis:fixes,verified:true};
+  githubExecutionConfirmed=true;
+  githubVerificationConfirmed=true;
+  githubFileVerified=true;
+  githubEvidence=result;
+  githubFileEvidence=result;
+  markEvidence("github_diagnose_patch_readback",result);
+  activity.push({tool:"github:diagnose",state:"done",details:fixes.join(" ")});
+  activity.push({tool:"github:patch_and_verify",state:"done",details:"Commit "+commitSha+" read back and content matched exactly."});
+  return json(res,200,{text:"## ✅ Mission GitHub fix verified\\n\\n**Repository:** "+owner+"/"+repo+"\\n\\n**File:** "+path+"\\n\\n**Diagnosis:** "+fixes.join(" ")+"\\n\\n**Commit:** "+commitSha+"\\n\\n**Verification:** Same file was read back from GitHub after commit and the content matched the patched content exactly.",activity,images:[],usage:await getMediaUsage(db,account.id)});
  }catch(e){
   return json(res,502,{error:"GitHub file execution failed: "+(e?.message||"Unknown GitHub error"),activity});
  }

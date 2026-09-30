@@ -4,7 +4,7 @@ import {generateWithRouter,reviewWithMultiAI} from "./aiRouter.js";
 const json=(res,status,data)=>res.status(status).json(data);
 const ghHeaders=()=>({Authorization:"Bearer "+process.env.GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","Content-Type":"application/json"});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const repoCfg=(task="")=>{const m=String(task).match(/\\b([A-Za-z0-9_.-]+)\\/([A-Za-z0-9_.-]+)\\/([^\\s]+)\\b/);if(m)return[m[1],m[2],m[3]||null];return String(process.env.BHAI_BUILD_REPO||"aitoolproject690-netizen/BHAI-AI").split("/").concat([null]).slice(0,3)};
+const repoCfg=(task="")=>{const m=String(task).match(/\b([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/([^\s]+)\b/);if(m)return[m[1],m[2],m[3]||null];return String(process.env.BHAI_BUILD_REPO||"aitoolproject690-netizen/BHAI-AI").split("/").concat([null]).slice(0,3)};
 async function gh(path,options={}){
  const r=await fetch("https://api.github.com"+path,{...options,headers:{...ghHeaders(),...(options.headers||{})}});
  const data=await r.json().catch(()=>({}));

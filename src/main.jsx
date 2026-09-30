@@ -21,21 +21,24 @@ const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.\n\nMain sirf jawab dene wala chatbot nahi hoon — project ka context yaad rakhkar bataunga ki kya complete hua, kya baaki hai, aur next mein kya add/fix karna useful rahega.'};
 
 function renderInline(text=''){
- const parts=text.split(/(\\*\\*[^*]+\\*\\*|__[^_]+__|\\*[^*]+\\*|_[^_]+_|`[^`]+`)/g);
+ const tokenRe=/(\\[[^\\]]+\\]\\(https?:\\/\\/[^\\s)]+\\)|https?:\\/\\/[^\\s<]+|www\\.[^\\s<]+|\\*\\*[^*]+\\*\\*|__[^_]+__|\\*[^*]+\\*|_[^_]+_|\`[^\`]+\`)/g;
+ const parts=String(text).split(tokenRe);
  return parts.map((part,i)=>{
   if(!part)return null;
-  const clean=part.replace(/[.,!?;:]+$/,'');const trailing=part.slice(clean.length);
-  let node=part;
-  if(part.startsWith('**')&&part.endsWith('**')) node=<strong>{part.slice(2,-2)}</strong>;
-  else if(part.startsWith('__')&&part.endsWith('__')) node=<strong>{part.slice(2,-2)}</strong>;
-  else if(part.startsWith('*')&&part.endsWith('*')) node=<em>{part.slice(1,-1)}</em>;
-  else if(part.startsWith('_')&&part.endsWith('_')) node=<em>{part.slice(1,-1)}</em>;
-  else if(part.startsWith('`')&&part.endsWith('`')) node=<code className="inlineCode">{part.slice(1,-1)}</code>;
-  else if(clean.startsWith('http://')||clean.startsWith('https://')||clean.startsWith('www.')){
+  const md=part.match(/^\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)$/);
+  if(md) return <React.Fragment key={i}><a className="messageLink" href={md[2]} target="_blank" rel="noopener noreferrer">{md[1]}</a></React.Fragment>;
+  const urlMatch=part.match(/^(https?:\\/\\/[^\\s<]+|www\\.[^\\s<]+)$/);
+  if(urlMatch){
+   const raw=urlMatch[1];const clean=raw.replace(/[.,!?;:]+$/,'');const trailing=raw.slice(clean.length);
    const href=clean.startsWith('www.')?'https://'+clean:clean;
-   node=<a className="messageLink" href={href} target="_blank" rel="noopener noreferrer">{clean}</a>;
-   return <React.Fragment key={i}>{node}{trailing}</React.Fragment>;
+   return <React.Fragment key={i}><a className="messageLink" href={href} target="_blank" rel="noopener noreferrer">{clean}</a>{trailing}</React.Fragment>;
   }
+  let node=part;
+  if(part.startsWith('**')&&part.endsWith('**'))node=<strong>{part.slice(2,-2)}</strong>;
+  else if(part.startsWith('__')&&part.endsWith('__'))node=<strong>{part.slice(2,-2)}</strong>;
+  else if(part.startsWith('*')&&part.endsWith('*'))node=<em>{part.slice(1,-1)}</em>;
+  else if(part.startsWith('_')&&part.endsWith('_'))node=<em>{part.slice(1,-1)}</em>;
+  else if(part.startsWith('`')&&part.endsWith('`'))node=<code className="inlineCode">{part.slice(1,-1)}</code>;
   return <React.Fragment key={i}>{node}</React.Fragment>;
  });
 }

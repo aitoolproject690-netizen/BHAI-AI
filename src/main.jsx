@@ -179,14 +179,45 @@ function App(){
   r.onresult=e=>{let s='';for(const x of e.results)s+=x[0].transcript;setInput(v=>(v?v+' ':'')+s)};
   recognition.current=r;r.start();
  }
+ async function runDedicatedTool(kind){
+  if(running||!chat)return;
+  if(!doIt){
+   upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ DO IT OFF hai. Pehle upar **DO IT ON** karo, phir '+(kind==='build'?'Build APK':'Deploy')+' tool chalega.'}]);
+   return;
+  }
+  setToolsOpen(false);setRunning(true);setActivityOpen(true);
+  const replyId=crypto.randomUUID();
+  upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'user',text:kind==='build'?'🔨 Build APK':'🚀 Deploy'},{id:replyId,role:'assistant',text:'⚡ Bhai, '+(kind==='build'?'AI Build Guard + GitHub Actions build':'AI Deploy Guard + Render deploy')+' start kar raha hoon...'}]);
+  setActivity([
+   {id:crypto.randomUUID(),step:'Pre-flight',text:kind==='build'?'🛡️ AI Build Guard check kar raha hai...':'🛡️ AI Deploy Guard check kar raha hai...',state:'running'},
+   {id:crypto.randomUUID(),step:kind==='build'?'Build':'Deploy',text:kind==='build'?'🔨 GitHub Actions build dispatch hoga...':'🚀 Render deployment dispatch hoga...',state:'pending'},
+   {id:crypto.randomUUID(),step:'Verify',text:'✅ Actual result verify kiya jayega...',state:'pending'}
+  ]);
+  try{
+   const path=kind==='build'?'/api/build':'/api/deploy';
+   const body=kind==='build'
+    ?{platform:'android',projectName:'BHAI-X',doIt:true}
+    :{doIt:true,reason:'BHAI X dedicated Deploy tool'};
+   const rr=await fetch(apiUrl(path),{method:'POST',headers:authHeaders(),body:JSON.stringify(body)});
+   const d=await rr.json().catch(()=>({}));
+   const ok=rr.ok&&d.ok===true&&(kind==='build'?d.status==='dispatched'||d.status==='complete':d.status==='complete');
+   setActivity(a=>a.map((x,i)=>({...x,state:i<2?'done':ok?'done':'failed'})));
+   upd(msgs=>msgs.map(x=>x.id===replyId?{...x,text:ok
+    ?(kind==='build'?'✅ Build tool dispatched successfully. GitHub Actions is now building; artifact verification abhi pending hai.':'✅ Deploy tool verified LIVE + /api/health passed.')
+    :'⚠️ '+(d.error||d.verification||('Tool failed with HTTP '+rr.status))}:x));
+  }catch(e){
+   setActivity(a=>a.map(x=>({...x,state:'failed'})));
+   upd(msgs=>msgs.map(x=>x.id===replyId?{...x,text:'⚠️ '+e.message}:x));
+  }finally{setRunning(false)}
+ }
  function useTool(label){
   if(label==='connect'){setConnectOpen(true);setToolsOpen(false);return}
   if(label==='codefix'){setCodeFixOpen(true);setToolsOpen(false);return}
   if(label==='generator'){setGeneratorOpen(true);setToolsOpen(false);return}
   if(label==='mission'){setMissionMode(true);setToolsOpen(false);return}
   if(label==='system'){setSystemOpen(true);setToolsOpen(false);return}
-  if(label==='build'||label==='deploy'){setInput(v=>(v?v+'\n':'')+prompts[label]);setToolsOpen(false);return}
-  const prompts={generator:'AI code generator kholo: ',web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: ',build:'Build APK karo: ',deploy:'Deploy karo: '};
+  if(label==='build'||label==='deploy'){runDedicatedTool(label);return}
+  const prompts={generator:'AI code generator kholo: ',web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: '};
   const prompt=prompts[label]; if(!prompt)return;
   setInput(v=>(v?v+'\n':'')+prompt);setToolsOpen(false);
  }

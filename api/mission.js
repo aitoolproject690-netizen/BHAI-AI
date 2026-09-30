@@ -4,7 +4,7 @@ import {generateWithRouter,reviewWithMultiAI} from "./aiRouter.js";
 const json=(res,status,data)=>res.status(status).json(data);
 const ghHeaders=()=>({Authorization:"Bearer "+process.env.GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","Content-Type":"application/json"});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const repoCfg=()=>String(process.env.BHAI_BUILD_REPO||"aitoolproject690-netizen/BHAI-AI").split("/");
+const repoCfg=(task="")=>{const m=String(task).match(/\\b([A-Za-z0-9_.-]+)\\/([A-Za-z0-9_.-]+)\\/([^\\s]+)\\b/);if(m)return[m[1],m[2],m[3]||null];return String(process.env.BHAI_BUILD_REPO||"aitoolproject690-netizen/BHAI-AI").split("/").concat([null]).slice(0,3)};
 async function gh(path,options={}){
  const r=await fetch("https://api.github.com"+path,{...options,headers:{...ghHeaders(),...(options.headers||{})}});
  const data=await r.json().catch(()=>({}));
@@ -35,14 +35,14 @@ export default async function handler(req,res){
  if(!String(task).trim())return json(res,400,{error:"task is required"});
  if(!doIt)return json(res,403,{ok:false,error:"DO IT mode is OFF"});
  if(!process.env.GITHUB_TOKEN)return json(res,503,{ok:false,error:"GITHUB_TOKEN is required"});
- const [owner,repo]=repoCfg(); const workflow=process.env.APK_BUILD_WORKFLOW||"build-apk.yml"; const history=[];
+ const [owner,repo,explicitPath]=repoCfg(task); const workflow=process.env.APK_BUILD_WORKFLOW||"build-apk.yml"; const history=[];
  const getPath=path=>gh("/repos/"+owner+"/"+repo+"/contents/"+encodeURIComponent(path).replace(/%2F/g,"/")+"?ref="+encodeURIComponent(branch));
  try{
   const plan=await aiJson("Plan this engineering task: "+String(task).slice(0,8000),
    "Return ONLY JSON {risk,plan,files}. files must contain only likely source files that need editing. Never include .github workflow files. Keep the file list small.", "code");
   history.push({stage:"plan",plan});
   if(plan.risk==="high")return json(res,422,{ok:false,status:"blocked",history,reason:"AI planner marked high risk"});
-  const paths=Array.isArray(plan.files)?plan.files.filter(p=>typeof p==="string"&&!p.startsWith(".github/")&&!p.includes("..")&&!p.startsWith("/")).slice(0,6):[];
+  const plannedPaths=Array.isArray(plan.files)?plan.files.filter(p=>typeof p==="string"&&!p.startsWith(".github/")&&!p.includes("..")&&!p.startsWith("/")).slice(0,6):[]; const paths=explicitPath&&!explicitPath.startsWith(".github/")&&!explicitPath.includes("..")&&!explicitPath.startsWith("/")?[explicitPath]:plannedPaths;
   const sources=[];
   for(const path of paths){try{const f=await getPath(path);if(f?.content){sources.push({path,content:Buffer.from(f.content,"base64").toString("utf8")});}}catch{}}
   let coding=null;

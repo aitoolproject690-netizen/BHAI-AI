@@ -18,7 +18,7 @@ async function get(id,account){
  const job=memory.get(id);return job&&job.owner===ownerKey(account)?job:undefined;
 }
 export default async function handler(req,res){
- if(!await requireSession(req,res))return;
+ const account=await requireSession(req,res); if(!account)return;
  await boot();
  const owner=ownerKey(account);
  if(req.method==="POST"){

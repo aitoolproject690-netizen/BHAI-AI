@@ -510,6 +510,7 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
    activity.push({tool:"recovery:diagnose",state:"done",details:msg});
    try{ recoveryStep("switch_provider_or_model","Deterministic fixer found no safe patch; routing to alternate recovery path."); }catch{}
    activity.push({tool:"recovery:checkpoint",state:"done",details:"Repository/file inspection preserved; no file mutation was made."});
+   try{ recoveryStep("resume_checkpoint","Resuming execution from the preserved repository/file checkpoint."); }catch{}
   }else{
    return json(res,502,{error:"GitHub file execution failed: "+msg,activity});
   }
@@ -652,7 +653,8 @@ const models=quickChatMode
      for(const item of result.items||[]) knownPaths.add(item.path);
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
-    if((name==="github_create_repo"||name==="github_update") && recovery.state==="patch_and_verify") recoveryStep("done","GitHub operation completed");
+    if((name==="github_create_repo"||name==="github_update") && recovery.state==="resume_checkpoint") recoveryStep("patch_and_verify","Alternate execution path produced a GitHub change; verification will follow.");
+    if((name==="github_create_repo"||name==="github_update") && recovery.state==="patch_and_verify") recoveryStep("done","GitHub operation completed and recovery patch was handed to verification.");
     if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
     if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result; markEvidence(name,result); if(name==="github_read" && result?.type==="file"){const p=String(result.path||"").replace(/^\/+/, ""); if(!githubRequestedPath || p.toLowerCase()===githubRequestedPath.toLowerCase()) githubFileVerified=true;}}
     responseParts.push({functionResponse:{name,response:{result}}});

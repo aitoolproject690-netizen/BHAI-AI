@@ -290,6 +290,36 @@ export default async function handler(req,res){
  if(!key) return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
  const {messages=[],doIt=false}=req.body||{},activity=[];
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
+ // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
+ // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
+ const normalizedCasual=String(latestUserMessage).toLowerCase().replace(/[!?.,]+/g," ").replace(/\s+/g," ").replace(/\s+bhai$/i,"").trim();
+ const serverCasual=/^(?:hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya chal raha(?: hai)?|kya chal rha(?: hai)?|kya kar rahe ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|bye|goodbye|khana kha liya(?: hai)?|khana khaya(?: hai)?|kha liya|chai pi liya|so gaye|so rahe ho|kahan ho|busy ho|free ho)$/i.test(normalizedCasual);
+ if(serverCasual){
+  const casualReplies={
+   "kya chal raha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
+   "kya chal raha hai":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
+   "kya chal rha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
+   "kya chal rha hai":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
+   "khana kha liya":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄",
+   "khana kha liya hai":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄",
+   "khana khaya":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄",
+   "khana khaya hai":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄",
+   "kha liya":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄",
+   "kya scene hai":"Sab mast bhai 😄 BHAI X ready hai. Batao aaj kya kaam pakadna hai? 🚀",
+   "kya hua":"Kuch nahi bhai 😄 Main ekdum ready hoon. Batao kya hua?",
+   "kaise ho":"Ekdum badhiya bhai 😎 Tum batao?",
+   "kaisa hai":"Badhiya bhai 😎 Main full ready hoon!",
+   "kya haal":"Mast bhai 😄 Tum batao kya haal?",
+   "hi":"Arre bhai! 😄 Main yahin hoon. Batao kya scene hai? 🚀",
+   "hello":"Hello bhai! 😎 BHAI X ready hai. Batao kya karna hai? 🚀",
+   "hey":"Hey bhai! 😄 Kya chal raha hai? 🚀",
+   "thanks":"Arey bhai, anytime! 😎❤️",
+   "thank you":"Arey bhai, anytime! 😎❤️",
+   "bye":"Bye bhai! 👋😄",
+   "goodbye":"Bye bhai! 👋😄"
+  };
+  return json(res,200,{ok:true,text:casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
+ }
  const userTaskMessages=messages.filter(m=>m&&m.role==="user").map(m=>String(m.text||"")).filter(Boolean);
  const explicitRepoSource=[...userTaskMessages].reverse().find(t=>/(?:GitHub\s+repository|repository)\s*:\s*[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}/i.test(t))||"";
  const githubTaskText=explicitRepoSource?explicitRepoSource+"\n"+latestUserMessage:latestUserMessage;

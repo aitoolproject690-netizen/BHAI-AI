@@ -31,53 +31,88 @@ async function patchFiles(owner,repo,branch,patches){
 export default async function handler(req,res){
  if(req.method!=="POST")return json(res,405,{error:"Method not allowed"});
  if(!await requireSession(req,res))return;
- const {task="",projectName="BHAI-App",platform="android",branch=process.env.BHAI_BUILD_BRANCH||"main",doIt=false,maxFixes=2}=req.body||{};
+ const {task="",projectName="BHAI-App",platform="android",branch=process.env.BHAI_BUILD_BRANCH||"main",doIt=false,maxFixes=2,autoDeploy=true}=req.body||{};
  if(!String(task).trim())return json(res,400,{error:"task is required"});
  if(!doIt)return json(res,403,{ok:false,error:"DO IT mode is OFF"});
  if(!process.env.GITHUB_TOKEN)return json(res,503,{ok:false,error:"GITHUB_TOKEN is required"});
- const [owner,repo]=repoCfg(); const workflow=process.env.APK_BUILD_WORKFLOW||"build-apk.yml";
- const history=[];
+ const [owner,repo]=repoCfg(); const workflow=process.env.APK_BUILD_WORKFLOW||"build-apk.yml"; const history=[];
+ const getPath=path=>gh("/repos/"+owner+"/"+repo+"/contents/"+encodeURIComponent(path).replace(/%2F/g,"/")+"?ref="+encodeURIComponent(branch));
  try{
-  const plan=await aiJson("Plan this engineering task and identify the smallest safe code changes: "+String(task).slice(0,8000),
-   "Return ONLY JSON {risk,plan,files}. risk=low|medium|high. files is an array of likely source paths. Do not invent evidence.", "code");
+  const plan=await aiJson("Plan this engineering task: "+String(task).slice(0,8000),
+   "Return ONLY JSON {risk,plan,files}. files must contain only likely source files that need editing. Never include .github workflow files. Keep the file list small.", "code");
   history.push({stage:"plan",plan});
   if(plan.risk==="high")return json(res,422,{ok:false,status:"blocked",history,reason:"AI planner marked high risk"});
+  const paths=Array.isArray(plan.files)?plan.files.filter(p=>typeof p==="string"&&!p.startsWith(".github/")&&!p.includes("..")&&!p.startsWith("/")).slice(0,6):[];
+  const sources=[];
+  for(const path of paths){try{const f=await getPath(path);if(f?.content){sources.push({path,content:Buffer.from(f.content,"base64").toString("utf8")});}}catch{}}
+  let coding=null;
+  if(sources.length){
+   coding=await aiJson("Implement this task using the supplied repository files. TASK:\n"+String(task).slice(0,7000)+"\nFILES:\n"+JSON.stringify(sources).slice(0,60000),
+    "Return ONLY JSON {diagnosis,confidence,patches}. patches must contain complete replacement files, only for supplied paths. Make the smallest safe change. Never modify workflow files or secrets. If evidence is insufficient return patches: [].", "code");
+   history.push({stage:"coding",coding});
+   if(Array.isArray(coding.patches)&&coding.patches.length){
+    try{
+     const review=await reviewWithMultiAI({task:String(task).slice(0,7000),draft:JSON.stringify(coding),exclude:[coding.provider]});
+     history.push({stage:"independent-review",provider:review.provider,model:review.model,draft:String(review.text).slice(0,5000)});
+    }catch(e){history.push({stage:"independent-review",status:"skipped",reason:String(e.message||e).slice(0,300)});}
+    const applied=await patchFiles(owner,repo,branch,coding.patches);
+    history.push({stage:"coding-patch-applied",applied});
+    if(!applied.length)return json(res,502,{ok:false,status:"no-patch",history,verification:"AI coding produced no applicable repository patch."});
+   }else history.push({stage:"coding-patch-applied",applied:[]});
+  }else history.push({stage:"coding",status:"no_source_files_identified"});
   const dispatch=await gh("/repos/"+owner+"/"+repo+"/actions/workflows/"+encodeURIComponent(workflow)+"/dispatches",{
-   method:"POST",body:JSON.stringify({ref:branch,inputs:{platform:String(platform),projectName:String(projectName),sourceUrl:""}})
+   method:"POST",body:JSON.stringify({ref:branch,inputs:{platform:String(platform),projectName:String(projectName),sourceUrl:"",official_release:"false"}})
   });
   history.push({stage:"build-dispatch",ok:true});
   let run=null;
-  for(let i=0;i<12;i++){
+  for(let i=0;i<18;i++){
    await sleep(5000);
-   const runs=await gh("/repos/"+owner+"/"+repo+"/actions/workflows/"+encodeURIComponent(workflow)+"/runs?branch="+encodeURIComponent(branch)+"&per_page=5");
-   run=(runs.workflow_runs||[]).find(x=>x.status!=="queued"||x.created_at);
-   if(run&&(run.status==="completed"||run.conclusion==="failure"||run.conclusion==="success"))break;
+   const runs=await gh("/repos/"+owner+"/"+repo+"/actions/workflows/"+encodeURIComponent(workflow)+"/runs?branch="+encodeURIComponent(branch)+"&per_page=10");
+   const candidates=(runs.workflow_runs||[]).filter(x=>new Date(x.created_at).getTime()>Date.now()-180000);
+   run=candidates[0];
+   if(run?.status==="completed")break;
   }
-  if(!run)return json(res,202,{ok:true,status:"building",history,verification:"Workflow dispatched; no completed run observed yet."});
+  if(!run||run.status!=="completed")return json(res,202,{ok:true,status:"building",history,verification:"Workflow dispatched; completion not yet observed."});
   history.push({stage:"build-result",runId:run.id,status:run.status,conclusion:run.conclusion});
-  if(run.conclusion==="success")return json(res,200,{ok:true,status:"verified",history,verification:"GitHub Actions build completed successfully."});
-  for(let attempt=1;attempt<=Math.min(2,Number(maxFixes)||2);attempt++){
-   const jobs=await gh("/repos/"+owner+"/"+repo+"/actions/runs/"+run.id+"/jobs?per_page=20");
-   const failed=(jobs.jobs||[]).filter(j=>j.conclusion==="failure");
-   const evidence=failed.map(j=>({name:j.name,conclusion:j.conclusion,steps:j.steps})).slice(0,8);
-   const fix=await aiJson("Fix this failed build. TASK: "+String(task).slice(0,5000)+"\nFAILURE EVIDENCE:\n"+JSON.stringify(evidence).slice(0,18000),
-    "Return ONLY JSON {diagnosis,confidence,patches,retest}. patches are complete replacement source files only. Use only paths you can justify from evidence; if insufficient, patches=[]. Never patch workflow files. Do not claim success.", "code");
-   history.push({stage:"ai-fix",attempt,fix});
-   if(!Array.isArray(fix.patches)||!fix.patches.length)break;
-   const applied=await patchFiles(owner,repo,branch,fix.patches);
-   history.push({stage:"patch-applied",attempt,applied});
-   if(!applied.length)break;
-   await sleep(4000);
-   const runs2=await gh("/repos/"+owner+"/"+repo+"/actions/workflows/"+encodeURIComponent(workflow)+"/runs?branch="+encodeURIComponent(branch)+"&per_page=5");
-   run=(runs2.workflow_runs||[])[0];
-   for(let i=0;i<12;i++){
-    await sleep(5000);
-    const rr=await gh("/repos/"+owner+"/"+repo+"/actions/runs/"+run.id);
-    if(rr.status==="completed"){run=rr;break;}
+  if(run.conclusion!=="success"){
+   for(let attempt=1;attempt<=Math.min(2,Number(maxFixes)||2);attempt++){
+    const jobs=await gh("/repos/"+owner+"/"+repo+"/actions/runs/"+run.id+"/jobs?per_page=30");
+    const failed=(jobs.jobs||[]).filter(j=>j.conclusion==="failure");
+    const evidence=failed.map(j=>({name:j.name,steps:j.steps})).slice(0,8);
+    const fix=await aiJson("Fix failed build for TASK: "+String(task).slice(0,5000)+"\nFAILURE:\n"+JSON.stringify(evidence).slice(0,20000),
+     "Return ONLY JSON {diagnosis,confidence,patches,retest}. patches are complete replacement source files only. Never patch .github workflow files. If evidence is insufficient, patches=[].", "code");
+    history.push({stage:"error-fixer",attempt,fix});
+    if(!Array.isArray(fix.patches)||!fix.patches.length)break;
+    const review=await reviewWithMultiAI({task:"Review this build error fix: "+String(task).slice(0,4000),draft:JSON.stringify(fix),exclude:[fix.provider]});
+    history.push({stage:"error-review",attempt,provider:review.provider,model:review.model});
+    const applied=await patchFiles(owner,repo,branch,fix.patches); history.push({stage:"error-patch-applied",attempt,applied});
+    if(!applied.length)break;
+    await sleep(3000);
+    await gh("/repos/"+owner+"/"+repo+"/actions/workflows/"+encodeURIComponent(workflow)+"/dispatches",{method:"POST",body:JSON.stringify({ref:branch,inputs:{platform:String(platform),projectName:String(projectName),sourceUrl:"",official_release:"false"}})});
+    for(let i=0;i<18;i++){await sleep(5000);const rs=await gh("/repos/"+owner+"/"+repo+"/actions/workflows/"+encodeURIComponent(workflow)+"/runs?branch="+encodeURIComponent(branch)+"&per_page=10");const candidates=(rs.workflow_runs||[]).filter(x=>new Date(x.created_at).getTime()>Date.now()-180000);run=candidates[0];if(run?.status==="completed")break;}
+    history.push({stage:"rebuild-result",attempt,runId:run?.id,status:run?.status,conclusion:run?.conclusion});
+    if(run?.conclusion==="success")break;
    }
-   history.push({stage:"rebuild-result",attempt,runId:run.id,status:run.status,conclusion:run.conclusion});
-   if(run.conclusion==="success")return json(res,200,{ok:true,status:"verified-after-fix",history,verification:"Build passed after AI patch and rebuild."});
   }
-  return json(res,502,{ok:false,status:"needs-evidence",history,verification:"Automatic fixes were attempted only when AI produced justified complete-file patches; build is not marked DONE."});
+  if(!run||run.conclusion!=="success")return json(res,502,{ok:false,status:"build-failed",history,verification:"Build did not pass; DONE is blocked."});
+  let artifact=null;
+  try{const arts=await gh("/repos/"+owner+"/"+repo+"/actions/runs/"+run.id+"/artifacts");artifact=(arts.artifacts||[]).find(a=>a.name==="BHAI-X-debug-apk"&&a.expired===false)||null;}catch{}
+  history.push({stage:"artifact-verification",ok:!!artifact,artifact:artifact?{name:artifact.name,size:artifact.size_in_bytes,expired:artifact.expired}:null});
+  if(!artifact)return json(res,502,{ok:false,status:"artifact-missing",history,verification:"Build passed but APK artifact was not verified."});
+  if(autoDeploy){
+   const key=process.env.RENDER_API_KEY; const service=process.env.RENDER_SERVICE_ID;
+   if(key&&service){
+    const dr=await fetch("https://api.render.com/v1/services/"+encodeURIComponent(service)+"/deploys",{method:"POST",headers:{Authorization:"Bearer "+key,"Content-Type":"application/json"},body:JSON.stringify({clearCache:false})});
+    const dd=await dr.json().catch(()=>({}));
+    if(!dr.ok)throw new Error(dd?.message||"Render deploy dispatch failed");
+    history.push({stage:"deploy-dispatch",deployId:dd.id,status:dd.status});
+    for(let i=0;i<24;i++){await sleep(5000);const rr=await fetch("https://api.render.com/v1/services/"+encodeURIComponent(service)+"/deploys/"+encodeURIComponent(dd.id),{headers:{Authorization:"Bearer "+key}});const rd=await rr.json().catch(()=>({}));history[history.length-1].lastStatus=rd.status;if(rd.status==="live"||rd.status==="build_failed"||rd.status==="deactivated"){if(rd.status!=="live")return json(res,502,{ok:false,status:"deploy-failed",history,verification:"Render deployment did not reach live."});break;}}
+    const base=process.env.BHAI_PUBLIC_URL||"https://bhai-ai-vpna.onrender.com";
+    try{const hr=await fetch(base+"/api/health",{signal:AbortSignal.timeout(10000)});history.push({stage:"health-check",ok:hr.ok,status:hr.status});if(!hr.ok)return json(res,502,{ok:false,status:"health-failed",history,verification:"Deploy reached live but health check failed."});}catch(e){return json(res,502,{ok:false,status:"health-failed",history,error:String(e.message||e).slice(0,300),verification:"Live deployment could not be health-verified."});}
+    return json(res,200,{ok:true,status:"complete",history,verification:"Coding, independent review, build, APK artifact, deploy and health check all verified."});
+   }
+   history.push({stage:"deploy",status:"not_configured",reason:"RENDER_API_KEY or RENDER_SERVICE_ID missing"});
+  }
+  return json(res,200,{ok:true,status:"build-verified",history,verification:"Coding, build and APK artifact verified. Deployment was not dispatched."});
  }catch(e){return json(res,502,{ok:false,status:"error",history,error:String(e.message||e).slice(0,1500)});}
 }

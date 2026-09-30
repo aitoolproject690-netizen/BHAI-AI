@@ -174,6 +174,28 @@ async function github(action,a){
  const token=process.env.GITHUB_TOKEN;
  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
  if(token) h.Authorization="Bearer "+token;
+ if(action==="github_create_repo"){
+  if(!token) throw new Error("GitHub write access is not configured. Add GITHUB_TOKEN in Render Environment.");
+  if(!a.name) throw new Error("Repository name is required.");
+  if(!a.doIt) throw new Error("DO IT mode is OFF; enable DO IT before creating a repository.");
+  const cleanName=String(a.name).trim();
+  let owner=a.owner||"";
+  if(!owner){
+   const me=await fetch("https://api.github.com/user",{headers:h});
+   const md=await me.json().catch(()=>({}));
+   if(!me.ok) throw new Error(md.message||"Unable to determine GitHub account.");
+   owner=md.login;
+  }
+  const create=await fetch("https://api.github.com/user/repos",{method:"POST",headers:{"Content-Type":"application/json",...h},body:JSON.stringify({name:cleanName,description:String(a.description||"Created by BHAI X"),private:!!a.private,auto_init:true})});
+  const d=await create.json().catch(()=>({}));
+  if(create.ok) return{ok:true,created:true,full_name:d.full_name,owner:d.owner?.login||owner,repo:d.name,default_branch:d.default_branch,url:d.html_url,clone_url:d.clone_url};
+  if(create.status===422){
+   const existing=await fetch("https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(cleanName),{headers:h});
+   const ed=await existing.json().catch(()=>({}));
+   if(existing.ok) return{ok:true,created:false,existing:true,full_name:ed.full_name,owner:ed.owner?.login||owner,repo:ed.name,default_branch:ed.default_branch,url:ed.html_url,clone_url:ed.clone_url};
+  }
+  throw new Error(d.message||"GitHub repository creation failed");
+ }
  if(!a.owner||!a.repo) throw new Error("GitHub owner and repo are required.");
  const base="https://api.github.com/repos/"+encodeURIComponent(a.owner)+"/"+encodeURIComponent(a.repo),branch=a.branch||"main";
  if(action==="github_info"){

@@ -567,11 +567,19 @@ const models=quickChatMode
   for(const call of allowedCalls){
    if(totalToolCalls>=maxToolCalls) break;
    const name=call.name,a={...(call.args||{}),doIt};
-   // Deterministic GitHub target override: explicit user target wins over model guesses.
-   if(/^github_/.test(name) && (githubTarget.owner||githubTarget.repo||githubTarget.path)){
-    if(githubTarget.owner) a.owner=githubTarget.owner;
-    if(githubTarget.repo) a.repo=githubTarget.repo;
-    if(/^(github_read|github_update|github_create_file|github_delete_file)$/.test(name) && githubRequestedFile) a.path=githubRequestedFile;
+   // Deterministic GitHub target override: the user's explicit "GitHub repository:" and "index.html" always beat AI/parser guesses.
+   const explicitToolRepo=latestText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i);
+   const explicitToolIndexHtml=/\bindex\.html\b/i.test(latestText);
+   if(/^github_/.test(name) && (explicitToolRepo||githubTarget.owner||githubTarget.repo||githubTarget.path)){
+    if(explicitToolRepo){ a.owner=explicitToolRepo[1]; a.repo=explicitToolRepo[2]; }
+    else {
+     if(githubTarget.owner) a.owner=githubTarget.owner;
+     if(githubTarget.repo) a.repo=githubTarget.repo;
+    }
+    if(/^(github_read|github_update|github_create_file|github_delete_file)$/.test(name)){
+     if(explicitToolIndexHtml) a.path="index.html";
+     else if(githubRequestedFile) a.path=githubRequestedFile;
+    }
    }
    const cacheKey=name+":"+JSON.stringify(a);
    activity.push({tool:name,state:"running"}); totalToolCalls++;

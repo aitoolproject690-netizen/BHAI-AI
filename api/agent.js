@@ -2,6 +2,7 @@ import { selectSkillsForTask, getSkillPromptContext } from "../src/skillsRouter.
 import { ownerState, ownerReady } from "./owner.js";
 import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
+import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence } from "./engineeringCore.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -372,9 +373,10 @@ async function getModelsFast(){
 const latestText=String(latestUserMessage||"").trim();
 const githubLinkRequest=/\bgithub\b/i.test(latestText)&&(/\b(link|url|repo|repository)\b/i.test(latestText));
 const githubFileRequest=/\bgithub\b/i.test(latestText)&&(/\b(file|index\.html|html|code|page|commit|push|update|create)\b/i.test(latestText));
+const githubTarget=resolveGithubTarget(latestText);
 const githubExplicitRepoMatch=latestText.match(/\b([A-Za-z0-9][A-Za-z0-9._-]{2,99})\/([A-Za-z0-9][A-Za-z0-9._-]{2,99})(?=\/|\b)/i);
 const githubRepoCandidates=latestText.match(/\b[A-Za-z0-9][A-Za-z0-9._-]{2,99}\b/g)||[];
-const githubRequestedRepo=githubExplicitRepoMatch?.[2]||githubRepoCandidates.find(x=>x.includes("-")&&/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(x)&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x))||"";
+const githubRequestedRepo=githubTarget.repo||githubExplicitRepoMatch?.[2]||githubRepoCandidates.find(x=>x.includes("-")&&/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(x)&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x))||"";
 
 const quickChat=/^(hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya chal raha|kya chal rha|kya kar rahe ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|😂|😄|bye|goodbye)(\\s+bhai)?[!?., ]*$/i.test(latestText);
 const fastMode=/^(bhai\\s+)?(ye|yeh|yah|kuch|sab|mera|meri|mujhe|isko|is|app|code|project|login|payment|error|problem|issue|bug|website|apk|video|image|file|github|render|deploy|api|server|dawa|medicine|tablet|baby|report|phone|mobile|wifi|internet|password|account)\\b.{0,220}$/i.test(latestText)
@@ -407,7 +409,7 @@ if(quickChat){
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
 const githubFileMatch=(latestText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";
-let githubRequestedFile=githubFileMatch;
+let githubRequestedFile=githubTarget.path||githubFileMatch;
 if(githubRequestedFile&&githubRequestedRepo){
  const repoMarker=githubRequestedRepo+"/";
  const repoAt=githubRequestedFile.toLowerCase().indexOf(repoMarker.toLowerCase());
@@ -483,6 +485,8 @@ const models=quickChatMode
  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
+ const retryGuard=createRetryGuard();
+ const evidence=createEvidence();
  const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|file|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
  
  const githubRequestedPath=(latestText.match(/(?:`|\b)(index\.html|[A-Za-z0-9._/-]+\.(?:html|css|js|jsx|ts|tsx|json|md))(?=`|\b)/i)||[])[1]||"";
@@ -574,18 +578,19 @@ const models=quickChatMode
      for(const item of result.items||[]) knownPaths.add(item.path);
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
-    if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result; if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
+    if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result; if(result?.commit) evidence.set({commit:result.commit}); if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
     if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result; if(name==="github_read" && result?.type==="file"){const p=String(result.path||"").replace(/^\/+/, ""); if(!githubRequestedPath || p.toLowerCase()===githubRequestedPath.toLowerCase()) githubFileVerified=true;}}
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
     const msg=String(e?.message||e);
+    const errorClass=classifyEngineeringError(e);
     const isGitHubReadMiss=name==="github_read" && /not found|path.*not|does not exist/i.test(msg);
     if(isGitHubReadMiss){
      activity[activity.length-1].state="skipped";
      responseParts.push({functionResponse:{name,response:{result:{skipped:true,reason:msg}}}});
      continue;
     }
-    failedCalls.add(cacheKey);consecutiveFailures++;activity[activity.length-1].state="failed";
+    failedCalls.add(cacheKey); retryGuard.canTry(name,a); consecutiveFailures++; activity[activity.length-1].state="failed";
     responseParts.push({functionResponse:{name,response:{error:msg}}});
    }
   }

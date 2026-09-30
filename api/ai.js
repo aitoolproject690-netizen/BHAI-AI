@@ -15,8 +15,8 @@ export default async function handler(req,res){
     providers,
     configured:getConfiguredAIProviders(),
     routing:{
-      primary:"gemini -> openai -> anthropic",
-      reviewer:"openai -> anthropic -> gemini",
+      primary:"gemini -> openai -> huggingface -> anthropic",
+      reviewer:"openai -> anthropic -> huggingface -> gemini",
       fallback:true,
       note:"Routing uses server-side credentials. API keys are never returned to the client."
     }

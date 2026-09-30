@@ -442,7 +442,7 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   const fixes=[];
   if(/\.html?$/i.test(path)){
    const before=fixed;
-   fixed=fixed.replace(/console\.log\\(([^;\\n]+);/g,"console.log($1);");
+   fixed=fixed.replace(/console\.log\(([^;\n]+);/g,"console.log($1);");
    if(fixed!==before) fixes.push("Fixed malformed console.log call (missing closing parenthesis).");
   }
   if(fixed===original) throw new Error("Diagnosis found no deterministic safe fix for "+path+". Existing content was inspected and left unchanged.");

@@ -236,7 +236,7 @@ async function callProvider(id,args) {
 
 function isFallbackError(error) {
   const s=String(error?.message||error);
-  return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporarily unavailable|overloaded|capacity/i.test(s);
+  return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporarily unavailable|currently experiencing high demand|high demand|service unavailable|overloaded|capacity|too many requests|try again later/i.test(s);
 }
 
 /**

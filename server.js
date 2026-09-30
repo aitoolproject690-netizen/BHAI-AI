@@ -18,6 +18,7 @@ import control from "./api/control.js";
 import backups from "./api/backups.js";
 import codefix from "./api/codefix.js";
 import capabilities from "./api/capabilities.js";
+import ai from "./api/ai.js";
 import generate from "./api/generate.js";
 import analyze from "./api/analyze.js";
 import suggestions from "./api/suggestions.js";
@@ -34,7 +35,7 @@ import billing from "./api/billing.js";
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT)||10000;
 const allowedOrigin="*";
-const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/worker":worker,"/api/preflight":preflight,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests,"/api/dna":dna,"/api/vault":vault,"/api/accounts":accounts,"/api/resellers":resellers,"/api/billing":billing};
+const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/worker":worker,"/api/preflight":preflight,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/ai":ai,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests,"/api/dna":dna,"/api/vault":vault,"/api/accounts":accounts,"/api/resellers":resellers,"/api/billing":billing};
 function runApi(fn,req,res){
   let body="";
   req.on("data",c=>{body+=c;if(body.length>2000000){res.statusCode=413;req.destroy();}});
@@ -60,7 +61,7 @@ http.createServer((req,res)=>{
   let p=decodeURIComponent(u.pathname);if(p==="/")p="/index.html";
   const root=path.join(__dirname,"dist"),file=path.join(root,p.replace(/^\//,""));
   if(!file.startsWith(root+path.sep)&&file!==root){res.statusCode=403;return res.end("Forbidden");}
-  const types={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".mjs":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".json":"application/json; charset=utf-8",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".ico":"image/x-icon"};
+  const types={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".mjs":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".ico":"image/x-icon"};
   fs.readFile(file,(e,data)=>{
     if(e){
       fs.readFile(path.join(root,"index.html"),(e2,d)=>{

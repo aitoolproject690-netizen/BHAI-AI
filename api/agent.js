@@ -4,6 +4,7 @@ import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
 import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
 import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
+import { routeConversationContext } from "./contextRouter.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -320,12 +321,15 @@ export default async function handler(req,res){
   };
   return json(res,200,{ok:true,text:casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
  }
- const userTaskMessages=messages.filter(m=>m&&m.role==="user").map(m=>String(m.text||"")).filter(Boolean);
+ const contextRoute=routeConversationContext(messages,latestUserMessage);
+ const routedMessages=contextRoute.messages;
+ const userTaskMessages=routedMessages.filter(m=>m&&m.role==="user").map(m=>String(m.text||"")).filter(Boolean);
  const explicitRepoSource=[...userTaskMessages].reverse().find(t=>/(?:GitHub\s+repository|repository)\s*:\s*[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}/i.test(t))||"";
  const githubTaskText=explicitRepoSource?explicitRepoSource+"\n"+latestUserMessage:latestUserMessage;
  const selectedSkills=selectSkillsForTask(latestUserMessage);
  const skillContext=getSkillPromptContext(selectedSkills);
- const system=`You are BHAI AI, a practical personal work agent. ${skillContext}
+ const contextNote=`CONTEXT ROUTER: ${contextRoute.mode}. ${contextRoute.reason} Never revive an older Mission, repository, file, commit, or build unless the current user message explicitly refers to that existing task.`;
+ const system=`You are BHAI AI, a practical personal work agent. ${contextNote} ${skillContext}
 Reply in Hinglish when the user does. Talk naturally like a helpful project partner and friend: explain what you are doing, why it matters, what is already complete, what is still pending, and what should be added or fixed next.
 
 RESPONSE STYLE / MARKDOWN:
@@ -371,7 +375,7 @@ EXECUTION POLICY:
 - After successful requested changes, stop tools and report changed files and commit result.
 - Never claim an action happened unless a tool result confirms it. Never say DONE when verification is missing. Every final report must state completed work, remaining work, verification performed, and one or more useful next-step recommendations when appropriate.`;
 
- let contents=compactContents(toGeminiContents(messages));
+ let contents=compactContents(toGeminiContents(routedMessages));
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
 
  async function getAvailableModels(){
@@ -405,7 +409,7 @@ async function getModelsFast(){
   return list;
 }
 const latestText=String(latestUserMessage||"").trim();
-const missionMode=/\b(mission mode|mission|autonomous mode|autonomous|auto mode)\b/i.test(githubTaskText);
+const missionMode=/\b(mission mode|mission|autonomous mode|autonomous|auto mode)\b/i.test(latestText);
 const mission=createMissionController();
 const missionStep=(next,details="")=>{ mission.transition(next); activity.push({tool:"mission:"+next,state:"done",details}); };
 const githubLinkRequest=/\bgithub\b/i.test(githubTaskText)&&(/\b(link|url|repo|repository)\b/i.test(githubTaskText));

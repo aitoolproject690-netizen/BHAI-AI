@@ -405,6 +405,48 @@ if(quickChat){
  const reply=playful[k]||casualReplies[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
+const githubRequestedFile=(latestText.match(/\b(index\.html|[A-Za-z0-9._\/-]+\.(?:html|css|js|jsx|ts|tsx|json|md))\b/i)||[])[1]||"";
+if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
+ try{
+  const token=process.env.GITHUB_TOKEN;
+  if(!token) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
+  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",Authorization:"Bearer "+token};
+  const me=await fetch("https://api.github.com/user",{headers:h,signal:AbortSignal.timeout(8000)});
+  const md=await me.json().catch(()=>({}));
+  if(!me.ok||!md.login) throw new Error(md.message||"Unable to verify GitHub account.");
+  const owner=md.login,repo=githubRequestedRepo,path=githubRequestedFile.replace(/^\/+/,"");
+  const base="https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo);
+  const rr=await fetch(base,{headers:h,signal:AbortSignal.timeout(8000)});
+  const rd=await rr.json().catch(()=>({}));
+  if(!rr.ok) throw new Error(rd.message||"GitHub repository lookup failed.");
+  const branch=rd.default_branch||"main";
+  let currentSha=null;
+  const existing=await fetch(base+"/contents/"+encodeURIComponent(path)+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
+  if(existing.ok){const ed=await existing.json().catch(()=>({}));currentSha=ed.sha||null;}
+  else if(existing.status!==404){const ed=await existing.json().catch(()=>({}));throw new Error(ed.message||"GitHub file lookup failed.");}
+  let content="";
+  const ext=path.split(".").pop().toLowerCase();
+  if(ext==="html") content="<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>BHAI X Test App</title></head>\n<body><h1>BHAI X GitHub Test</h1><p>File created and verified by BHAI X.</p></body>\n</html>\n";
+  else if(ext==="js") content="console.log(\"BHAI X GitHub test file\");\n";
+  else if(ext==="css") content="body { font-family: sans-serif; }\n";
+  else if(ext==="json") content="{}\n";
+  else content="# BHAI X GitHub Test\n\nFile created and verified by BHAI X.\n";
+  const body={message:"BHAI X: create/update "+path,content:Buffer.from(content,"utf8").toString("base64"),branch};
+  if(currentSha) body.sha=currentSha;
+  const wr=await fetch(base+"/contents/"+encodeURIComponent(path),{method:"PUT",headers:{"Content-Type":"application/json",...h},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});
+  const wd=await wr.json().catch(()=>({}));
+  if(!wr.ok) throw new Error(wd.message||"GitHub file write failed.");
+  const commitSha=wd.commit?.sha||null;
+  const verify=await fetch(base+"/contents/"+encodeURIComponent(path)+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
+  const vd=await verify.json().catch(()=>({}));
+  if(!verify.ok) throw new Error(vd.message||"GitHub file verification read failed.");
+  const verifiedContent=vd.content?Buffer.from(vd.content,"base64").toString("utf8"):"";
+  if(vd.path!==path||verifiedContent!==content) throw new Error("GitHub read-back verification failed: file content does not match.");
+  return json(res,200,{text:"## GitHub file created and verified\n\n**Repository:** "+owner+"/"+repo+"\n\n**File:** "+path+"\n\n**Commit:** "+(commitSha||vd.sha||"verified")+"\n\n**Verification:** GitHub API se file write ke baad same file read-back karke content match confirm kiya gaya.",activity,images:[],usage:await getMediaUsage(db,account.id)});
+ }catch(e){
+  return json(res,502,{error:"GitHub file execution failed: "+(e?.message||"Unknown GitHub error"),activity});
+ }
+}
 if(githubLinkRequest && githubRequestedRepo && doIt && !githubFileRequest){
  try{
   const token=process.env.GITHUB_TOKEN;

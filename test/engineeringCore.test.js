@@ -32,3 +32,17 @@ test("evidence requires repository, branch, path, commit and passing tests",()=>
   e.addTest("read-back",true);
   assert.equal(e.verify(),true);
 });
+test("recovery state machine follows safe recovery order",async()=>{
+  const { createRecoveryStateMachine } = await import("../api/engineeringCore.js");
+  const m=createRecoveryStateMachine();
+  assert.equal(m.state,"diagnose");
+  m.transition("patch_and_verify");
+  m.transition("rollback_if_regression");
+  m.transition("retry");
+  m.transition("switch_provider_or_model");
+  m.transition("resume_checkpoint");
+  m.transition("patch_and_verify");
+  const evidence={verified:true};
+  m.transition("done");
+  assert.equal(m.canClaimDone(evidence),true);
+});

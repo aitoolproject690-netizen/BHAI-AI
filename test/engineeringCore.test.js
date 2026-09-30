@@ -1,4 +1,4 @@
-import { routeConversationContext, shouldCarryPreviousContext } from "../api/contextRouter.js";
+import { routeConversationContext, shouldCarryPreviousContext, shouldAutoExecuteTask } from "../api/contextRouter.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeFilePath, resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createDeploymentCheckpoint, verifyDeploymentCheckpoint, createMissionController } from "../api/engineeringCore.js";
@@ -110,4 +110,11 @@ test("context router carries context only for explicit follow-ups",()=>{
   assert.equal(r.isolated,false);
   assert.equal(r.messages.length,3);
   assert.equal(shouldCarryPreviousContext("Us repo ko build karke deploy kar"),true);
+});
+
+
+test("automatic execution selects tools without a DO IT toggle",()=>{
+  assert.equal(shouldAutoExecuteTask("Bhai ek app bana aur build karke de"),true);
+  assert.equal(shouldAutoExecuteTask("GitHub par repo bana de"),true);
+  assert.equal(shouldAutoExecuteTask("khana kha liya bhai"),false);
 });

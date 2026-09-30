@@ -21,13 +21,13 @@ const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. DO IT ON hai, to jahan possible hoga main actual kaam karunga.\n\nMain sirf jawab dene wala chatbot nahi hoon — project ka context yaad rakhkar bataunga ki kya complete hua, kya baaki hai, aur next mein kya add/fix karna useful rahega.'};
 
 function renderInline(text=''){
- const tokenRe=/(\\[[^\\]]+\\]\\(https?:\\/\\/[^\\s)]+\\)|https?:\\/\\/[^\\s<]+|www\\.[^\\s<]+|\\*\\*[^*]+\\*\\*|__[^_]+__|\\*[^*]+\\*|_[^_]+_|\`[^\`]+\`)/g;
+ const tokenRe=/(\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+|www\.[^\s<]+|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`)/g;
  const parts=String(text).split(tokenRe);
  return parts.map((part,i)=>{
   if(!part)return null;
-  const md=part.match(/^\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)$/);
-  if(md) return <React.Fragment key={i}><a className="messageLink" href={md[2]} target="_blank" rel="noopener noreferrer">{md[1]}</a></React.Fragment>;
-  const urlMatch=part.match(/^(https?:\\/\\/[^\\s<]+|www\\.[^\\s<]+)$/);
+  const md=part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
+  if(md)return <React.Fragment key={i}><a className="messageLink" href={md[2]} target="_blank" rel="noopener noreferrer">{md[1]}</a></React.Fragment>;
+  const urlMatch=part.match(/^(https?:\/\/[^\s<]+|www\.[^\s<]+)$/);
   if(urlMatch){
    const raw=urlMatch[1];const clean=raw.replace(/[.,!?;:]+$/,'');const trailing=raw.slice(clean.length);
    const href=clean.startsWith('www.')?'https://'+clean:clean;
@@ -42,7 +42,6 @@ function renderInline(text=''){
   return <React.Fragment key={i}>{node}</React.Fragment>;
  });
 }
-
 function renderText(text='',onCopy){
  const lines=String(text).replace(/\r/g,'').split('\n');
  const out=[]; let i=0, listType=null, listItems=[];

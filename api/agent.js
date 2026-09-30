@@ -631,7 +631,7 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && autoDoIt){
   }
  }
 }
-if(githubLinkRequest && githubRequestedRepo && doIt && !githubFileRequest){
+if(githubLinkRequest && githubRequestedRepo && autoDoIt && !githubFileRequest){
  try{
   const token=process.env.GITHUB_TOKEN;
   if(!token) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
@@ -696,7 +696,7 @@ const models=quickChatMode
   const allowedCalls=calls.slice(0,2),responseParts=[];
   for(const call of allowedCalls){
    if(totalToolCalls>=maxToolCalls) break;
-   const name=call.name,a={...(call.args||{}),doIt};
+   const name=call.name,a={...(call.args||{}),doIt:autoDoIt};
    // Deterministic GitHub target override: the user's explicit "GitHub repository:" and "index.html" always beat AI/parser guesses.
    const explicitToolRepo=githubTaskText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i);
    const explicitToolIndexHtml=/\bindex\.html\b/i.test(githubTaskText);

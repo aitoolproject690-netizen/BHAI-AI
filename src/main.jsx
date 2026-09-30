@@ -181,10 +181,7 @@ function App(){
  }
  async function runDedicatedTool(kind){
   if(running||!chat)return;
-  if(!doIt){
-   upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ DO IT OFF hai. Pehle upar **DO IT ON** karo, phir '+(kind==='build'?'Build APK':'Deploy')+' tool chalega.'}]);
-   return;
-  }
+  
   setToolsOpen(false);setRunning(true);setActivityOpen(true);
   const replyId=crypto.randomUUID();
   upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'user',text:kind==='build'?'🔨 Build APK':'🚀 Deploy'},{id:replyId,role:'assistant',text:'⚡ Bhai, '+(kind==='build'?'AI Build Guard + GitHub Actions build':'AI Deploy Guard + Render deploy')+' start kar raha hoon...'}]);
@@ -214,7 +211,7 @@ function App(){
   if(label==='connect'){setConnectOpen(true);setToolsOpen(false);return}
   if(label==='codefix'){setCodeFixOpen(true);setToolsOpen(false);return}
   if(label==='generator'){setGeneratorOpen(true);setToolsOpen(false);return}
-  if(label==='mission'){setMissionMode(true);setToolsOpen(false);return}
+  if(label==='mission'){setToolsOpen(false);return}
   if(label==='system'){setSystemOpen(true);setToolsOpen(false);return}
   if(label==='build'||label==='deploy'){runDedicatedTool(label);return}
   const prompts={generator:'AI code generator kholo: ',web:'Web search karke current information verify karo: ',image:'Ek image generate karo: ',coding:'Coding task solve karo: ',github:'GitHub par actual kaam karo: '};
@@ -235,7 +232,7 @@ function App(){
    const planMsg={id:crypto.randomUUID(),role:'assistant',text:plan};
    const next=[...chat.messages,userMsg,planMsg];
    upd(()=>next);setInput('');setMissionMode(false);
-   if(doIt){
+   if(true){
     try{const cp=await fetch(apiUrl('/api/system'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'checkpoint',goal,state:{missionId:m.id,steps:m.steps.map(s=>({id:s.id,name:s.name,state:s.state})),messages:next.slice(-6)}})}).then(x=>x.json()); if(cp?.checkpoint){localStorage.setItem('bhai_x_checkpoint',JSON.stringify(cp.checkpoint));setResumeMission(cp.checkpoint)}}catch{}
     let dnaMission='';try{const dr=await fetch(apiUrl('/api/dna?project=default'),{headers:authHeaders()}).then(x=>x.json());dnaMission=JSON.stringify(dr.data||{}).slice(0,5000)}catch{}
     const execMessages=[...next,{id:crypto.randomUUID(),role:'user',text:'MISSION EXECUTION: Ab compiled mission ko end-to-end execute karo. Required files/code changes/build/test/deploy jo possible ho actual tools se karo. Har step verify karo; kaam complete hone tak execute karo. Agar execution interrupt ho to last checkpoint se resume karne ke liye state preserve karo.'},{id:crypto.randomUUID(),role:'user',text:'RECOVERY CHECKPOINT: '+JSON.stringify(m.steps)+'\\nPROJECT DNA: '+dnaMission}];
@@ -269,7 +266,7 @@ function App(){
    <header>
     {!sidebar&&<button className="openSide" onClick={()=>setSidebar(true)}><PanelLeftOpen size={19}/></button>}
     <div className="topTitle"><b>BHAI X</b><button className="modelBtn">BHAI X Agent <ChevronDown size={14}/></button></div>
-    <button className="headerIconBtn" aria-label="Settings" title="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button><button className={doIt?'topDo on':'topDo'} onClick={()=>setDoIt(v=>{const n=!v;localStorage.setItem('bhai_x_default_doit',String(n));return n})}><Zap size={14}/> DO IT {doIt?'ON':'OFF'}</button>
+    <button className="headerIconBtn" aria-label="Settings" title="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button>
    </header>
    <section className="messages">
     {chat?.messages.map(m=><div className={m.role==='user'?'row user':'row'} key={m.id}>
@@ -289,7 +286,7 @@ function App(){
     <div className="composerTools">
      <div className="toolMenuWrap">
       <button className="roundBtn" onClick={()=>setToolsOpen(v=>!v)}><Plus size={20}/></button>
-      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('generator')}><Code2 size={15}/> AI Code Generator</button><button onClick={()=>useTool('codefix')}><WandSparkles/> AI Code Fixer</button><button onClick={()=>useTool('github')}><Zap/> GitHub / DO IT</button><button onClick={()=>useTool('build')}><Code2/> Build APK</button><button onClick={()=>useTool('deploy')}><Zap/> Deploy</button><button onClick={()=>useTool('mission')}><Target/> Mission Mode</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button><button onClick={()=>useTool('system')}><ActivityIcon/> System Center</button></div>}
+      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('generator')}><Code2 size={15}/> AI Code Generator</button><button onClick={()=>useTool('codefix')}><WandSparkles/> AI Code Fixer</button><button onClick={()=>useTool('github')}><Zap/> GitHub</button><button onClick={()=>useTool('build')}><Code2/> Build APK</button><button onClick={()=>useTool('deploy')}><Zap/> Deploy</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button><button onClick={()=>useTool('system')}><ActivityIcon/> System Center</button></div>}
      </div>
      <label className="roundBtn attach"><Paperclip size={19}/><input type="file" hidden onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setFileInfo({name:f.name,text:(await f.text()).slice(0,50000)})}}/></label>
      <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message BHAI X..." rows="1"/>

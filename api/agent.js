@@ -241,7 +241,7 @@ async function geminiGenerate(apiKey,model,system,contents,useTools=true,activeD
  const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{
   method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
   body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,...(useTools?{tools:[{functionDeclarations:activeDefinitions}]}:{}),generationConfig:{temperature:0.2}}),
-   signal:AbortSignal.timeout(45000)
+   signal:AbortSignal.timeout(22000)
  });
  const d=await r.json(); if(!r.ok) throw new Error(d?.error?.message||"Gemini API request failed"); return d;
 }
@@ -312,7 +312,7 @@ EXECUTION POLICY:
  const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
 
  async function getAvailableModels(){
- const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key},signal:AbortSignal.timeout(20000)});
+ const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":key},signal:AbortSignal.timeout(10000)});
  const d=await r.json();
  if(!r.ok) throw new Error(d?.error?.message||"Unable to list Gemini models");
  return (d.models||[])
@@ -370,12 +370,12 @@ const models=quickChatMode
   : await getModelsFast();
  const isTransientModelError=(e)=>/429|RESOURCE_EXHAUSTED|quota|rate.?limit|high demand|temporarily unavailable|try again later|overloaded/i.test(String(e?.message||e));
  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
- const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<4) await sleep(Math.min(5000,1200*Math.pow(2,attempt)));}}}throw last;};
+ const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<2;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<1) await sleep(1200);}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
  let rootListed=false;
- const maxGithubReads=6,maxToolCalls=8,maxRounds=4;
+ const maxGithubReads=5,maxToolCalls=6,maxRounds=3;
 
  for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
   let d; try{d=await generateWithFallback(!quickChatMode)}catch(e){
@@ -472,7 +472,7 @@ const models=quickChatMode
 
  const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains.";
  try{
-  const fd=await (async()=>{let last;for(const m of models){for(let attempt=0;attempt<4;attempt++){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<3) await sleep(Math.min(6000,1500*Math.pow(2,attempt)));}}}throw last;})();
+  const fd=await (async()=>{let last;for(const m of models){for(let attempt=0;attempt<2;attempt++){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<1) await sleep(1200);}}}throw last;})();
   const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
   return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}

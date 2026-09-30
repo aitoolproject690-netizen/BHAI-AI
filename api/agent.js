@@ -2,7 +2,7 @@ import { selectSkillsForTask, getSkillPromptContext } from "../src/skillsRouter.
 import { ownerState, ownerReady } from "./owner.js";
 import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
-import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine } from "./engineeringCore.js";
+import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -510,7 +510,7 @@ const models=quickChatMode
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){
    const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
-   if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified))){
+   if(missionMode && mission.phase==="verify" && !requiresGithubExecution) { missionStep("complete","Response produced and no external execution evidence was required"); }\n   if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified))){
     if(totalToolCalls<maxToolCalls){
      contents.push(candidate.content);
      contents.push({role:"user",parts:[{text:"STOP. This is an explicit GitHub execution task. You have not yet produced verified GitHub evidence. Do NOT say Task completed. Use the GitHub tools now to create/update/read the requested repository and verify the result. Final success requires repository URL, requested file/path, commit SHA, and verification."}]});
@@ -594,7 +594,7 @@ const models=quickChatMode
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
     const msg=String(e?.message||e);
-    const errorClass=classifyEngineeringError(e);
+    const errorClass=classifyEngineeringError(e);\n    if(missionMode && mission.phase==="recover" && errorClass.retryable){ try { missionStep("execute","Retrying from recovery checkpoint"); } catch {} }
     if(recovery.state==="diagnose") activity.push({tool:"recovery:diagnose",state:"done",details:errorClass.type+":"+errorClass.message});
     if(errorClass.retryable && recovery.state==="diagnose") recoveryStep("patch_and_verify","retryable "+errorClass.type);
     const isGitHubReadMiss=name==="github_read" && /not found|path.*not|does not exist/i.test(msg);
@@ -621,8 +621,8 @@ const models=quickChatMode
    const title=githubEvidence.name||githubEvidence.full_name||"GitHub repository";
    return json(res,200,{text:"## ✅ GitHub verified\n\n🔗 **"+title+"**\n\n"+githubEvidence.url+"\n\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   }
-  if(requiresGithubExecution && githubVerificationConfirmed && (!githubFileRequest || githubFileVerified) && recovery.state==="diagnose"){ recoveryStep("patch_and_verify","GitHub evidence collected"); if(evidence.verify()) recoveryStep("done","Evidence verified"); }
-  if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified) || !evidence.verify())) return json(res,200,{text:"⚠️ GitHub execution was not fully verified. No completion claim was made. The repository/file/commit/test evidence is incomplete.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
+  if(missionMode && mission.phase==="verify" && requiresGithubExecution && githubVerificationConfirmed && (!githubFileRequest || githubFileVerified) && evidence.verify()){ try { missionStep("complete","GitHub evidence and test proof verified"); } catch {} }\n  if(requiresGithubExecution && githubVerificationConfirmed && (!githubFileRequest || githubFileVerified) && recovery.state==="diagnose"){ recoveryStep("patch_and_verify","GitHub evidence collected"); if(evidence.verify()) recoveryStep("done","Evidence verified"); }
+  if(missionMode && mission.phase==="verify" && !mission.canClaimDone(evidence)) return json(res,200,{text:"⚠️ Mission Mode reached verification but could not prove completion. No DONE claim was made.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});\n  if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified) || !evidence.verify())) return json(res,200,{text:"⚠️ GitHub execution was not fully verified. No completion claim was made. The repository/file/commit/test evidence is incomplete.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }

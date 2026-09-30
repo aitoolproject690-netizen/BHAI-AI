@@ -400,6 +400,28 @@ if(quickChat){
  const reply=playful[k]||casualReplies[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
+if(githubLinkRequest && githubRequestedRepo && doIt){
+ try{
+  const token=process.env.GITHUB_TOKEN;
+  if(!token) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
+  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",Authorization:"Bearer "+token};
+  const me=await fetch("https://api.github.com/user",{headers:h,signal:AbortSignal.timeout(8000)});
+  const md=await me.json().catch(()=>({}));
+  if(!me.ok||!md.login) throw new Error(md.message||"Unable to verify GitHub account.");
+  const owner=md.login,repo=githubRequestedRepo;
+  let gr=await fetch("https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo),{headers:h,signal:AbortSignal.timeout(8000)});
+  let gd=await gr.json().catch(()=>({}));
+  if(gr.status===404){
+   const cr=await fetch("https://api.github.com/user/repos",{method:"POST",headers:{"Content-Type":"application/json",...h},body:JSON.stringify({name:repo,description:"Created by BHAI X",private:false,auto_init:true}),signal:AbortSignal.timeout(10000)});
+   gd=await cr.json().catch(()=>({}));
+   if(!cr.ok && cr.status!==422) throw new Error(gd.message||"GitHub repository creation failed.");
+  }else if(!gr.ok) throw new Error(gd.message||"GitHub repository lookup failed.");
+  const url=gd.html_url||("https://github.com/"+owner+"/"+repo);
+  return json(res,200,{text:"## ✅ GitHub verified\\n\\n🔗 **"+(gd.full_name||owner+"/"+repo)+"**\\n\\n"+url+"\\n\\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:[],usage:await getMediaUsage(db,account.id)});
+ }catch(e){
+  return json(res,502,{error:"GitHub check failed: "+(e?.message||"Unknown GitHub error"),activity});
+ }
+}
 const models=quickChatMode
   ? [process.env.GEMINI_FAST_MODEL||preferred[0]]
   : await getModelsFast();
@@ -408,6 +430,8 @@ const models=quickChatMode
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  const githubLinkRequest=/\bgithub\b/i.test(latestText)&&(/\b(link|url|repo|repository)\b/i.test(latestText));
+ const githubRequestedRepo=(latestText.match(/\b(?:repo(?:sitory)?\s*(?:name)?\s*[:=]?\s*)?([A-Za-z0-9][A-Za-z0-9._-]{2,99})\b/i)||[])[1]||"";
+
  const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
  let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubEvidence=null;
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;

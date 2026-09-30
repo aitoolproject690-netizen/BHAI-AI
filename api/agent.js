@@ -405,7 +405,12 @@ if(quickChat){
  const reply=playful[k]||casualReplies[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
-const githubRequestedFile=(latestText.match(/\b(index\.html|[A-Za-z0-9._\/-]+\.(?:html|css|js|jsx|ts|tsx|json|md))\b/i)||[])[1]||"";
+const githubFileMatch=(latestText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";
+let githubRequestedFile=githubFileMatch;
+if(githubRequestedFile&&githubRequestedRepo){
+ const repoPrefix=new RegExp("^(?:[A-Za-z0-9_.-]+/)?"+githubRequestedRepo.replace(/[.*+?^${}()|[\\]\\]/g,"\\\\const githubRequestedFile=(latestText.match(/\b(index\.html|[A-Za-z0-9._\/-]+\.(?:html|css|js|jsx|ts|tsx|json|md))\b/i)||[])[1]||"";")+"/","i");
+ githubRequestedFile=githubRequestedFile.replace(repoPrefix,"");
+}
 if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
  try{
   const token=process.env.GITHUB_TOKEN;

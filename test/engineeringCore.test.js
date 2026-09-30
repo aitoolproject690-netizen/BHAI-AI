@@ -118,3 +118,8 @@ test("automatic execution selects tools without a DO IT toggle",()=>{
   assert.equal(shouldAutoExecuteTask("GitHub par repo bana de"),true);
   assert.equal(shouldAutoExecuteTask("khana kha liya bhai"),false);
 });
+
+test("fresh project task does not authorize stale GitHub file fixer",()=>{
+  assert.equal(/(?:github|git hub|repository|repo\\b|github\\s+repo)/i.test("Bhai ek calculator app bana kar de"),false);
+  assert.equal(/(?:app|project|website|apk|code|build|deploy|create|make|bana|ban[a-z]*|fix|update|publish|commit|push)/i.test("Bhai ek calculator app bana kar de"),true);
+});

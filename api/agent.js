@@ -412,6 +412,8 @@ if(quickChat){
  const reply=playful[k]||casualReplies[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
+const recovery=createRecoveryStateMachine();
+const recoveryStep=(next,details="")=>{ recovery.transition(next); activity.push({tool:"recovery:"+next,state:"done",details}); };
 const githubFileMatch=(githubTaskText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";
 const explicitRepoMatch=githubTaskText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i);
 const explicitIndexHtml=/\bindex\.html\b/i.test(githubTaskText);
@@ -503,7 +505,14 @@ if(githubFileRequest && githubRequestedRepo && githubRequestedFile && doIt){
   activity.push({tool:"mission:evidence",state:"done",details:"No-proof-no-DONE gate passed for repository, branch, file, commit and read-back verification."});
   return json(res,200,{text:"## ✅ Mission GitHub fix verified\\n\\n**Repository:** "+owner+"/"+repo+"\\n\\n**Branch:** "+branch+"\\n\\n**File:** "+path+"\\n\\n**Diagnosis:** "+fixes.join(" ")+"\\n\\n**Commit:** "+commitSha+"\\n\\n**Verification:** Same file was read back from GitHub after commit and the content matched the patched content exactly.\\n\\n**Evidence:** ✅ No-proof-no-DONE gate passed.",activity,images:[],usage:await getMediaUsage(db,account.id)});
  }catch(e){
-  return json(res,502,{error:"GitHub file execution failed: "+(e?.message||"Unknown GitHub error"),activity});
+  const msg=String(e?.message||"Unknown GitHub error");
+  if(/Diagnosis found no deterministic safe fix/i.test(msg)){
+   activity.push({tool:"recovery:diagnose",state:"done",details:msg});
+   try{ recoveryStep("switch_provider_or_model","Deterministic fixer found no safe patch; routing to alternate recovery path."); }catch{}
+   activity.push({tool:"recovery:checkpoint",state:"done",details:"Repository/file inspection preserved; no file mutation was made."});
+  }else{
+   return json(res,502,{error:"GitHub file execution failed: "+msg,activity});
+  }
  }
 }
 if(githubLinkRequest && githubRequestedRepo && doIt && !githubFileRequest){
@@ -536,8 +545,6 @@ const models=quickChatMode
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  const retryGuard=createRetryGuard();
- const recovery=createRecoveryStateMachine();
- const recoveryStep=(next,details="")=>{ recovery.transition(next); activity.push({tool:"recovery:"+next,state:"done",details}); };
  const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|file|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
  
  const githubRequestedPath=(latestText.match(/(?:`|\b)(index\.html|[A-Za-z0-9._/-]+\.(?:html|css|js|jsx|ts|tsx|json|md))(?=`|\b)/i)||[])[1]||"";

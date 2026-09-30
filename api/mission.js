@@ -60,10 +60,22 @@ export default async function handler(req,res){
     if(!applied.length)return json(res,502,{ok:false,status:"no-patch",history,verification:"AI coding produced no applicable repository patch."});
    }else history.push({stage:"coding-patch-applied",applied:[]});
   }else history.push({stage:"coding",status:"no_source_files_identified"});
-  const dispatch=await gh("/repos/"+owner+"/"+repo+"/actions/workflows/"+encodeURIComponent(workflow)+"/dispatches",{
-   method:"POST",body:JSON.stringify({ref:branch,inputs:{platform:String(platform),projectName:String(projectName),sourceUrl:"",official_release:"false"}})
-  });
-  history.push({stage:"build-dispatch",ok:true});
+  const buildGuard=await aiJson("Build preflight for "+owner+"/"+repo+". TASK: "+String(task).slice(0,5000),
+   "Return ONLY JSON {risk,checks,fixPlan,nextAction}. This is the dedicated AI Build Guard. Never claim build success without runner evidence.", "code");
+  history.push({stage:"build-guard",label:"AI Build Guard",buildGuard});
+  if(buildGuard.risk==="high")return json(res,422,{ok:false,status:"build-blocked",history,verification:"Build guard blocked a high-risk run; DONE is blocked."});
+  let dispatch;
+  try{
+   dispatch=await gh("/repos/"+owner+"/"+repo+"/actions/workflows/"+encodeURIComponent(workflow)+"/dispatches",{
+    method:"POST",body:JSON.stringify({ref:branch,inputs:{platform:String(platform),projectName:String(projectName),sourceUrl:"",official_release:"false"}})
+   });
+   history.push({stage:"build-dispatch",ok:true});
+  }catch(e){
+   const errorGuard=await aiJson("Build dispatch error: "+String(e.message||e)+" for "+owner+"/"+repo,
+    "Return ONLY JSON {diagnosis,confidence,patches,retest}. This is the dedicated AI Error Fixer. Never modify .github workflow files. If evidence is insufficient, patches=[].", "code");
+   history.push({stage:"error-tool",label:"AI Error Fixer",errorGuard});
+   return json(res,502,{ok:false,status:"build-dispatch-failed",history,verification:"Build dispatch failed; dedicated error tool ran and DONE is blocked."});
+  }
   let run=null;
   for(let i=0;i<18;i++){
    await sleep(5000);

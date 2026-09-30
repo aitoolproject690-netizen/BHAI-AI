@@ -128,7 +128,18 @@ async function callGemini({apiKey,model,system,messages}) {
     }
   );
   const d = await r.json().catch(()=>({}));
-  if (!r.ok) throw new Error(d?.error?.message || "Gemini API request failed");
+  if (!r.ok) {
+    const msg=d?.error?.message || "Gemini API request failed";
+    if(r.status===404 && model===providerModel("gemini")) {
+      try {
+        const mr=await fetch("https://generativelanguage.googleapis.com/v1beta/models",{headers:{"x-goog-api-key":apiKey},signal:timeout(10000)});
+        const md=await mr.json().catch(()=>({}));
+        const compatible=(md.models||[]).find(m=>Array.isArray(m.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent"))?.name?.replace(/^models\//,"");
+        if(compatible && compatible!==model) return callGemini({apiKey,model:compatible,system,messages});
+      }catch{}
+    }
+    throw new Error(msg);
+  }
   const text = (d?.candidates?.[0]?.content?.parts||[])
     .filter(p => typeof p.text === "string")
     .map(p => p.text).join("\n").trim();

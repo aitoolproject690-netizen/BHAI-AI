@@ -2,7 +2,7 @@ import { selectSkillsForTask, getSkillPromptContext } from "../src/skillsRouter.
 import { ownerState, ownerReady } from "./owner.js";
 import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
-import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence } from "./engineeringCore.js";
+import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine } from "./engineeringCore.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -487,6 +487,8 @@ const models=quickChatMode
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  const retryGuard=createRetryGuard();
  const evidence=createEvidence();
+ const recovery=createRecoveryStateMachine();
+ const recoveryStep=(next,details="")=>{ recovery.transition(next); activity.push({tool:"recovery:"+next,state:"done",details}); };
  const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|file|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
  
  const githubRequestedPath=(latestText.match(/(?:`|\b)(index\.html|[A-Za-z0-9._/-]+\.(?:html|css|js|jsx|ts|tsx|json|md))(?=`|\b)/i)||[])[1]||"";
@@ -585,12 +587,15 @@ const models=quickChatMode
      for(const item of result.items||[]) knownPaths.add(item.path);
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
+    if((name==="github_create_repo"||name==="github_update") && recovery.state==="patch_and_verify") recoveryStep("done","GitHub operation completed");
     if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result; if(result?.commit) evidence.set({commit:result.commit}); if(name==="github_update" && result?.path){knownPaths.add(String(result.path).replace(/^\/+/, ""));}}
     if((name==="github_read"||name==="github_info") && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result; if(name==="github_read" && result?.type==="file"){const p=String(result.path||"").replace(/^\/+/, ""); if(!githubRequestedPath || p.toLowerCase()===githubRequestedPath.toLowerCase()) githubFileVerified=true;}}
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
     const msg=String(e?.message||e);
     const errorClass=classifyEngineeringError(e);
+    if(recovery.state==="diagnose") activity.push({tool:"recovery:diagnose",state:"done",details:errorClass.type+":"+errorClass.message});
+    if(errorClass.retryable && recovery.state==="diagnose") recoveryStep("patch_and_verify","retryable "+errorClass.type);
     const isGitHubReadMiss=name==="github_read" && /not found|path.*not|does not exist/i.test(msg);
     if(isGitHubReadMiss){
      activity[activity.length-1].state="skipped";

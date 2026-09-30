@@ -33,7 +33,7 @@ export function classifyEngineeringError(error){
 export function createRetryGuard(){ const attempted=new Set(); return { key(a,x={}){return a+':'+JSON.stringify(x);}, canTry(a,x={}){const k=this.key(a,x);if(attempted.has(k))return false;attempted.add(k);return true;}, size(){return attempted.size;} }; }
 export function createEvidence(){
  const state={repository:null,branch:null,path:null,commit:null,tests:[],deployment:null,verified:false};
- return {state,set(p={}){Object.assign(state,p);},addTest(name,passed,details=''){state.tests.push({name,passed:!!passed,details});},verify(){state.verified=!!(state.repository&&state.branch&&state.path&&state.commit&&state.tests.length&&state.tests.every(t=>t.passed));return state.verified;},snapshot(){return JSON.parse(JSON.stringify(state));}};
+ return {state,set(p={}){Object.assign(state,p);},addTest(name,passed,details=''){state.tests.push({name,passed:!!passed,details});},verify(){const hasReadBack=state.tests.some(t=>/read.?back/i.test(String(t.name||""))&&t.passed);state.verified=!!(state.repository&&state.branch&&state.path&&state.commit&&hasReadBack&&state.tests.length&&state.tests.every(t=>t.passed));return state.verified;},snapshot(){return JSON.parse(JSON.stringify(state));}};
 }
 
 

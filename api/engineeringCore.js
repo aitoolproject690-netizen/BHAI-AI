@@ -62,3 +62,14 @@ export function createRecoveryStateMachine(){
   canClaimDone(evidence){ return state==="done" && !!evidence?.verified; }
  };
 }
+
+
+export function createDeploymentCheckpoint({commit="",service="",url="",status="unknown"}={}){
+ return {commit:String(commit||""),service:String(service||""),url:String(url||""),status:String(status||"unknown"),createdAt:new Date().toISOString()};
+}
+export function verifyDeploymentCheckpoint(checkpoint,{expectedCommit="",expectedStatus="live"}={}){
+ const commitOk=!expectedCommit||String(checkpoint?.commit||"")===String(expectedCommit);
+ const statusOk=String(checkpoint?.status||"").toLowerCase()===String(expectedStatus).toLowerCase();
+ const urlOk=!!String(checkpoint?.url||"");
+ return {ok:!!(commitOk&&statusOk&&urlOk),commitOk,statusOk,urlOk};
+}

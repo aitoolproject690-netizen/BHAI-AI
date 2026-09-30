@@ -394,6 +394,8 @@ const models=quickChatMode
  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of models){for(let attempt=0;attempt<2;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<1) await sleep(1200);}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
+ const requiresGithubExecution=/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|index\.html|verify|proof)\b/i.test(latestText)||/do it on/i.test(latestText));
+ let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubEvidence=null;
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
  let rootListed=false;
@@ -410,6 +412,14 @@ const models=quickChatMode
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
   if(!calls.length){
    const text=parts.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
+   if(requiresGithubExecution && !githubVerificationConfirmed){
+    if(totalToolCalls<maxToolCalls){
+     contents.push(candidate.content);
+     contents.push({role:"user",parts:[{text:"STOP. This is an explicit GitHub execution task. You have not yet produced verified GitHub evidence. Do NOT say Task completed. Use the GitHub tools now to create/update/read the requested repository and verify the result. Final success requires repository URL, requested file/path, commit SHA, and verification."}]});
+     continue;
+    }
+    return json(res,200,{text:"⚠️ GitHub execution was not verified. I will not claim the task is completed without actual repository/file/commit evidence.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
+   }
    return json(res,200,{text:text||"Media ready.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   }
   contents.push(candidate.content);
@@ -473,6 +483,8 @@ const models=quickChatMode
      for(const item of result.items||[]) knownPaths.add(item.path);
     }
     seenCalls.set(cacheKey,result);consecutiveFailures=0;activity[activity.length-1].state="done";
+    if(name==="github_create_repo"||name==="github_update"){githubExecutionConfirmed=true;githubEvidence=result;}
+    if(name==="github_read" && result && !result.skipped){githubVerificationConfirmed=true;githubEvidence=result;}
     responseParts.push({functionResponse:{name,response:{result}}});
    }catch(e){
     const msg=String(e?.message||e);
@@ -492,7 +504,7 @@ const models=quickChatMode
   if(consecutiveFailures>=2) break;
  }
 
- const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains.";
+ const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains."+ (requiresGithubExecution ? " IMPORTANT: Never claim GitHub completion unless actual GitHub tool results verified the repository/file/commit. If evidence is missing, explicitly say GitHub execution was not verified." : "");
  try{
   const fd=await (async()=>{let last;for(const m of models){for(let attempt=0;attempt<2;attempt++){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<1) await sleep(1200);}}}throw last;})();
   const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();

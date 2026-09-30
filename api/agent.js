@@ -421,7 +421,7 @@ if(githubLinkRequest && githubRequestedRepo && doIt){
    if(!cr.ok && cr.status!==422) throw new Error(gd.message||"GitHub repository creation failed.");
   }else if(!gr.ok) throw new Error(gd.message||"GitHub repository lookup failed.");
   const url=gd.html_url||("https://github.com/"+owner+"/"+repo);
-  return json(res,200,{text:"## ✅ GitHub verified\\n\\n🔗 **"+(gd.full_name||owner+"/"+repo)+"**\\n\\n"+url+"\\n\\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:[],usage:await getMediaUsage(db,account.id)});
+  return json(res,200,{text:"## ✅ GitHub verified\n\n🔗 **"+(gd.full_name||owner+"/"+repo)+"**\n\n"+url+"\n\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:[],usage:await getMediaUsage(db,account.id)});
  }catch(e){
   return json(res,502,{error:"GitHub check failed: "+(e?.message||"Unknown GitHub error"),activity});
  }
@@ -549,7 +549,7 @@ const models=quickChatMode
   const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
   if(githubLinkRequest&&githubVerificationConfirmed&&githubEvidence?.url){
    const title=githubEvidence.name||githubEvidence.full_name||"GitHub repository";
-   return json(res,200,{text:"## ✅ GitHub verified\\n\\n🔗 **"+title+"**\\n\\n"+githubEvidence.url+"\\n\\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
+   return json(res,200,{text:"## ✅ GitHub verified\n\n🔗 **"+title+"**\n\n"+githubEvidence.url+"\n\n**Verification:** GitHub API se repository confirm hui hai.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   }
   return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}

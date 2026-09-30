@@ -24,3 +24,10 @@ export function shouldCarryPreviousContext(message=""){
  const r=routeConversationContext([{role:"user",text:String(message)}],message);
  return r.mode==="contextual_followup";
 }
+
+
+export function shouldAutoExecuteTask(message=""){
+ const text=normalize(message);
+ if(!text) return false;
+ return /\b(?:app|project|repo|repository|website|apk|code|bug|error|issue|fix|build|deploy|publish|commit|push|github|render|create|make|bana|ban[a-z]*|update|repair|test|verify)\b/i.test(text);
+}

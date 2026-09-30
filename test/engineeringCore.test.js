@@ -94,6 +94,11 @@ test("context router isolates a fresh task from an older Mission",()=>{
   assert.equal(shouldCarryPreviousContext("Bhai ek app bana aur build karke de"),false);
 });
 
+test("context router carries a short build command after an existing task",()=>{
+  assert.equal(shouldCarryPreviousContext("build karke de"),true);
+  assert.equal(shouldCarryPreviousContext("deploy kar"),true);
+});
+
 test("context router carries context only for explicit follow-ups",()=>{
   const messages=[
     {role:"user",text:"GitHub repository: owner/demo"},

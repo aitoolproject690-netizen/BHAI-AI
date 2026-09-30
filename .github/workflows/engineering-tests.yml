@@ -22,7 +22,7 @@ jobs:
           node-version: 20
           cache: npm
       - name: Install
-        run: npm ci
+        run: npm install
       - name: Regression tests
         run: npm test
       - name: Production build

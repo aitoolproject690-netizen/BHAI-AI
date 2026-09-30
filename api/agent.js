@@ -376,6 +376,7 @@ async function getModelsFast(){
 const latestText=String(latestUserMessage||"").trim();
 const githubLinkRequest=/\bgithub\b/i.test(githubTaskText)&&(/\b(link|url|repo|repository)\b/i.test(githubTaskText));
 const githubFileRequest=/\bgithub\b/i.test(githubTaskText)&&(/\b(file|index\.html|html|code|page|commit|push|update|create)\b/i.test(githubTaskText));
+let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubFileVerified=false,githubEvidence=null,githubFileEvidence=null;
 const githubTarget=resolveGithubTarget(githubTaskText);
 const githubExplicitRepoMatch=githubTaskText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i)||githubTaskText.match(/\b([A-Za-z0-9][A-Za-z0-9._-]{2,99})\/([A-Za-z0-9][A-Za-z0-9._-]{2,99})(?=\/|\b)/i);
 const githubRepoCandidates=githubTaskText.match(/\b[A-Za-z0-9][A-Za-z0-9._-]{2,99}\b/g)||[];

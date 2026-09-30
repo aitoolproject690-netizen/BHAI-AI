@@ -409,7 +409,8 @@ if(quickChat){
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
 }
 const githubFileMatch=(latestText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";
-let githubRequestedFile=githubTarget.path||githubFileMatch;
+const explicitIndexHtml=/\bindex\.html\b/i.test(latestText);
+let githubRequestedFile=explicitIndexHtml?"index.html":(githubTarget.path||githubFileMatch);
 if(githubRequestedFile&&githubRequestedRepo){
  const repoMarker=githubRequestedRepo+"/";
  const repoAt=githubRequestedFile.toLowerCase().indexOf(repoMarker.toLowerCase());
@@ -568,7 +569,7 @@ const models=quickChatMode
    if(/^github_/.test(name) && (githubTarget.owner||githubTarget.repo||githubTarget.path)){
     if(githubTarget.owner) a.owner=githubTarget.owner;
     if(githubTarget.repo) a.repo=githubTarget.repo;
-    if(githubTarget.path && /^(github_read|github_update|github_create_file|github_delete_file)$/.test(name)) a.path=githubTarget.path;
+    if(/^(github_read|github_update|github_create_file|github_delete_file)$/.test(name) && githubRequestedFile) a.path=githubRequestedFile;
    }
    const cacheKey=name+":"+JSON.stringify(a);
    activity.push({tool:name,state:"running"}); totalToolCalls++;

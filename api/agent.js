@@ -197,7 +197,13 @@ async function github(action,a){
   throw new Error(d.message||"GitHub repository creation failed");
  }
  if(!a.owner||!a.repo) throw new Error("GitHub owner and repo are required.");
- const base="https://api.github.com/repos/"+encodeURIComponent(a.owner)+"/"+encodeURIComponent(a.repo),branch=a.branch||"main";
+ let effectiveOwner=String(a.owner).trim();
+ if(token && /^bhai[-_]?ai$/i.test(effectiveOwner)){
+  const me=await fetch("https://api.github.com/user",{headers:h});
+  const md=await me.json().catch(()=>({}));
+  if(me.ok&&md.login) effectiveOwner=md.login;
+ }
+ const base="https://api.github.com/repos/"+encodeURIComponent(effectiveOwner)+"/"+encodeURIComponent(a.repo),branch=a.branch||"main";
  if(action==="github_info"){
   const r=await fetch(base,{headers:h}),d=await r.json(); if(!r.ok) throw new Error(d.message||"GitHub request failed");
   return{name:d.full_name,default_branch:d.default_branch,private:d.private,url:d.html_url,permissions:d.permissions||null};

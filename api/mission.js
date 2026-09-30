@@ -93,7 +93,7 @@ export default async function handler(req,res){
     const evidence=failed.map(j=>({name:j.name,steps:j.steps})).slice(0,8);
     const fix=await aiJson("Fix failed build for TASK: "+String(task).slice(0,5000)+"\nFAILURE:\n"+JSON.stringify(evidence).slice(0,20000),
      "Return ONLY JSON {diagnosis,confidence,patches,retest}. patches are complete replacement source files only. Never patch .github workflow files. If evidence is insufficient, patches=[].", "code");
-    history.push({stage:"error-fixer",attempt,fix});
+    history.push({stage:"error-tool",label:"AI Error Fixer",attempt,fix});
     if(!Array.isArray(fix.patches)||!fix.patches.length)break;
     const review=await reviewWithMultiAI({task:"Review this build error fix: "+String(task).slice(0,4000),draft:JSON.stringify(fix),exclude:[fix.provider]});
     history.push({stage:"error-review",attempt,provider:review.provider,model:review.model});
@@ -114,6 +114,10 @@ export default async function handler(req,res){
   if(autoDeploy){
    const key=process.env.RENDER_API_KEY; const service=process.env.RENDER_SERVICE_ID;
    if(key&&service){
+    const deployGuard=await aiJson("Deployment preflight for "+owner+"/"+repo+" after verified build and APK artifact. TASK: "+String(task).slice(0,4000),
+     "Return ONLY JSON {risk,checks,rollbackPlan,nextAction}. This is the dedicated AI Deploy Guard. Never claim deployment success without live health evidence.", "reviewer");
+    history.push({stage:"deploy-guard",label:"AI Deploy Guard",deployGuard});
+    if(deployGuard.risk==="high")return json(res,422,{ok:false,status:"deploy-blocked",history,verification:"Deploy guard blocked a high-risk deployment; DONE is blocked."});
     const dr=await fetch("https://api.render.com/v1/services/"+encodeURIComponent(service)+"/deploys",{method:"POST",headers:{Authorization:"Bearer "+key,"Content-Type":"application/json"},body:JSON.stringify({clearCache:false})});
     const dd=await dr.json().catch(()=>({}));
     if(!dr.ok)throw new Error(dd?.message||"Render deploy dispatch failed");

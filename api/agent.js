@@ -417,6 +417,8 @@ const explicitRepoMatch=githubTaskText.match(/(?:GitHub\s+repository|repository)
 const explicitIndexHtml=/\bindex\.html\b/i.test(githubTaskText);
 if(explicitRepoMatch) githubRequestedRepo=explicitRepoMatch[1]+"/"+explicitRepoMatch[2];
 let githubRequestedFile=explicitIndexHtml?"index.html":(githubTarget.path||githubFileMatch);
+ const evidence=createEvidence();
+ const markEvidence=(name,result)=>{ const owner=result?.owner?.login||result?.owner||githubTarget.owner||""; const repo=result?.repo||result?.name||githubTarget.repo||""; const branch=result?.default_branch||result?.branch||"main"; const path=result?.path||githubTarget.path||"repository"; const commit=result?.commit||result?.sha||""; if(owner&&repo) evidence.set({repository:owner+"/"+repo}); evidence.set({branch,path}); if(commit) evidence.set({commit}); evidence.addTest(name,true,"Verified by GitHub API/read-back"); };
 if(githubRequestedFile&&githubRequestedRepo){
  const repoMarker=githubRequestedRepo+"/";
  const repoAt=githubRequestedFile.toLowerCase().indexOf(repoMarker.toLowerCase());
@@ -531,14 +533,12 @@ const models=quickChatMode
  const generateWithFallback=async(useTools=true)=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;};
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  const retryGuard=createRetryGuard();
- const evidence=createEvidence();
  const recovery=createRecoveryStateMachine();
  const recoveryStep=(next,details="")=>{ recovery.transition(next); activity.push({tool:"recovery:"+next,state:"done",details}); };
  const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|file|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
  
  const githubRequestedPath=(latestText.match(/(?:`|\b)(index\.html|[A-Za-z0-9._/-]+\.(?:html|css|js|jsx|ts|tsx|json|md))(?=`|\b)/i)||[])[1]||"";
  
- const markEvidence=(name,result)=>{ const owner=result?.owner?.login||result?.owner||githubTarget.owner||""; const repo=result?.repo||result?.name||githubTarget.repo||""; const branch=result?.default_branch||result?.branch||"main"; const path=result?.path||githubTarget.path||githubRequestedPath||"repository"; const commit=result?.commit||result?.sha||""; if(owner&&repo) evidence.set({repository:owner+"/"+repo}); evidence.set({branch,path}); if(commit) evidence.set({commit}); evidence.addTest(name,true,"Verified by GitHub API/read-back"); };
  let githubReadCount=0,totalToolCalls=0,consecutiveFailures=0;
  const knownPaths=new Set(["","/"]);
  let rootListed=false;

@@ -20,14 +20,14 @@ test("AI router fails clearly when no provider is configured",()=>{
     openai:process.env.OPENAI_API_KEY,
     anthropic:process.env.ANTHROPIC_API_KEY,
     hf:process.env.HF_TOKEN,
-    core:process.env.BHAI_CORE_API_KEY
+    coreUrl:process.env.BHAI_CORE_URL
   };
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_API_KEY;
   delete process.env.OPENAI_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.HF_TOKEN;
-  delete process.env.BHAI_CORE_API_KEY;
+  delete process.env.BHAI_CORE_URL;
   try{
     assert.deepEqual(getConfiguredAIProviders(),[]);
     assert.throws(()=>routeAI({task:"hello"}),/No AI provider is configured/);
@@ -37,7 +37,7 @@ test("AI router fails clearly when no provider is configured",()=>{
     if(original.openai!==undefined)process.env.OPENAI_API_KEY=original.openai;
     if(original.anthropic!==undefined)process.env.ANTHROPIC_API_KEY=original.anthropic;
     if(original.hf!==undefined)process.env.HF_TOKEN=original.hf;
-    if(original.core!==undefined)process.env.BHAI_CORE_API_KEY=original.core;
+    if(original.coreUrl!==undefined)process.env.BHAI_CORE_URL=original.coreUrl;
   }
 });
 
@@ -102,15 +102,15 @@ test("AI router falls back when the primary provider reports high demand",async(
 
 
 test("BHAI-CORE is a first-class router provider without exposing its API key",()=>{
-  const original=process.env.BHAI_CORE_API_KEY;
-  process.env.BHAI_CORE_API_KEY="test-core-key";
+  const original=process.env.BHAI_CORE_URL;
+  process.env.BHAI_CORE_URL="https://core.test";
   try{
     const status=getAIProviderStatus().find(p=>p.id==="core");
     assert.equal(status?.configured,true);
     assert.equal(routeAI({task:"fix this code"}),"core");
     assert.equal(Object.prototype.hasOwnProperty.call(status||{},"apiKey"),false);
   }finally{
-    if(original===undefined)delete process.env.BHAI_CORE_API_KEY; else process.env.BHAI_CORE_API_KEY=original;
+    if(original===undefined)delete process.env.BHAI_CORE_URL; else process.env.BHAI_CORE_URL=original;
   }
 });
 

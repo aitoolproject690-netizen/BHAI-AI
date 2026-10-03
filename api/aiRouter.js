@@ -281,7 +281,8 @@ export async function generateWithRouter({
   model=""
 }={}) {
   const first = routeAI({task,preferred,role,exclude});
-  const candidates = [first,...getConfiguredAIProviders().filter(x=>x!==first && !exclude.includes(x))];
+  const available = getConfiguredAIProviders().filter(x=>!exclude.includes(x) && x!==first);
+  const candidates = [first,...available.filter(x=>x!=="core"),...(available.includes("core")?["core"]:[])];
   let last;
   for (const id of candidates) {
     try {

@@ -16,7 +16,7 @@ const PROVIDERS = {
   core: {
     id: "core",
     name: "BHAI-CORE",
-    env: ["BHAI_CORE_API_KEY"],
+    env: [],
     modelEnv: "BHAI_CORE_MODEL",
     defaultModel: ""
   },
@@ -58,6 +58,7 @@ function firstEnv(names) {
 }
 
 function configured(id) {
+  if (id === "core") return Boolean(process.env.BHAI_CORE_URL);
   return !!firstEnv(PROVIDERS[id]?.env || []);
 }
 
@@ -123,13 +124,13 @@ function normalizeMessages(messages=[]) {
 async function callCore({apiKey,model,system,messages}) {
   const r = await fetch(coreBaseUrl()+"/v1/chat/completions", {
     method:"POST",
-    headers:{"Content-Type":"application/json","x-bhai-key":apiKey},
+    headers:{...(apiKey?{"x-bhai-key":apiKey}:{}),"Content-Type":"application/json"},
     body:JSON.stringify({messages:[...(system?[{role:"system",content:String(system)}]:[]),...normalizeMessages(messages).map(m=>({role:m.role,content:m.text}))],temperature:0.2}),
     signal:timeout(30000)
   });
   const d = await r.json().catch(()=>({}));
   if (!r.ok) throw new Error(d?.error || "BHAI-CORE request failed");
-  const text = typeof d?.text === "string" ? d.text.trim() : "";
+  const text = typeof d?.text === "string" ? d.text.trim() : String(d?.choices?.[0]?.message?.content || "").trim();
   if (!text) throw new Error("BHAI-CORE returned no text.");
   return {text,provider:"core",model:d.model || model || null};
 }
@@ -250,7 +251,7 @@ async function callAnthropic({apiKey,model,system,messages}) {
 
 async function callProvider(id,args) {
   const apiKey = firstEnv(PROVIDERS[id].env);
-  if (!apiKey) throw new Error(PROVIDERS[id].name+" is not configured.");
+  if (id !== "core" && !apiKey) throw new Error(PROVIDERS[id].name+" is not configured.");
   const model = args.model || providerModel(id);
   if (id === "core") return callCore({...args,apiKey,model});
   if (id === "gemini") return callGemini({...args,apiKey,model});

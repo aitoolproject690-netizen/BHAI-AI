@@ -113,3 +113,29 @@ test("BHAI-CORE is a first-class router provider without exposing its API key",(
     if(original===undefined)delete process.env.BHAI_CORE_API_KEY; else process.env.BHAI_CORE_API_KEY=original;
   }
 });
+
+test("AI router falls back when the primary provider has a transient network failure",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.GEMINI_API_KEY="test-gemini";
+  process.env.OPENAI_API_KEY="test-openai";
+  try{
+    let calls=0;
+    global.fetch=async(url)=>{
+      calls++;
+      if(String(url).includes("generativelanguage.googleapis.com")){
+        throw new TypeError("fetch failed");
+      }
+      return new Response(JSON.stringify({output_text:"network-fallback-ok"}),{status:200,headers:{"content-type":"application/json"}});
+    };
+    const {generateWithRouter}=await import("../api/aiRouter.js?network-fallback="+Date.now());
+    const out=await generateWithRouter({task:"hello",preferred:"gemini",role:"chat"});
+    assert.equal(out.provider,"openai");
+    assert.equal(out.text,"network-fallback-ok");
+    assert.equal(calls,2);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});

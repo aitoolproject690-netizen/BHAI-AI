@@ -19,13 +19,15 @@ test("AI router fails clearly when no provider is configured",()=>{
     google:process.env.GOOGLE_API_KEY,
     openai:process.env.OPENAI_API_KEY,
     anthropic:process.env.ANTHROPIC_API_KEY,
-    hf:process.env.HF_TOKEN
+    hf:process.env.HF_TOKEN,
+    core:process.env.BHAI_CORE_API_KEY
   };
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_API_KEY;
   delete process.env.OPENAI_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.HF_TOKEN;
+  delete process.env.BHAI_CORE_API_KEY;
   try{
     assert.deepEqual(getConfiguredAIProviders(),[]);
     assert.throws(()=>routeAI({task:"hello"}),/No AI provider is configured/);
@@ -35,6 +37,7 @@ test("AI router fails clearly when no provider is configured",()=>{
     if(original.openai!==undefined)process.env.OPENAI_API_KEY=original.openai;
     if(original.anthropic!==undefined)process.env.ANTHROPIC_API_KEY=original.anthropic;
     if(original.hf!==undefined)process.env.HF_TOKEN=original.hf;
+    if(original.core!==undefined)process.env.BHAI_CORE_API_KEY=original.core;
   }
 });
 
@@ -94,5 +97,19 @@ test("AI router falls back when the primary provider reports high demand",async(
     global.fetch=originalFetch;
     for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
     Object.assign(process.env,old);
+  }
+});
+
+
+test("BHAI-CORE is a first-class router provider without exposing its API key",()=>{
+  const original=process.env.BHAI_CORE_API_KEY;
+  process.env.BHAI_CORE_API_KEY="test-core-key";
+  try{
+    const status=getAIProviderStatus().find(p=>p.id==="core");
+    assert.equal(status?.configured,true);
+    assert.equal(routeAI({task:"fix this code"}),"core");
+    assert.equal(Object.prototype.hasOwnProperty.call(status||{},"apiKey"),false);
+  }finally{
+    if(original===undefined)delete process.env.BHAI_CORE_API_KEY; else process.env.BHAI_CORE_API_KEY=original;
   }
 });

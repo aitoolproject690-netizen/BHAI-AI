@@ -13,6 +13,13 @@
 const timeout = ms => AbortSignal.timeout(ms);
 
 const PROVIDERS = {
+  core: {
+    id: "core",
+    name: "BHAI-CORE",
+    env: ["BHAI_CORE_API_KEY"],
+    modelEnv: "BHAI_CORE_MODEL",
+    defaultModel: ""
+  },
   gemini: {
     id: "gemini",
     name: "Google Gemini",
@@ -59,6 +66,10 @@ function providerModel(id) {
   return process.env[p.modelEnv] || p.defaultModel;
 }
 
+function coreBaseUrl() {
+  return String(process.env.BHAI_CORE_URL || "https://bhai-core.onrender.com").replace(/\/+$/, "");
+}
+
 export function getAIProviderStatus() {
   return Object.values(PROVIDERS).map(p => ({
     id: p.id,
@@ -91,10 +102,10 @@ export function routeAI({ task="", preferred="", role="chat", exclude=[] }={}) {
 
   const lower = String(task).toLowerCase();
   const order = role === "reviewer"
-    ? ["openai", "anthropic", "huggingface", "gemini"]
+    ? ["openai", "anthropic", "huggingface", "gemini", "core"]
     : /code|debug|github|repo|repository|build|test|engineering/.test(lower)
-      ? ["gemini", "openai", "anthropic", "huggingface"]
-      : ["gemini", "openai", "huggingface", "anthropic"];
+      ? ["core", "gemini", "openai", "anthropic", "huggingface"]
+      : ["core", "gemini", "openai", "huggingface", "anthropic"];
 
   return order.find(id => available.includes(id)) || available[0];
 }
@@ -107,6 +118,20 @@ function normalizeMessages(messages=[]) {
       text: String(m.text ?? m.content ?? "")
     }))
     .filter(m => m.text);
+}
+
+async function callCore({apiKey,model,system,messages}) {
+  const r = await fetch(coreBaseUrl()+"/v1/chat/completions", {
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-bhai-key":apiKey},
+    body:JSON.stringify({messages:[...(system?[{role:"system",content:String(system)}]:[]),...normalizeMessages(messages).map(m=>({role:m.role,content:m.text}))],temperature:0.2}),
+    signal:timeout(30000)
+  });
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(d?.error || "BHAI-CORE request failed");
+  const text = typeof d?.text === "string" ? d.text.trim() : "";
+  if (!text) throw new Error("BHAI-CORE returned no text.");
+  return {text,provider:"core",model:d.model || model || null};
 }
 
 async function callGemini({apiKey,model,system,messages}) {
@@ -227,6 +252,7 @@ async function callProvider(id,args) {
   const apiKey = firstEnv(PROVIDERS[id].env);
   if (!apiKey) throw new Error(PROVIDERS[id].name+" is not configured.");
   const model = args.model || providerModel(id);
+  if (id === "core") return callCore({...args,apiKey,model});
   if (id === "gemini") return callGemini({...args,apiKey,model});
   if (id === "openai") return callOpenAI({...args,apiKey,model});
   if (id === "anthropic") return callAnthropic({...args,apiKey,model});

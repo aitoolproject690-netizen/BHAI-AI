@@ -71,7 +71,7 @@ function App(){
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),doIt=true;
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
  const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[apiKeysOpen,setApiKeysOpen]=useState(false),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3});
- const end=useRef(null),recognition=useRef(null),workTicker=useRef(null);
+ const end=useRef(null),recognition=useRef(null),workTicker=useRef(null);\n const[authChecked,setAuthChecked]=useState(false);\n useEffect(()=>{let live=true;(async()=>{const t=authToken();if(!t){if(live)setAuthChecked(true);return;}try{const r=await fetch(apiUrl("/api/accounts?me=1"),{headers:authHeaders()});const d=await r.json();if(live&&r.ok&&d.account){setAccount(d.account);setAuthChecked(true);return;}}catch{}localStorage.removeItem("bhai_user_session");sessionStorage.removeItem("bhai_user_session");if(live){setAccount(null);setAuthChecked(true);}})();return()=>{live=false}},[]);
 
  useEffect(()=>{if(!sessions.length){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);
  useEffect(()=>{localStorage.setItem(K,JSON.stringify(sessions));end.current?.scrollIntoView({behavior:'smooth'})},[sessions]);
@@ -251,8 +251,7 @@ function App(){
   }catch(e){upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ '+e.message}])}finally{setRunning(false)}
  }
  async function copyText(text,id){try{await navigator.clipboard.writeText(text);setCopied(id);setTimeout(()=>setCopied(''),1200)}catch{}}
- const filtered=sessions.filter(s=>s.title.toLowerCase().includes(search.toLowerCase()));
- return <div className="app">
+ const filtered=sessions.filter(s=>s.title.toLowerCase().includes(search.toLowerCase()));\n if(!authChecked)return <div className="app"><div className="panelOverlay"><div className="utilityPanel accountPanel"><div className="utilityBody" style={{textAlign:"center",padding:"48px"}}><Loader2 className="spin" size={24}/><div style={{marginTop:10}}>BHAI X security check...</div></div></div></div></div>;\n if(!account)return <div className="app"><AccountPanel ownerOnly onClose={()=>{}} onAccount={a=>{if(a)setAccount(a)}}/></div>;\n return <div className="app">
   <aside className={sidebar?'sidebar':'sidebar closed'}>
    <div className="sideTop">
     <div className="brand"><div className="logo">B</div><div><b>BHAI X</b><span>Personal AI Agent</span></div></div>

@@ -1,4 +1,5 @@
 import {getDb,initDb} from "./db.js";
 import {getSession} from "./accounts.js";
+import {validateApiKey} from "./apiKeys.js";
 export function json(res,status,data){res.statusCode=status;res.setHeader("Content-Type","application/json; charset=utf-8");res.end(JSON.stringify(data));}
-export async function requireSession(req,res){await initDb().catch(()=>false);const db=await getDb();if(!db){json(res,503,{error:"DATABASE_URL is required"});return null;}const account=await getSession(req,db);if(!account){json(res,401,{error:"Login required. Open Account and login before using this feature."});return null;}return account;}
+export async function requireSession(req,res){await initDb().catch(()=>false);const db=await getDb();if(!db){json(res,503,{error:"DATABASE_URL is required"});return null;}const account=await getSession(req,db);if(account)return account;const raw=String(req.headers?.authorization||"").replace(/^Bearer\\s+/i,"").trim();if(raw.startsWith("bhai_live_")){const key=await validateApiKey(raw);if(key)return {id:key.account_id,role:"api",apiKeyId:key.id,apiKeyName:key.name,scopes:key.scopes};}json(res,401,{error:"Login required or valid BHAI-X API key required."});return null;}

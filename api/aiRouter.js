@@ -67,7 +67,7 @@ function providerModel(id) {
 }
 
 function coreBaseUrl() {
-  return String(process.env.BHAI_CORE_URL || "https://bhai-core.onrender.com").replace(/\\/+$/, "");
+  return String(process.env.BHAI_CORE_URL || "https://bhai-core.onrender.com").replace(/\/+$/, "");
 }
 
 export function getAIProviderStatus() {

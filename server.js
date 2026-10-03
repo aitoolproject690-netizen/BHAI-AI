@@ -60,7 +60,8 @@ http.createServer((req,res)=>{
   const u=new URL(req.url||"/","http://localhost");
   if(routes[u.pathname]){
     const fn=routes[u.pathname];
-    if(u.pathname==="/api/tests")return runApi(async(req,res)=>{if(!await requireSession(req,res))return;return fn(req,res);},req,res);
+    // BHAI-X is a private owner-only app. Authentication is intentionally bypassed only for login/account bootstrap and Render health checks.
+    if(u.pathname!=="/api/accounts"&&u.pathname!=="/api/health")return runApi(async(req,res)=>{if(!await requireSession(req,res))return;return fn(req,res);},req,res);
     return runApi(fn,req,res);
   }
   let p=decodeURIComponent(u.pathname);if(p==="/")p="/index.html";

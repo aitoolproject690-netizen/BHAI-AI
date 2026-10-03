@@ -689,10 +689,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 
  for(let round=0;round<maxRounds && totalToolCalls<maxToolCalls;round++){
   let d; try{d=await generateWithFallback(!quickChatMode)}catch(e){
-   if(quickChatMode){
-    try{modelCache.models=null; const fallbackModels=await getModelsFast(); const oldModels=models.splice(0,models.length,...fallbackModels); d=await generateWithFallback(false);}
-    catch(e2){return json(res,502,{error:e2.message||e.message,activity})}
-   }else return json(res,502,{error:e.message,activity});
+   return json(res,502,{error:e.message||String(e),activity});
   }
   const candidate=d.candidates?.[0],parts=candidate?.content?.parts||[];
   const calls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);

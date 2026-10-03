@@ -124,7 +124,7 @@ async function callCore({apiKey,model,system,messages}) {
   const r = await fetch(coreBaseUrl()+"/v1/chat/completions", {
     method:"POST",
     headers:{"Content-Type":"application/json","x-bhai-key":apiKey},
-    body:JSON.stringify({messages:normalizeMessages(messages),temperature:0.2}),
+    body:JSON.stringify({messages:[...(system?[{role:"system",content:String(system)}]:[]),...normalizeMessages(messages).map(m=>({role:m.role,content:m.text}))],temperature:0.2}),
     signal:timeout(30000)
   });
   const d = await r.json().catch(()=>({}));

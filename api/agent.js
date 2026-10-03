@@ -322,6 +322,27 @@ export default async function handler(req,res){
   };
   return json(res,200,{ok:true,text:casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
  }
+
+// Deterministic media routing: explicit image requests must never fall through to the engineering/GitHub agent.
+// This is intentionally server-side so stale frontend bundles or AI routing cannot turn an image request into repo work.
+const directImageRequest=/\b(?:generate|create|make|draw|design|render|visualize)\b.{0,80}\b(?:image|picture|photo|poster|illustration|artwork)\b|\b(?:image|picture|photo|poster|illustration|artwork)\b.{0,80}\b(?:generate|create|make|draw|design|render|visualize)\b/i.test(latestUserMessage);
+if(directImageRequest){
+ try{
+  await reserveMedia(db,account.id,"image",10);
+  try{
+   const cleanPrompt=latestUserMessage
+    .replace(/^\s*(?:create|generate|make|draw|design|render|visualize)\s+(?:an?\s+)?(?:image|picture|photo|poster|illustration|artwork)\s*(?:of|for)?\s*/i,"")
+    .trim()||latestUserMessage;
+   const media=await generateImage(cleanPrompt,"16:9");
+   return json(res,200,{ok:true,text:"## 🖼️ Image generated\n\nBHAI X ne request ko direct image pipeline par route kiya — GitHub/Mission execution bypass kiya gaya.",activity:[{tool:"generate_image",state:"done",details:"Direct image request routed to the media generator."}],images:[{mimeType:media.mimeType,data:media.data}],usage:await getMediaUsage(db,account.id)});
+  }catch(e){
+   await releaseMedia(db,account.id,"image");
+   return json(res,502,{error:"Image generation failed: "+String(e?.message||e),activity:[{tool:"generate_image",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});
+  }
+ }catch(e){
+  return json(res,502,{error:"Image generation pre-flight failed: "+String(e?.message||e),activity:[{tool:"generate_image",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});
+ }
+}
  const contextRoute=routeConversationContext(messages,latestUserMessage);
  const routedMessages=contextRoute.messages;
  const userTaskMessages=routedMessages.filter(m=>m&&m.role==="user").map(m=>String(m.text||"")).filter(Boolean);

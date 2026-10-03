@@ -323,6 +323,26 @@ export default async function handler(req,res){
   return json(res,200,{ok:true,text:casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
  }
 
+// Deterministic media routing: explicit video requests always win over image-reference wording in video prompts.
+const directVideoRequest=/\b(?:generate|create|make|render|produce)\b.{0,100}\b(?:video|clip|animation|animated)\b|\b(?:video|clip|animation|animated)\b.{0,100}\b(?:generate|create|make|render|produce)\b|\bimage[- ]to[- ]video\b|\bvideo\b.{0,100}\b(?:from|using|with)\b.{0,100}\bimage\b/i.test(latestUserMessage);
+if(directVideoRequest){
+ try{
+  await reserveMedia(db,account.id,"video",3);
+  try{
+   const cleanPrompt=latestUserMessage
+    .replace(/^\s*(?:create|generate|make|render|produce)\s+(?:a\s+)?(?:video|clip|animation|animated\s+video)\s*(?:of|from|using)?\s*/i,"")
+    .trim()||latestUserMessage;
+   const media=await generateVideo(cleanPrompt,5,"16:9");
+   return json(res,200,{ok:true,text:"## 🎬 Video generated\\n\\nBHAI X ne request ko direct video pipeline par route kiya — image/GitHub/Mission routing bypass ki gayi.",activity:[{tool:"generate_video",state:"done",details:"Direct video request routed to the video generator."}],images:[{mimeType:media.mimeType,data:media.data,video:true,duration:media.duration}],usage:await getMediaUsage(db,account.id)});
+  }catch(e){
+   await releaseMedia(db,account.id,"video");
+   return json(res,502,{error:"Video generation failed: "+String(e?.message||e),activity:[{tool:"generate_video",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});
+  }
+ }catch(e){
+  return json(res,502,{error:"Video generation pre-flight failed: "+String(e?.message||e),activity:[{tool:"generate_video",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});
+ }
+}
+
 // Deterministic media routing: explicit image requests must never fall through to the engineering/GitHub agent.
 // This is intentionally server-side so stale frontend bundles or AI routing cannot turn an image request into repo work.
 const directImageRequest=/\b(?:generate|create|make|draw|design|render|visualize)\b.{0,80}\b(?:image|picture|photo|poster|illustration|artwork)\b|\b(?:image|picture|photo|poster|illustration|artwork)\b.{0,80}\b(?:generate|create|make|draw|design|render|visualize)\b/i.test(latestUserMessage);

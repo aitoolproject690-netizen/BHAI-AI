@@ -130,7 +130,7 @@ async function callCore({apiKey,model,system,messages}) {
   });
   const d = await r.json().catch(()=>({}));
   if (!r.ok) throw new Error(d?.error || "BHAI-CORE request failed");
-  const text = typeof d?.text === "string" ? d.text.trim() : String(d?.choices?.[0]?.message?.content || "").trim();
+  const text = typeof d?.text === "string" ? d.text.trim() : (typeof d?.output_text === "string" ? d.output_text.trim() : String(d?.choices?.[0]?.message?.content || "").trim());
   if (!text) throw new Error("BHAI-CORE returned no text.");
   return {text,provider:"core",model:d.model || model || null};
 }

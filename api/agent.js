@@ -657,12 +657,25 @@ if(githubLinkRequest && githubRequestedRepo && autoDoIt && !githubFileRequest){
   return json(res,502,{error:"GitHub check failed: "+(e?.message||"Unknown GitHub error"),activity});
  }
 }
-const models=quickChatMode
-  ? [process.env.GEMINI_FAST_MODEL||preferred[0]]
-  : await getModelsFast();
- const isTransientModelError=(e)=>/408|429|500|502|503|504|RESOURCE_EXHAUSTED|UNAVAILABLE|INTERNAL|quota|rate.?limit|high demand|temporarily unavailable|service unavailable|try again later|overloaded|timeout|timed out/i.test(String(e?.message||e));
- const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
- const generateWithFallback=async(useTools=true)=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,system,contents,useTools,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;};
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+ const generateWithFallback=async(useTools=true)=>{
+  const routed=await generateWithRouter({
+   task:latestText,
+   system:system+(useTools
+    ?"\n\nBHAI-CORE EXECUTION MODE: Return the best direct answer. Do not claim that external tools were used unless the deterministic GitHub executor has actually produced evidence."
+    :""),
+   messages:compactContents(contents).flatMap(x=>{
+    const parts=Array.isArray(x?.parts)?x.parts:[];
+    const text=parts.filter(p=>typeof p?.text==="string").map(p=>p.text).join("\n").trim();
+    if(!text)return [];
+    return [{role:x.role==="model"?"assistant":"user",text}];
+   }),
+   preferred:"core",
+   role:"engineering",
+   fallback:true
+  });
+  return {candidates:[{content:{role:"model",parts:[{text:routed.text}]}}],provider:routed.provider,model:routed.model};
+ };
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  const retryGuard=createRetryGuard();
  const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|file|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
@@ -809,7 +822,7 @@ const models=quickChatMode
 
  const finalSystem=system+" You have reached the safe execution budget. Do not call any more tools. Use the information already gathered and give the best possible final response. If the requested code change was not completed, clearly state what remains."+ (requiresGithubExecution ? " IMPORTANT: Never claim GitHub completion unless actual GitHub tool results verified the repository/file/commit. If evidence is missing, explicitly say GitHub execution was not verified." : "");
  try{
-  const fd=await (async()=>{let last;for(const m of [...new Set(models.concat(preferred))]){for(let attempt=0;attempt<3;attempt++){try{return await geminiGenerate(key,m,finalSystem,compactContents(contents),false,activeToolDefinitions)}catch(e){last=e;if(!isTransientModelError(e))throw e;if(attempt<2) await sleep(1500*Math.pow(2,attempt)+Math.floor(Math.random()*400));}}}throw last;})();
+  const fd=await generateWithFallback(false);
   const fp=fd.candidates?.[0]?.content?.parts||[],ft=fp.filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
   if(githubLinkRequest&&githubVerificationConfirmed&&(!githubFileRequest||githubFileVerified)&&githubEvidence?.url){
    const title=githubEvidence.name||githubEvidence.full_name||"GitHub repository";

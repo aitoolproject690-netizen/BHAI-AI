@@ -52,8 +52,8 @@ export function getMedicalSafetyPrompt(task=""){
   ].filter(Boolean).join("\n");
 }
 
-const MED_ACTION_RE = /(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोकें|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें).{0,120}(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली)/i;
-const MED_ACTION_RE_REVERSED = /(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली).{0,120}(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोकें|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें)/i;
+const MED_ACTION_RE = /(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|rok|roko|rok de|rok dein|band|band karo|band kar|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोक|रोकें|बंद|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें).{0,120}(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली)/i;
+const MED_ACTION_RE_REVERSED = /(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली).{0,120}(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|rok|roko|rok de|rok dein|band|band karo|band kar|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोक|रोकें|बंद|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें)/i;
 const SPECIFIC_DOSE_RE = /\b(?:aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|tablet|capsule|syrup|medicine|medication|goli)\b[^\n]{0,100}\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml)\b/i;
 
 function removeUnsafeLine(line){

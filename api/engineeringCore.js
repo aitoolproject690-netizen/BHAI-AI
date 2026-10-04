@@ -10,12 +10,31 @@ export function normalizeFilePath(value=''){
  if(!SAFE_PATH.test(p)) throw new Error('Invalid repository path.');
  return p;
 }
+const REPO_PART='[A-Za-z0-9][A-Za-z0-9._-]{0,99}';
+export function extractGithubRepoReference(text=''){
+ const input=String(text||'').trim();
+ const make=(m)=>m?{owner:m[1],repo:m[2]}:null;
+ let m=input.match(new RegExp('(?:https?:\\/\\/)?(?:www\\.)?github\\.com\\/('+REPO_PART+')\\/('+REPO_PART+')(?:[\\/\\s?#]|$)','i'));
+ if(m) return make(m);
+ m=input.match(new RegExp('(?:github\\s+(?:repository|repo)|repository|repo)\\s*(?:name\\s*)?(?:[:=#-]\\s*)?[`\\\"]?('+REPO_PART+')\\/('+REPO_PART+')(?:[`\\\"]|\\b)','i'));
+ if(m) return make(m);
+ m=input.match(new RegExp('github\\s+(?:par|pe)\\s*[`\\\"]?('+REPO_PART+')\\/('+REPO_PART+')(?:[`\\\"]|\\s+(?:repo|repository)\\b|[.,;!?]|$)','i'));
+ if(m) return make(m);
+ m=input.match(new RegExp('[`\\\"]('+REPO_PART+')\\/('+REPO_PART+')[`\\\"]','i'));
+ if(m && /(?:github|repo(?:sitory)?)/i.test(input)) return make(m);
+ m=input.match(new RegExp('(?:^|[\\s`\\\"] )('+REPO_PART+')\\/('+REPO_PART+')\\/([^\\s`\\\"<>]+)','i'));
+ if(m && /\\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml)$/i.test(m[3])) return {owner:m[1],repo:m[2]};
+ m=input.match(new RegExp('(?:^|[\\s`\\\"] )('+REPO_PART+')\\/('+REPO_PART+')(?:\\s+)(?:repo|repository)\\b','i'));
+ if(m) return make(m);
+ return null;
+}
 export function resolveGithubTarget(text=''){
  const input=String(text||'').trim();
- const explicit=input.match(/(?:^|\s|\x60|https?:\/\/github\.com\/)([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})(?:\/([^\s\x60"\x27<>]+))?/i);
- let owner=explicit?.[1]||'', repo=explicit?.[2]||'', path=explicit?.[3]||'';
- if(path) path=normalizeFilePath(path);
- const fileMatch=input.match(/(?:^|[\s\x60"\x27\/])((?:[A-Za-z0-9._~-]+\/)*[A-Za-z0-9._~-]+\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml))/i);
+ const target=extractGithubRepoReference(input);
+ let owner=target?.owner||'', repo=target?.repo||'', path='';
+ const urlPath=input.match(new RegExp('(?:https?:\\/\\/)?(?:www\\.)?github\\.com\\/'+REPO_PART+'\\/'+REPO_PART+'\\/([^\\s?#`\\\"<>]+)','i'));
+ if(urlPath) path=normalizeFilePath(urlPath[1]);
+ const fileMatch=input.match(/(?:^|[\\s\\x60\"\\x27\\/])((?:[A-Za-z0-9._~-]+\\/)*[A-Za-z0-9._~-]+\\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml))/i);
  if(!path&&fileMatch) path=normalizeFilePath(fileMatch[1]);
  if(repo&&path){ const marker=repo+'/'; const at=path.toLowerCase().indexOf(marker.toLowerCase()); if(at>=0) path=normalizeFilePath(path.slice(at+marker.length)); }
  return {owner:owner.trim(),repo:repo.trim(),path,raw:input};

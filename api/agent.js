@@ -1,4 +1,7 @@
 import { selectSkillsForTask, getSkillPromptContext } from "../src/skillsRouter.js";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { ownerState, ownerReady } from "./owner.js";
 import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
@@ -256,7 +259,7 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
   }catch(e){errors.push("Pollinations: "+String(e?.message||e).slice(0,500));}
  }else errors.push("Pollinations: POLLINATIONS_API_KEY is not configured");
 
- const spaces=(process.env.HF_VIDEO_SPACES||"Lightricks/LTX-2-3,fffiloni/Wan2.1,Wan-AI/Wan2.1,techfreakworm/LTX2.3-Studio").split(",").map(x=>x.trim()).filter(Boolean).slice(0,6);
+ const spaces=(process.env.HF_VIDEO_SPACES||"Lightricks/LTX-2-3,Lightricks/ltx-video-distilled,Wan-AI/Wan2.1,techfreakworm/LTX2.3-Studio").split(",").map(x=>x.trim()).filter(Boolean).slice(0,6);
  try{
   const {Client,handle_file}=await import("@gradio/client");
   for(const space of spaces){
@@ -283,29 +286,37 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
     if(!wanted)throw new Error("No compatible "+(sourceImage?"image-to-video":"text-to-video")+" endpoint exposed by Space.");
     const meta=named[wanted]||{};
     const params=Array.isArray(meta.parameters)?meta.parameters:[];
-    const imageRef=sourceImage?.data
-      ? handle_file(Buffer.from(sourceImage.data,"base64"))
-      : null;
-    const args=params.map(p=>{
-     const label=String(p.label||p.name||"").toLowerCase();
-     if(/input.?image|image|img/.test(label)) return imageRef;
-     if(/prompt|text/.test(label)) return String(prompt).trim();
-     if(/duration|seconds/.test(label)) return seconds;
-     if(/enhance.?prompt/.test(label)) return false;
-     if(/randomize.?seed/.test(label)) return true;
-     if(/seed/.test(label)) return 0;
-     if(/^height$|height/.test(label)) return aspectSize.height;
-     if(/^width$|width/.test(label)) return aspectSize.width;
-     if(/aspect.?ratio/.test(label)) return aspectRatio;
-     if(/size|resolution/.test(label)) return aspectRatio==="9:16"?"720*1280":aspectRatio==="1:1"?"960*960":aspectRatio==="4:5"?"832*1088":"1280*720";
-     if(/watermark/.test(label)) return false;
-     if(/negative.?prompt/.test(label)) return "";
-     if(/steps|inference/.test(label)) return 8;
-     if(/guidance|cfg/.test(label)) return 3.5;
-     if(p.default!==undefined) return p.default;
-     return undefined;
-    });
-    const submitted=await client.predict(wanted,args);
+    let tempImagePath=null;
+    try{
+     if(sourceImage?.data){
+      tempImagePath=path.join(os.tmpdir(),"bhai-i2v-"+Date.now()+"-"+Math.random().toString(36).slice(2)+".png");
+      await fs.writeFile(tempImagePath,Buffer.from(sourceImage.data,"base64"));
+     }
+     const imageRef=sourceImage?.data ? handle_file(tempImagePath) : null;
+     const args=params.map(p=>{
+      const label=String(p.label||p.name||"").toLowerCase();
+      if(/input.?image|image|img/.test(label)) return imageRef;
+      if(/input.?video|video.?file/.test(label)) return null;
+      if(/prompt|text/.test(label)) return String(prompt).trim();
+      if(/duration|seconds/.test(label)) return Math.min(seconds,5);
+      if(/enhance.?prompt/.test(label)) return false;
+      if(/high.?res|high.?resolution/.test(label)) return false;
+      if(/improve.?texture|multi.?scale/.test(label)) return false;
+      if(/mode|task/.test(label)) return sourceImage?.data ? "image-to-video" : "text-to-video";
+      if(/randomize.?seed/.test(label)) return true;
+      if(/seed/.test(label)) return 0;
+      if(/^height$|height/.test(label)) return sourceImage?.data ? (aspectRatio==="9:16"?512:aspectRatio==="1:1"?512:512) : 512;
+      if(/^width$|width/.test(label)) return sourceImage?.data ? (aspectRatio==="9:16"?768:aspectRatio==="1:1"?512:768) : 768;
+      if(/aspect.?ratio/.test(label)) return aspectRatio;
+      if(/size|resolution/.test(label)) return aspectRatio==="9:16"?"720*1280":aspectRatio==="1:1"?"960*960":aspectRatio==="4:5"?"832*1088":"1280*720";
+      if(/watermark/.test(label)) return false;
+      if(/negative.?prompt/.test(label)) return "";
+      if(/steps|inference/.test(label)) return 8;
+      if(/guidance|cfg/.test(label)) return 3.0;
+      if(p.default!==undefined) return p.default;
+      return undefined;
+     });
+     const submitted=await client.predict(wanted,args);
     const submittedData=submitted?.data??submitted;
     let video=await extractVideo(submittedData);
     if(video)return {...video,duration:seconds,provider:"huggingface-space:"+space+":"+wanted};
@@ -336,6 +347,9 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
      throw new Error("Async endpoint returned task ID but Space exposes no status_refresh endpoint.");
     }
     throw new Error("Video endpoint returned no video or task ID: "+JSON.stringify(submittedData).slice(0,350));
+    }finally{
+     if(tempImagePath){try{await fs.unlink(tempImagePath);}catch{}}
+    }
    }catch(e){errors.push("Hugging Face "+space+": "+String(e?.message||e).slice(0,500));}
   }
  }catch(e){errors.push("Hugging Face fallback unavailable: "+String(e?.message||e).slice(0,350));}

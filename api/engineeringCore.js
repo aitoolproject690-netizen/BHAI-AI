@@ -5,7 +5,7 @@ const NON_REPO_PAIRS=new Set(["logs/steps","steps/logs","logs/jobs","jobs/logs",
 
 export function normalizeRepoName(value=''){ return String(value).trim().replace(/^\\/+|\\/+$/g,''); }
 export function normalizeFilePath(value=''){
- let p=String(value||'').trim().replace(/^[\\s"\\x27]+|[\\s"\\x27]+$/g,'');
+ let p=String(value||'').trim().replace(/^[\s"\x27]+|[\s"\x27]+$/g,'');
  p=p.split(/[?#]/,1)[0].replace(/^\\/+|\\/+$/g,'').replace(/\\\\+/g,'/');
  p=p.split('/').filter(Boolean).join('/');
  if(!p||p==='.'||p==='..') return '';

@@ -25,7 +25,7 @@ async function readJsonResponse(response,label='Backend'){
  const raw=await response.text();
  if(!raw.trim()) throw new Error(label+' returned an empty response (HTTP '+response.status+').');
  try{return JSON.parse(raw);}catch{
-  const preview=raw.replace(/\\s+/g,' ').slice(0,220);
+  const preview=raw.replace(/\s+/g,' ').slice(0,220);
   throw new Error(label+' returned invalid JSON (HTTP '+response.status+'): '+preview);
  }
 }

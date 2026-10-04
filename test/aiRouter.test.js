@@ -20,7 +20,8 @@ test("AI router fails clearly when no provider is configured",()=>{
     openai:process.env.OPENAI_API_KEY,
     anthropic:process.env.ANTHROPIC_API_KEY,
     hf:process.env.HF_TOKEN,
-    coreUrl:process.env.BHAI_CORE_URL
+    coreUrl:process.env.BHAI_CORE_URL,
+    coreKey:process.env.BHAI_CORE_API_KEY
   };
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_API_KEY;
@@ -28,6 +29,7 @@ test("AI router fails clearly when no provider is configured",()=>{
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.HF_TOKEN;
   delete process.env.BHAI_CORE_URL;
+  delete process.env.BHAI_CORE_API_KEY;
   try{
     assert.deepEqual(getConfiguredAIProviders(),[]);
     assert.throws(()=>routeAI({task:"hello"}),/No AI provider is configured/);
@@ -38,6 +40,7 @@ test("AI router fails clearly when no provider is configured",()=>{
     if(original.anthropic!==undefined)process.env.ANTHROPIC_API_KEY=original.anthropic;
     if(original.hf!==undefined)process.env.HF_TOKEN=original.hf;
     if(original.coreUrl!==undefined)process.env.BHAI_CORE_URL=original.coreUrl;
+    if(original.coreKey!==undefined)process.env.BHAI_CORE_API_KEY=original.coreKey;
   }
 });
 

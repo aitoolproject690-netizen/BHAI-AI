@@ -270,7 +270,7 @@ function App(){
   <main>
    <header>
     {!sidebar&&<button className="openSide" onClick={()=>setSidebar(true)}><PanelLeftOpen size={19}/></button>}
-    <div className="topTitle"><b>BHAI X</b><button className="modelBtn">BHAI X Agent <ChevronDown size={14}/></button></div>
+    <div className="topTitle"><b>BHAI X</b></div>
     <button className="headerIconBtn" aria-label="Settings" title="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button>
    </header>
    <section className="messages">
@@ -288,17 +288,13 @@ function App(){
    {activityOpen&&<section className="activity"><div className="activityHead"><b>🔧 BHAI X ka kaam</b><span className="activityLive">LIVE</span><button onClick={()=>setActivityOpen(false)}><X size={14}/></button></div>{activity.map(x=><div className="activityItem" key={x.id}><span className={x.state==='done'?'ok':''}>{x.state==='done'?<Check size={12}/>:<Loader2 size={12} className={x.state==='running'?'spin':''}/>}</span><b>{x.step}</b><span>{x.text}</span></div>)}</section>}
    <div className="composerWrap">
     <div className="composerTools">
-     <div className="toolMenuWrap">
-      <button className="roundBtn" onClick={()=>setToolsOpen(v=>!v)}><Plus size={20}/></button>
-      {toolsOpen&&<div className="toolMenu"><button onClick={()=>useTool('web')}><Globe2/> Web search</button><button onClick={()=>useTool('image')}><ImageIcon/> Create image</button><button onClick={()=>useTool('coding')}><Code2/> Coding</button><button onClick={()=>useTool('generator')}><Code2 size={15}/> AI Code Generator</button><button onClick={()=>useTool('codefix')}><WandSparkles/> AI Code Fixer</button><button onClick={()=>useTool('github')}><Zap/> GitHub</button><button onClick={()=>useTool('build')}><Code2/> Build APK</button><button onClick={()=>useTool('deploy')}><Zap/> Deploy</button><button onClick={()=>useTool('connect')}><Plug/> Connect App</button><button onClick={()=>useTool('system')}><ActivityIcon/> System Center</button></div>}
-     </div>
-     <label className="roundBtn attach"><Paperclip size={19}/><input type="file" hidden onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setFileInfo({name:f.name,text:(await f.text()).slice(0,50000)})}}/></label>
-     <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message BHAI X..." rows="1"/>
+     <label className="roundBtn attach" title="Attach file"><Paperclip size={19}/><input type="file" hidden onChange={async e=>{const f=e.target.files?.[0];if(!f)return;setFileInfo({name:f.name,text:(await f.text()).slice(0,50000)})}}/></label>
+     <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Jo karna hai seedha likho..." rows="1"/>
      <button className={listening?'roundBtn mic listening':'roundBtn mic'} onClick={toggleMic}><Mic size={19}/></button>
      <button className="sendBtn" disabled={!input.trim()&&!fileInfo||running} onClick={()=>send()}>{running?<Loader2 className="spin" size={19}/>:<Send size={19}/>}</button>
     </div>
     {fileInfo&&<div className="fileChip"><Paperclip size={12}/> {fileInfo.name}<button onClick={()=>setFileInfo(null)}><X size={12}/></button></div>}
-    <div className="composerHint">BHAI X can search, code, generate images, work with files and execute tasks. <b>Check important results.</b></div>
+    <div className="composerHint">🧠 BHAI X khud samjhega request ka intent — chat, research, coding, GitHub, image, video, app ya doosra kaam. Koi tool select karne ki zarurat nahi.</div>
    </div>
   </main>
  {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false)}/>} {brainOpen&&<ProjectBrainPanel onClose={()=>setBrainOpen(false)}/>} {apiKeysOpen&&<APIKeysPanel onClose={()=>setApiKeysOpen(false)}/>} \n </div>

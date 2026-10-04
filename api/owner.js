@@ -13,14 +13,15 @@ async function getDb(){
   if(!process.env.DATABASE_URL){db=false;return db}
   try{
     const {Client}=await import("pg");
-    const c=new Client({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false}});
+    const c=new Client({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false},connectionTimeoutMillis:5000});
     await c.connect();
     await c.query("CREATE TABLE IF NOT EXISTS bhai_owner_state (id INTEGER PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     db=c;return db;
   }catch(e){console.error("Owner persistence unavailable:",e.message);db=false;return db}
 }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 export const ownerReady=(async()=>{
-  const c=await getDb(); if(!c)return;
+  const c=await Promise.race([getDb(),sleep(5000).then(()=>null)]); if(!c)return;
   try{
     const r=await c.query("SELECT data FROM bhai_owner_state WHERE id=1");
     if(r.rows[0]?.data)Object.assign(state,r.rows[0].data);

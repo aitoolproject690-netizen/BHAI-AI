@@ -20,7 +20,7 @@ const PROVIDERS = {
   core: {
     id: "core",
     name: "BHAI-CORE",
-    env: [],
+    env: ["BHAI_CORE_API_KEY", "BHAI_CORE_KEY"],
     modelEnv: "BHAI_CORE_MODEL",
     defaultModel: ""
   },

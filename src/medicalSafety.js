@@ -77,7 +77,7 @@ function buildEmergencyResponse(task=""){
     "2. **खुद drive न करें**; किसी भरोसेमंद व्यक्ति को साथ रखें।",
     "3. बैठकर/आराम की स्थिति में रहें और शारीरिक मेहनत न करें।",
     "4. Emergency operator या clinician के निर्देश follow करें।",
-    "5. चैट के आधार पर **कोई नई दवा, aspirin dose, या prescribed medicine की dose खुद से शुरू/बंद/बदलें नहीं**।",
+    "5. चैट के आधार पर **कोई नई दवा या prescribed medicine की dose खुद से शुरू/बंद/बदलें नहीं**।",
     "",
     "अगर बेहोशी, बहुत ज्यादा सांस की तकलीफ, हालत बिगड़ना, या कोई नया गंभीर लक्षण हो तो emergency dispatcher को तुरंत बताएं।"
   ].join("\n");

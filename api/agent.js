@@ -163,6 +163,7 @@ async function getMediaUsage(db,accountId){
  return {images:Number(x.images||0),videos:Number(x.videos||0),imageLimit:10,videoLimit:3};
 }
 
+// CI verification marker: hardened free video fallback
 async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=null){
  const timeout=(ms)=>AbortSignal.timeout(ms);
  const seconds=Math.min(5,Math.max(1,Number(duration)||5));

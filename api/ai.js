@@ -15,10 +15,10 @@ export default async function handler(req,res){
     providers,
     configured:getConfiguredAIProviders(),
     routing:{
-      primary:"gemini -> openai -> huggingface -> anthropic",
+      primary:"BHAI-CORE (local phone engine) -> gemini -> openai -> huggingface -> anthropic",
       reviewer:"openai -> anthropic -> huggingface -> gemini",
       fallback:true,
-      note:"Routing uses server-side credentials. API keys are never returned to the client."
+      note:"BHAI-CORE is the local-engine-first route when configured; external providers are fallback/reviewer routes. API keys are never returned to the client."
     }
   });
 }

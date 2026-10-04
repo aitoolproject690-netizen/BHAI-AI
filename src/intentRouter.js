@@ -53,3 +53,9 @@ export function detectMediaIntent(text="") {
     return {type:"image",imageToVideo:false};
   return {type:null,imageToVideo:false};
 }
+
+export function isGeneralChatIntent(text="") {
+  const raw=String(text);
+  if(isCasualIntent(raw)||detectMediaIntent(raw).type) return false;
+  return !/\b(?:github|git\s*hub|repo(?:sitory)?|code|coding|debug|fix|bug|build|deploy|app|project|website|web\s*site|apk|android|ios|file|files|image|picture|photo|poster|video|clip|animation|research|search|generate|create|make|render|draw|design|visualize|banao|bana|banado|ban[aā]o|commit|push|pull request|test|publish|download|upload|api|database|server|program|script)\b/i.test(raw);
+}

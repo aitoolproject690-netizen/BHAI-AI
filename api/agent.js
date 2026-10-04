@@ -267,7 +267,7 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
     let video=null;
     for(const item of candidates){ video=await downloadVideo(item).catch(()=>null); if(video)break; }
     if(!video){
-      const url=String(JSON.stringify(data)).match(/https?:\\/\\/[^"\\s]+\\.(?:mp4|webm)(?:\\?[^"\\s]*)?/i)?.[0];
+      const url=String(JSON.stringify(data)).match(/https?:\/\/[^"\s]+\.(?:mp4|webm)(?:\?[^"\s]*)?/i)?.[0];
       if(url) video=await downloadVideo(url).catch(()=>null);
     }
     if(!video)throw new Error("Compatible endpoint returned no downloadable video.");

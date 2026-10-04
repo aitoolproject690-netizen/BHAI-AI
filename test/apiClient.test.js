@@ -26,7 +26,7 @@ test("requestJson retries only when the caller marks the request retry-safe",asy
    ()=>requestJson("/api/test",{method:"POST"},{retrySafe:false,retries:1}),
    /empty response \(HTTP 502\)/i
   );
-  assert.equal(calls,0);
+  assert.equal(calls,1);
  }finally{
   globalThis.fetch=originalFetch;
  }

@@ -1,0 +1,52 @@
+name: BHAI X Production Medical Smoke Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-medical-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Wait for exact commit to become live
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          LIVE_URL: https://bhai-ai-vpna.onrender.com/api/health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 72); do
+            http_code="$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 15 "$LIVE_URL" || true)"
+            if [ "$http_code" = "200" ]; then
+              python - <<'PY'
+          import json, os, sys
+          with open("/tmp/health.json", "r", encoding="utf-8") as f:
+              data=json.load(f)
+          deployment=data.get("deployment") or {}
+          medical=data.get("medicalSafety") or {}
+          expected=os.environ["EXPECTED_SHA"]
+          actual=deployment.get("commit","")
+          ok=medical.get("ok") is True
+          exact=actual==expected
+          print(f"production_http={200}")
+          print(f"deployment_status={deployment.get('status')}")
+          print(f"deployment_commit_matches_expected={exact}")
+          print(f"medical_safety_ok={ok}")
+          print(f"medical_safety_failures={len(medical.get('failures') or [])}")
+          if exact and ok:
+              sys.exit(0)
+          sys.exit(2)
+          PY
+              echo "Production smoke passed on attempt $attempt."
+              exit 0
+            fi
+            echo "Attempt $attempt/72: production endpoint not ready yet (HTTP $http_code)."
+            sleep 10
+          done
+          echo "Production medical smoke test timed out waiting for exact commit + medical safety PASS."
+          exit 1

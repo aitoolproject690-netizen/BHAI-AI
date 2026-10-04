@@ -30,11 +30,13 @@ export function extractGithubRepoReference(text=''){
 }
 export function resolveGithubTarget(text=''){
  const input=String(text||'').trim();
- const target=extractGithubRepoReference(input);
- let owner=target?.owner||'', repo=target?.repo||'', path='';
- const urlPath=input.match(new RegExp('(?:https?:\\/\\/)?(?:www\\.)?github\\.com\\/'+REPO_PART+'\\/'+REPO_PART+'\\/([^\\s?#`\\\"<>]+)','i'));
- if(urlPath) path=normalizeFilePath(urlPath[1]);
- const fileMatch=input.match(/(?:^|[\\s\\x60\"\\x27\\/])((?:[A-Za-z0-9._~-]+\\/)*[A-Za-z0-9._~-]+\\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml))/i);
+ const githubUrl=input.match(/https?:\/\/github\.com\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})(?:\/([^\s\x60"\x27<>]+))?/i);
+ const contextual=input.match(/\b(?:github(?:\s+par)?(?:\s+(?:repo|repository))?|(?:my\s+)?(?:repo|repository))\s*[:=-]?\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})(?:\/([^\s\x60"\x27<>]+))?/i);
+ const actionTarget=input.match(/\b(?:fix|update|check|inspect|open|read|edit|modify|repair|work\s+on|use)\s+(?:the\s+)?([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})(?:\/([^\s\x60"\x27<>]+))?/i);
+ const explicit=githubUrl||contextual||actionTarget;
+ let owner=explicit?.[1]||'', repo=explicit?.[2]||'', path=explicit?.[3]||'';
+ if(path) path=normalizeFilePath(path);
+ const fileMatch=input.match(/(?:^|[\s\x60"\x27\/])((?:[A-Za-z0-9._~-]+\/)*[A-Za-z0-9._~-]+\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml))/i);
  if(!path&&fileMatch) path=normalizeFilePath(fileMatch[1]);
  if(repo&&path){ const marker=repo+'/'; const at=path.toLowerCase().indexOf(marker.toLowerCase()); if(at>=0) path=normalizeFilePath(path.slice(at+marker.length)); }
  return {owner:owner.trim(),repo:repo.trim(),path,raw:input};

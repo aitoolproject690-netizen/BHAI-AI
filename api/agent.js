@@ -620,8 +620,13 @@ if(directImageRequest){
  const contextRoute=routeConversationContext(messages,latestUserMessage);
  const routedMessages=contextRoute.messages;
  const userTaskMessages=routedMessages.filter(m=>m&&m.role==="user").map(m=>String(m.text||"")).filter(Boolean);
- const explicitRepoSource=[...userTaskMessages].reverse().find(t=>/(?:GitHub\s+repository|repository)\s*:\s*[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}/i.test(t))||"";
- const githubTaskText=explicitRepoSource?explicitRepoSource+"\n"+latestUserMessage:latestUserMessage;
+ const latestTarget=resolveGithubTarget(latestUserMessage);
+ const contextualRepoReference=/(?:\bus\s+repo\b|\busi\s+repo\b|\bwahi\s+repo\b|\bthat\s+repo\b|\bthis\s+repo\b|\bsame\s+repo\b|\bis\s+repo\b)/i.test(latestUserMessage);
+ const contextRepoKeys=[...new Set(userTaskMessages.map(t=>resolveGithubTarget(t)).filter(x=>x.owner&&x.repo).map(x=>x.owner+"/"+x.repo))];
+ const hasUniqueContextRepo=!latestTarget.owner&&!latestTarget.repo&&contextualRepoReference&&contextRepoKeys.length===1;
+ const githubTaskText=hasUniqueContextRepo
+  ? "GitHub repository: "+contextRepoKeys[0]+"\n"+latestUserMessage
+  : latestUserMessage;
   const latestHasExplicitGithub=/(?:github|git hub|repository|repo\b|\bcreate\s+(?:a\s+)?repo|\bgithub\s+repo)/i.test(latestUserMessage);
   const latestRequestsProjectExecution=/(?:\bapp\b|\bproject\b|\bwebsite\b|\bapk\b|\bcode\b|\bbuild\b|\bdeploy\b|\bcreate\b|\bmake\b|\bbana\b|\bban[a-z]*\b|\bfix\b|\bupdate\b|\bpublish\b|\bcommit\b|\bpush\b)/i.test(latestUserMessage);
   const freshTaskIsolation=contextRoute.mode==="fresh_task";
@@ -738,9 +743,10 @@ const githubFileRequest=/\bgithub\b/i.test(githubTaskText)&&(/\b(file|index\.htm
   const autoDoIt=true;
 let githubExecutionConfirmed=false,githubVerificationConfirmed=false,githubFileVerified=false,githubEvidence=null,githubFileEvidence=null;
 const githubTarget=resolveGithubTarget(githubTaskText);
-const githubExplicitRepoMatch=githubTaskText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i)||githubTaskText.match(/\b([A-Za-z0-9][A-Za-z0-9._-]{2,99})\/([A-Za-z0-9][A-Za-z0-9._-]{2,99})(?=\/|\b)/i);
-const githubRepoCandidates=githubTaskText.match(/\b[A-Za-z0-9][A-Za-z0-9._-]{2,99}\b/g)||[];
-let githubRequestedRepo=githubTarget.repo||githubExplicitRepoMatch?.[2]||githubRepoCandidates.find(x=>x.includes("-")&&/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(x)&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x))||"";
+const githubExplicitRepoMatch=githubTarget.owner&&githubTarget.repo
+  ? {owner:githubTarget.owner,repo:githubTarget.repo}
+  : null;
+let githubRequestedRepo=githubTarget.repo||"";
 
 const quickChat=/^(?:hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya chal raha(?: hai)?|kya chal rha(?: hai)?|kya kar rahe ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|😂|😄|bye|goodbye|khana kha liya(?: hai)?|khana khaya(?: hai)?|kha liya|chai pi liya|so gaye|so rahe ho|kahan ho|busy ho|free ho)(?:\\s+bhai)?[!?., ]*$/i.test(latestText);
 const fastMode=/^(bhai\\s+)?(ye|yeh|yah|kuch|sab|mera|meri|mujhe|isko|is|app|code|project|login|payment|error|problem|issue|bug|website|apk|video|image|file|github|render|deploy|api|server|dawa|medicine|tablet|baby|report|phone|mobile|wifi|internet|password|account)\\b.{0,220}$/i.test(latestText)
@@ -797,9 +803,11 @@ if(quickChat && !medicalMode){
 const recovery=createRecoveryStateMachine();
 const recoveryStep=(next,details="")=>{ recovery.transition(next); activity.push({tool:"recovery:"+next,state:"done",details}); };
 const githubFileMatch=(githubTaskText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";
-const explicitRepoMatch=githubTaskText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i);
+const deterministicRepoTarget=resolveGithubTarget(githubTaskText);
+const explicitRepoMatch=deterministicRepoTarget.owner&&deterministicRepoTarget.repo
+  ? [null,deterministicRepoTarget.owner,deterministicRepoTarget.repo]
+  : null;
 const explicitIndexHtml=/\bindex\.html\b/i.test(githubTaskText);
-if(explicitRepoMatch) githubRequestedRepo=explicitRepoMatch[1]+"/"+explicitRepoMatch[2];
 let githubRequestedFile=explicitIndexHtml?"index.html":(githubTarget.path||githubFileMatch);
  const evidence=createEvidence();
  const markEvidence=(name,result)=>{ const owner=result?.owner?.login||result?.owner||githubTarget.owner||""; const repo=result?.repo||result?.name||githubTarget.repo||""; const branch=result?.default_branch||result?.branch||"main"; const path=result?.path||githubTarget.path||"repository"; const commit=result?.commit||result?.commitSha||""; if(owner&&repo) evidence.set({repository:owner+"/"+repo}); evidence.set({branch,path}); if(commit) evidence.set({commit}); evidence.addTest(name,true,"Verified by GitHub API"); };
@@ -1027,23 +1035,27 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   for(const call of allowedCalls){
    if(totalToolCalls>=maxToolCalls) break;
    const name=call.name,a={...(call.args||{}),doIt:autoDoIt};
-   // Deterministic GitHub target override: the user's explicit "GitHub repository:" and "index.html" always beat AI/parser guesses.
-   const explicitToolRepo=githubTaskText.match(/(?:GitHub\s+repository|repository)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i);
+   // Deterministic GitHub target override: only the current request (or one unambiguous contextual repo) may select a repository.
+   const explicitToolTarget=resolveGithubTarget(githubTaskText);
+   const explicitToolRepo=explicitToolTarget.owner&&explicitToolTarget.repo
+     ? [null,explicitToolTarget.owner,explicitToolTarget.repo]
+     : null;
    const explicitToolIndexHtml=/\bindex\.html\b/i.test(githubTaskText);
-   if(/^github_/.test(name) && (explicitToolRepo||githubTarget.owner||githubTarget.repo||githubTarget.path)){
+   if(/^github_/.test(name)){
      if(!latestHasExplicitGithub && name!=="github_create_repo"){
        activity[activity.length-1].state="blocked";
        responseParts.push({functionResponse:{name,response:{error:"GitHub action blocked: current user message does not explicitly reference GitHub/repository work."}}});
+       continue;
+     }
+     if(name!=="github_create_repo" && (!githubTarget.owner||!githubTarget.repo)){
+       activity[activity.length-1].state="blocked";
+       responseParts.push({functionResponse:{name,response:{error:"GitHub action blocked: exact repository target is missing or ambiguous. Ask for an explicit owner/repository before reading or modifying files."}}});
        continue;
      }
     if(explicitToolRepo){ a.owner=explicitToolRepo[1]; a.repo=explicitToolRepo[2]; }
     else {
      if(githubTarget.owner) a.owner=githubTarget.owner;
      if(githubTarget.repo) a.repo=githubTarget.repo;
-    }
-    if(/^(github_read|github_update|github_create_file|github_delete_file)$/.test(name)){
-     if(explicitToolIndexHtml) a.path="index.html";
-     else if(githubRequestedFile) a.path=githubRequestedFile;
     }
    }
    const cacheKey=name+":"+JSON.stringify(a);

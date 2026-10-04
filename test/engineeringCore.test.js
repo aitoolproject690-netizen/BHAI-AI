@@ -10,6 +10,19 @@ test("resolves explicit GitHub owner/repo/file target",()=>{
   assert.equal(x.path,"index.html");
 });
 
+test("does not mistake arbitrary slash tokens for a GitHub repository",()=>{
+  const x=resolveGithubTarget("GitHub file execution failed: HTTP 404 for logs/steps (public page also returned 404).");
+  assert.equal(x.owner,"");
+  assert.equal(x.repo,"");
+});
+
+test("resolves GitHub target only from an explicit GitHub/repo context",()=>{
+  const x=resolveGithubTarget("Bhai GitHub par aitoolproject690-netizen/BHAI-AI/index.html check karo.");
+  assert.equal(x.owner,"aitoolproject690-netizen");
+  assert.equal(x.repo,"BHAI-AI");
+  assert.equal(x.path,"index.html");
+});
+
 test("normalizes safe repository paths",()=>{
   assert.equal(normalizeFilePath("/src//app.js/"),"src/app.js");
   assert.throws(()=>normalizeFilePath("../secret.js"),/Unsafe repository path/);

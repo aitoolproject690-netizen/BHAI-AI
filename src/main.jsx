@@ -149,7 +149,7 @@ function App(){
     const rr=await fetch(apiUrl('/api/chat'),{method:'POST',headers:authHeaders(),body:JSON.stringify({messages:next})});
     const d=await rr.json().catch(()=>({}));
     if(!rr.ok||d.error)throw new Error(d.error||('Chat backend HTTP '+rr.status));
-    upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||'✅':x.text}:x));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||'✅'}:x));
    }catch(e){
     upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ Chat error\\n\\n'+e.message}:x));
    }finally{setRunning(false)}

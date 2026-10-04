@@ -54,14 +54,14 @@ export function getMedicalSafetyPrompt(task=""){
 
 const MED_ACTION_RE = /(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|rok|roko|rok de|rok dein|band|band karo|band kar|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोक|रोकें|बंद|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें).{0,120}(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली)/i;
 const MED_ACTION_RE_REVERSED = /(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली).{0,120}(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|rok|roko|rok de|rok dein|band|band karo|band kar|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोक|रोकें|बंद|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें)/i;
-const SPECIFIC_DOSE_RE = /(?:\\b(?:aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|tablet|capsule|syrup|medicine|medication|goli|dawai|dava|dawa)\\b|(?:पेरासिटामोल|पैरासिटामोल|इबुप्रोफेन|आईबुप्रोफेन|एस्पिरिन|दवा|दवाई|गोली|टैबलेट|कैप्सूल|सिरप))[^\\n]{0,120}\\b\\d+(?:\\.\\d+)?\\s*(?:mg|mcg|g|ml)\\b/i;
+const SPECIFIC_DOSE_RE = /(?:\b(?:aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|tablet|capsule|syrup|medicine|medication|goli|dawai|dava|dawa)\b|(?:पेरासिटामोल|पैरासिटामोल|इबुप्रोफेन|आईबुप्रोफेन|एस्पिरिन|दवा|दवाई|गोली|टैबलेट|कैप्सूल|सिरप))[^\n]{0,120}\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml)\b/i;
 
 function removeUnsafeLine(line){
   const s=String(line);
   if(/(?:every|har)\s*15\s*[-–]?\s*20\s*(?:minutes|minute|मिनट)/i.test(s)) return true;
   if(/(?:coconut water|electrolyte(?:s)?|electrolyte drink|ORS|snack|नारियल पानी|इलेक्ट्रोलाइट|ओआरएस)/i.test(s)
      && /(?:take|drink|lo|lelo|lijiye|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|पीएँ|लेें|लें|जरूरी|इलाज)/i.test(s)) return true;
-  if(MED_ACTION_RE.test(s)||MED_ACTION_RE_REVERSED.test(s)||SPECIFIC_DOSE_RE.test(s)) return true;\n  if(/(?:\\b(?:2|3)\\s*[-–]?\\s*(?:litre|liter|liters|litres|L)\\b|(?:2|3)\\s*[-–]?\\s*लीटर|\\b(?:drink|drink plenty|पीएँ|पिएँ|पीना)\\b)[^\\n]*(?:water|पानी|hydration|हाइड्रेशन)/i.test(s) && /(?:must|should|take|drink|पीएँ|पिएँ|लेें|जरूरी|treatment|इलाज|headache|fatigue|thakan)/i.test(s)) return true;
+  if(MED_ACTION_RE.test(s)||MED_ACTION_RE_REVERSED.test(s)||SPECIFIC_DOSE_RE.test(s)) return true;\n  if(/(?:\b(?:2|3)\\s*[-–]?\\s*(?:litre|liter|liters|litres|L)\\b|(?:2|3)\\s*[-–]?\\s*लीटर|\\b(?:drink|drink plenty|पीएँ|पिएँ|पीना)\\b)[^\\n]*(?:water|पानी|hydration|हाइड्रेशन)/i.test(s) && /(?:must|should|take|drink|पीएँ|पिएँ|लेें|जरूरी|treatment|इलाज|headache|fatigue|thakan)/i.test(s)) return true;
   if(/(?:\b(?:PCI|percutaneous coronary intervention|catheterization|intubation)\b|\b(?:flashlight|torch)\b)/i.test(s)) return true;
   return false;
 }

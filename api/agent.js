@@ -405,7 +405,7 @@ export default async function handler(req,res){
  // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
  const normalizedCasual=String(latestUserMessage).toLowerCase().replace(/[!?.,]+/g," ").replace(/\s+/g," ").replace(/\s+bhai$/i,"").trim();
- const serverCasual=/^(?:hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya chal raha(?: hai)?|kya chal rha(?: hai)?|kya kar rahe ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|bye|goodbye|khana kha liya(?: hai)?|khana khaya(?: hai)?|kha liya|chai pi liya|so gaye|so rahe ho|kahan ho|busy ho|free ho)$/i.test(normalizedCasual);
+ const serverCasual=/^(?:hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya chal raha(?: hai)?|kya chal rha(?: hai)?|kya kar rahe ho|kya kr rahe ho|kya kar reh ho|kya kr reh ho|kya kaam kar rahe ho|kya kam kar reh ho|kya kaam kr rahe ho|kya kam kr reh ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|bye|goodbye|khana kha liya(?: hai)?|khana khaya(?: hai)?|kha liya|chai pi liya|so gaye|so rahe ho|kahan ho|busy ho|free ho)$/i.test(normalizedCasual);
  if(serverCasual){
   const casualReplies={
    "kya chal raha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
@@ -444,9 +444,19 @@ if(directVideoRequest){
    const cleanPrompt=latestUserMessage
     .replace(/^\s*(?:create|generate|make|render|produce)\s+(?:a\s+)?(?:video|clip|animation|animated\s+video)\s*(?:of|from|using)?\s*/i,"")
     .trim()||latestUserMessage;
-   const sourceImage=imageToVideoRequest?await getLatestMediaAsset(db,account.id,"image"):null;
-   if(imageToVideoRequest&&!sourceImage) throw new Error("Image-to-video requested, but no previous BHAI X image asset is available. Generate an image first, then say 'isko video bana'.");
-   const media=await generateVideo(cleanPrompt,5,"16:9",sourceImage);
+   let sourceImage=imageToVideoRequest?await getLatestMediaAsset(db,account.id,"image"):null;
+   let videoPrompt=cleanPrompt;
+   if(imageToVideoRequest&&!sourceImage){
+    const priorVisual=Array.isArray(messages)
+      ? [...messages].reverse().find(m=>m?.role==="user" && m?.text && m.text!==latestUserMessage && /(?:scene|image|picture|photo|poster|illustration|artwork|tasveer|visual|cinematic|3d)/i.test(String(m.text)))
+      : null;
+    videoPrompt=priorVisual?.text
+      ? "Create a cinematic video based on this previously requested visual scene: "+String(priorVisual.text).trim()
+      : "Create a cinematic video based on the most recent visual request.";
+    activity.push({tool:"media:recovery",state:"done",details:"Previous image asset was unavailable; recovered the latest visual prompt and switched to compatible text-to-video generation."});
+    sourceImage=null;
+   }
+   const media=await generateVideo(videoPrompt,5,"16:9",sourceImage);
    return json(res,200,{ok:true,text:"## 🎬 Video generated\\n\\nBHAI X ne request ko verified video pipeline par route kiya — capability match + fallback + output validation complete.",activity:[{tool:"generate_video",state:"done",details:"Direct video request routed to the video generator."}],images:[{mimeType:media.mimeType,data:media.data,video:true,duration:media.duration}],usage:await getMediaUsage(db,account.id)});
   }catch(e){
    await releaseMedia(db,account.id,"video");
@@ -460,7 +470,11 @@ if(directVideoRequest){
 // Deterministic media routing: explicit image requests must never fall through to the engineering/GitHub agent.
 // This is intentionally server-side so stale frontend bundles or AI routing cannot turn an image request into repo work.
 // Visual intent also covers prompts like "cinematic 3D scene banao" where the word "image" is never written.
-const directImageRequest=/\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b.{0,120}\b(?:image|picture|photo|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b|\b(?:image|picture|photo|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b.{0,120}\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b/i.test(latestUserMessage);
+const directImageRequest=(
+ /\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b.{0,140}\b(?:image|picture|photo|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b/i.test(latestUserMessage) ||
+ /\b(?:image|picture|photo|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b.{0,140}\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b/i.test(latestUserMessage) ||
+ /\b(?:scene|tasveer|visual|picture|image|photo)\b\s*(?:banao|bana|banado|ban[aā]o|create|make|generate|draw|design|render)\b/i.test(latestUserMessage)
+) && !/\b(?:video|clip|animation|animated)\b/i.test(latestUserMessage);
 if(directImageRequest){
  try{
   await reserveMedia(db,account.id,"image",10);

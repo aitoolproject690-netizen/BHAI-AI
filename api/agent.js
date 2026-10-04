@@ -171,7 +171,12 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
  const downloadVideo=async(value)=>{
   let url=null;
   if(typeof value==="string") url=value;
-  else if(value&&typeof value==="object") url=value.url||value.video_url||value.videoUrl||value.path||value.output||null;
+  else if(value&&typeof value==="object"){
+   url=value.url||value.video_url||value.videoUrl||value.path||value.output||null;
+   if(value.video&&typeof value.video==="object") url=url||value.video.url||value.video.path;
+   if(value.data&&typeof value.data==="object") url=url||value.data.url||value.data.path;
+  }
+  if(url&&typeof url==="object") url=url.url||url.path||null;
   if(url&&/^https?:\/\//i.test(url)){
    const r=await fetch(url,{signal:timeout(120000)});
    if(!r.ok) throw new Error("Video download returned HTTP "+r.status);
@@ -179,61 +184,54 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
    if(!b.length) throw new Error("Provider returned an empty video.");
    if(b.length>maxBytes) throw new Error("Provider returned a video larger than 20 MB.");
    const mime=r.headers.get("content-type")||"video/mp4";
-   if(!/^video\//i.test(mime) && !/\.mp4(?:$|\?)/i.test(url) && !/\.webm(?:$|\?)/i.test(url)) throw new Error("Provider returned a non-video payload.");
+   if(!/^video\//i.test(mime)&&!/(?:\\.mp4|\\.webm)(?:$|\\?)/i.test(url)) throw new Error("Provider returned a non-video payload.");
    return {mimeType:mime,data:b.toString("base64")};
   }
   return null;
  };
+ const extractVideo=async(value)=>{
+  const direct=await downloadVideo(value).catch(()=>null); if(direct)return direct;
+  if(value==null)return null;
+  const text=typeof value==="string"?value:JSON.stringify(value);
+  const urls=text.match(/https?:\/\/[^"\\s\\]}]+(?:\\.mp4|\\.webm)(?:\\?[^"\\s\\]}]*)?/gi)||[];
+  for(const u of urls){const v=await downloadVideo(u).catch(()=>null);if(v)return v;}
+  return null;
+ };
 
- // Primary paid provider. If its balance is exhausted, continue automatically.
+ // Paid provider first; a zero balance is a normal fallback condition.
  const key=process.env.POLLINATIONS_API_KEY;
  if(key){
   try{
    const model=process.env.POLLINATIONS_VIDEO_MODEL||"google/veo-3.1-fast";
    if(sourceImage?.data){
     const r=await fetch("https://gen.pollinations.ai/v1/chat/completions",{
-     method:"POST",
-     headers:{Authorization:"Bearer "+key,"Content-Type":"application/json"},
-     body:JSON.stringify({
-      model,
-      messages:[{role:"user",content:[
-       {type:"text",text:String(prompt).trim()},
-       {type:"image_url",image_url:{url:"data:"+(sourceImage.mimeType||"image/png")+";base64,"+sourceImage.data}}
-      ]}],
-      duration:seconds
-     }),
+     method:"POST",headers:{Authorization:"Bearer "+key,"Content-Type":"application/json"},
+     body:JSON.stringify({model,messages:[{role:"user",content:[
+      {type:"text",text:String(prompt).trim()},
+      {type:"image_url",image_url:{url:"data:"+(sourceImage.mimeType||"image/png")+";base64,"+sourceImage.data}}
+     ]}],duration:seconds}),
      signal:timeout(300000)
     });
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error("Pollinations image-to-video returned HTTP "+r.status+" — "+JSON.stringify(d).slice(0,500));
-    const text=String(d?.choices?.[0]?.message?.content||d?.output_text||"");
-    const url=(text.match(/https?:\/\/[^\s)\]]+\.(?:mp4|webm)(?:\?[^\s)\]]*)?/i)||[])[0]||d?.data?.[0]?.url;
-    if(!url)throw new Error("Pollinations image-to-video returned no video URL.");
-    const video=await downloadVideo(url);
-    if(!video)throw new Error("Pollinations image-to-video returned an invalid video.");
+    const video=await extractVideo(d?.choices?.[0]?.message?.content||d?.output_text||d?.data||d);
+    if(!video)throw new Error("Pollinations image-to-video returned no downloadable video.");
     return {...video,duration:seconds,provider:"pollinations:i2v"};
    }
    const qs=new URLSearchParams({model,duration:String(seconds)});
-   if(aspectRatio==="9:16")qs.set("aspectRatio","9:16");
-   else if(aspectRatio==="1:1")qs.set("aspectRatio","1:1");
-   const url="https://gen.pollinations.ai/video/"+encodeURIComponent(String(prompt).trim())+"?"+qs.toString();
-   const r=await fetch(url,{headers:{Authorization:"Bearer "+key},signal:timeout(300000)});
-   if(!r.ok){
-    const body=await r.text().catch(()=> "");
-    throw new Error("Pollinations video returned HTTP "+r.status+(body?" — "+body.slice(0,300):""));
-   }
+   if(aspectRatio==="9:16"||aspectRatio==="1:1")qs.set("aspectRatio",aspectRatio);
+   const r=await fetch("https://gen.pollinations.ai/video/"+encodeURIComponent(String(prompt).trim())+"?"+qs.toString(),{headers:{Authorization:"Bearer "+key},signal:timeout(300000)});
+   if(!r.ok)throw new Error("Pollinations video returned HTTP "+r.status+" — "+(await r.text().catch(()=> "")).slice(0,300));
    const b=Buffer.from(await r.arrayBuffer());
    if(!b.length)throw new Error("Pollinations returned an empty video.");
    if(b.length>maxBytes)throw new Error("Pollinations returned a video larger than 20 MB.");
    return {mimeType:r.headers.get("content-type")||"video/mp4",data:b.toString("base64"),duration:seconds,provider:"pollinations"};
   }catch(e){errors.push("Pollinations: "+String(e?.message||e).slice(0,500));}
- }else{
-  errors.push("Pollinations: POLLINATIONS_API_KEY is not configured");
- }
+ }else errors.push("Pollinations: POLLINATIONS_API_KEY is not configured");
 
- // Capability-aware Hugging Face Gradio fallback. Inspect the live API first; never guess endpoint names.
- const spaces=(process.env.HF_VIDEO_SPACES||"Wan-AI/Wan2.1,techfreakworm/LTX2.3-Studio")
-  .split(",").map(x=>x.trim()).filter(Boolean).slice(0,5);
+ // Real Gradio fallback. Wan2.1 exposes async generation endpoints, so we must
+ // poll status_refresh until the task produces the actual video URL.
+ const spaces=(process.env.HF_VIDEO_SPACES||"Wan-AI/Wan2.1,techfreakworm/LTX2.3-Studio").split(",").map(x=>x.trim()).filter(Boolean).slice(0,5);
  try{
   const {Client,handle_file}=await import("@gradio/client");
   for(const space of spaces){
@@ -244,42 +242,47 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
     const named=api?.named_endpoints||{};
     const names=Object.keys(named);
     const wanted=sourceImage
-      ? names.find(n=>/i2v|image.*video|video.*image/i.test(n))
-      : names.find(n=>/t2v|text.*video|video.*text/i.test(n));
-    if(!wanted) throw new Error("No compatible "+(sourceImage?"image-to-video":"text-to-video")+" endpoint exposed by Space.");
+      ? names.find(n=>/i2v.*generation.*async|image.*video/i.test(n))
+      : names.find(n=>/t2v.*generation.*async|text.*video/i.test(n));
+    if(!wanted)throw new Error("No compatible "+(sourceImage?"image-to-video":"text-to-video")+" endpoint exposed by Space.");
     const meta=named[wanted]||{};
-    const labels=(meta.parameters||[]).map(p=>String(p.label||p.name||"").toLowerCase());
+    const params=meta.parameters||[];
+    const labels=params.map(p=>String(p.label||p.name||"").toLowerCase());
     let args;
     if(sourceImage){
-      const imageBuffer=Buffer.from(sourceImage.data,"base64");
-      const imageRef=handle_file(new Blob([imageBuffer],{type:sourceImage.mimeType||"image/png"}));
-      args=labels.length
-       ? labels.map(label=>/image|img/.test(label)?imageRef:/prompt|text/.test(label)?String(prompt).trim():/watermark/.test(label)?false:/seed/.test(label)?-1:undefined)
-       : [String(prompt).trim(),imageRef,false,-1];
+     const imageBuffer=Buffer.from(sourceImage.data,"base64");
+     const imageRef=handle_file(new Blob([imageBuffer],{type:sourceImage.mimeType||"image/png"}));
+     args=labels.map(label=>/image|img/.test(label)?imageRef:/prompt|text/.test(label)?String(prompt).trim():/watermark/.test(label)?false:/seed/.test(label)?-1:undefined);
     }else{
-      args=labels.length
-       ? labels.map(label=>/prompt|text/.test(label)?String(prompt).trim():/size|resolution/.test(label)?"480P":/watermark/.test(label)?false:/seed/.test(label)?-1:undefined)
-       : [String(prompt).trim(),"480P",false,-1];
+     args=labels.map(label=>/prompt|text/.test(label)?String(prompt).trim():/size|resolution/.test(label)?"480P":/watermark/.test(label)?false:/seed/.test(label)?-1:undefined);
     }
-    const out=await client.predict(wanted,args);
-    const data=out?.data??out;
-    const candidates=Array.isArray(data)?data:[data];
-    let video=null;
-    for(const item of candidates){ video=await downloadVideo(item).catch(()=>null); if(video)break; }
-    if(!video){
-      const url=String(JSON.stringify(data)).match(/https?:\/\/[^"\s]+\.(?:mp4|webm)(?:\?[^"\s]*)?/i)?.[0];
-      if(url) video=await downloadVideo(url).catch(()=>null);
+    const submitted=await client.predict(wanted,args);
+    const submittedData=submitted?.data??submitted;
+    let video=await extractVideo(submittedData);
+    if(video)return {...video,duration:seconds,provider:"huggingface-space:"+space+":"+wanted};
+    const taskId=Array.isArray(submittedData)?submittedData.find(x=>typeof x==="string"&&x.length>5):null;
+    if(!taskId)throw new Error("Async endpoint returned no task ID/video.");
+    const statusName=names.find(n=>/status_refresh/i.test(n));
+    if(!statusName)throw new Error("Async endpoint returned task ID but Space exposes no status_refresh endpoint.");
+    const statusMeta=named[statusName]||{};
+    const statusParams=statusMeta.parameters||[];
+    const statusLabels=statusParams.map(p=>String(p.label||p.name||"").toLowerCase());
+    let last=null;
+    for(let attempt=0;attempt<36;attempt++){
+     await new Promise(r=>setTimeout(r,5000));
+     const statusArgs=statusLabels.map(label=>/task.?id/.test(label)?taskId:/^task$|task type/.test(label)?(sourceImage?"i2v":"t2v"):/status/.test(label)?false:undefined);
+     // Wan2.1's status_refresh(task_id, task, status) returns the result gallery first.
+     const sr=await client.predict(statusName,statusArgs);
+     last=sr?.data??sr;
+     video=await extractVideo(last);
+     if(video)return {...video,duration:seconds,provider:"huggingface-space:"+space+":"+wanted};
     }
-    if(!video)throw new Error("Compatible endpoint returned no downloadable video.");
-    return {...video,duration:seconds,provider:"huggingface-space:"+space+":"+wanted};
-   }catch(e){
-    errors.push("Hugging Face "+space+": "+String(e?.message||e).slice(0,450));
-   }
+    throw new Error("Video task did not produce a downloadable result within the polling window: "+String(last).slice(0,250));
+   }catch(e){errors.push("Hugging Face "+space+": "+String(e?.message||e).slice(0,500));}
   }
- }catch(e){ errors.push("Hugging Face fallback unavailable: "+String(e?.message||e).slice(0,350)); }
+ }catch(e){errors.push("Hugging Face fallback unavailable: "+String(e?.message||e).slice(0,350));}
  throw new Error("Video generation failed: all configured providers were unavailable. "+errors.join(" | "));
 }
-
 async function github(action,a){
  const token=process.env.GITHUB_TOKEN;
  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};

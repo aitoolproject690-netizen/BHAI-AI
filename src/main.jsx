@@ -12,6 +12,7 @@ import SystemPanel from'./SystemPanel.jsx';
 import ResellerPanel from'./ResellerPanel.jsx';
 import ProjectBrainPanel from'./ProjectBrainPanel.jsx';
 import APIKeysPanel from'./APIKeysPanel.jsx';
+import {normalizeIntent,isCasualIntent,detectMediaIntent} from './intentRouter.js';
 
 const API_BASE='https://bhai-ai-vpna.onrender.com';
 const apiUrl=p=>API_BASE+p;
@@ -82,17 +83,19 @@ function App(){
  const upd=fn=>setSessions(a=>a.map(s=>s.id===active?{...s,messages:fn(s.messages)}:s));
 
  async function send(textOverride){
-  let t=(textOverride??input).trim();
+  const userIntentText=(textOverride??input).trim();
+  let t=userIntentText;
   if(fileInfo)t=t+'\n\n[Attached file: '+fileInfo.name+']\n'+fileInfo.text;
   if(!t||running||!chat)return;
   if(false){await compileMission(t);return;}
-  const casualKey=t.toLowerCase().replace(/[!?.,]+/g,' ').replace(/\s+/g,' ').replace(/\s+bhai$/i,'').trim();
+  const casualKey=normalizeIntent(userIntentText);
+  const mediaIntent=detectMediaIntent(userIntentText);
   // Casual conversation must stay completely outside the agent/mission execution path.
   // Keep this guard intentionally conservative: only clear social/chat phrases are intercepted.
   const instantCasual={
    "hi":"Arre bhai! 😄 Main yahin hoon. Batao kya scene hai? 🚀","hello":"Hello bhai! 😎 BHAI X ready hai. Batao kya karna hai? 🚀","hey":"Hey bhai! 😄 Kya chal raha hai? 🚀","hii":"Hii bhai! 😄 Batao kya karna hai? 🚀","helo":"Hello bhai! 😄 Main ready hoon. 🚀","namaste":"Namaste bhai! 🙏 Batao kya kaam karein?","salam":"Walaikum salam bhai! 😄 Batao kya scene hai?","kaise ho":"Ekdum badhiya bhai 😎 Tum batao?","kaisa hai":"Badhiya bhai 😎 Main full ready hoon!","kya haal":"Mast bhai 😄 Tum batao kya haal?","kya chal raha":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?","kya chal raha hai":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?","kya chal rha":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?","kya kar rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya kaam kar rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya kam kar rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya kaam kr rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya kam kr reh ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","khana kha liya":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","khana kha liya hai":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","khana khaya":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","khana khaya hai":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","kha liya":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","kya kar rahe ho bhai":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya scene hai":"Sab mast bhai 😄 Batao aaj kya kaam pakadna hai? 🚀","kya hua":"Kuch nahi bhai 😄 Main ekdum ready hoon. Batao kya hua?","thanks":"Arey bhai, anytime! 😎❤️","thank you":"Arey bhai, anytime! 😎❤️","thik hai":"Theek hai bhai 😄👍","theek hai":"Theek hai bhai 😄👍","ok":"Done bhai 😎👍","okay":"Done bhai 😎👍","nice":"Hehe 😄🔥","wah":"😄🔥 Bas bhai!","haha":"😂😂 Bhai, hasi rukni nahi chahiye!","bye":"Bye bhai! 👋😄","goodbye":"Bye bhai! 👋😄"
   };
-  const casualSocial=/^(?:bhai\s+)?(?:khana\s+(?:kha|khaya)\s+liya(?:\s+hai)?|kha\s+liya|chai\s+(?:pi|pili)\s+liya|so\s+gaye|so\s+rahe\s+ho|kahan\s+ho|kya\s+kar\s+rahe\s+ho|busy\s+ho|free\s+ho)[!?., ]*$/i.test(casualKey);
+  const casualSocial=isCasualIntent(userIntentText);
   const casualChat=Object.prototype.hasOwnProperty.call(instantCasual,casualKey)||casualSocial;
   const fastLocal={
    "good morning":"Good morning bhai! ☀️😎 Aaj kya kaam pakadna hai? 🚀",
@@ -126,12 +129,37 @@ function App(){
   const fastKey=casualKey;
   const instantReply=instantCasual[fastKey]||fastLocal[fastKey];
   const instantMessage=Boolean(instantReply);
+  const mediaMessage=!instantMessage&&Boolean(mediaIntent.type);
   if(instantMessage){
    const id=crypto.randomUUID();
    setInput('');setFileInfo(null);setToolsOpen(false);
    const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id,role:'assistant',text:instantReply}];
    upd(()=>next);
    if(chat.title==='New chat')setSessions(a=>a.map(s=>s.id===active?{...s,title:t.slice(0,32)}:s));
+   return;
+  }
+  if(mediaMessage){
+   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
+   const id=crypto.randomUUID();
+   const label=mediaIntent.type==='video'?'🎬':'🖼️';
+   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id:id+'-media-reply',role:'assistant',text:'⚡ '+label+' BHAI X media pipeline chala raha hai...'}];
+   upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
+   setActivity([
+    {id:id+'0',step:'Intent',text:mediaIntent.type==='video'?'🎬 Video request samajh liya...':'🖼️ Image request samajh liya...',state:'done'},
+    {id:id+'1',step:'Working',text:mediaIntent.type==='video'?'⚙️ Video provider pipeline execute ho rahi hai...':'⚙️ Image provider pipeline execute ho rahi hai...',state:'running'},
+    {id:id+'2',step:'Verifying',text:'✅ Actual media output validate kiya jayega...',state:'pending'}
+   ]);
+   try{
+    const rr=await fetch(apiUrl('/api/media'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:mediaIntent.type,prompt:userIntentText,aspectRatio:'16:9',duration:5,imageToVideo:mediaIntent.imageToVideo})});
+    const d=await rr.json().catch(()=>({}));
+    if(!rr.ok||d.error)throw new Error(d.error||('Media backend HTTP '+rr.status));
+    setActivity(a=>a.map(x=>x.id===id+'1'||x.id===id+'2'?{...x,state:'done'}:x));
+    if(d.usage)setUsage(d.usage);
+    upd(m=>m.map(x=>x.id===id+'-media-reply'?{...x,text:d.text||'✅ Media ready.',images:d.images||[]}:x));
+   }catch(e){
+    setActivity(a=>a.map(x=>({...x,state:'failed'})));
+    upd(m=>m.map(x=>x.id===id+'-media-reply'?{...x,text:'⚠️ ERROR DETECTOR\\n\\n'+e.message+'\\n\\nBHAI X ne failed provider ko DONE nahi maana. Sealed media pipeline ke through retry/switch-provider possible hai. 😎'}:x));
+   }finally{setRunning(false);clearInterval(workTicker.current);workTicker.current=null;}
    return;
   }
   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);

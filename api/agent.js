@@ -433,7 +433,7 @@ export default async function handler(req,res){
 // Deterministic media routing: explicit video requests always win over image-reference wording in video prompts.
 // Intent routing accepts natural Hinglish/Hindi forms such as "isko video bana", "is image ko video bana do".
 const directVideoRequest=/\b(?:generate|create|make|render|produce|banao|bana|banado|ban[aā]o)\b.{0,120}\b(?:video|clip|animation|animated)\b|\b(?:video|clip|animation|animated)\b.{0,120}\b(?:generate|create|make|render|produce|banao|bana|banado|ban[aā]o)\b|\bimage[- ]to[- ]video\b|\b(?:isko|iss|is)\b.{0,80}\b(?:video|clip|animation)\b.{0,40}\b(?:banao|bana|banado|ban[aā]o|make|create|generate)\b/i.test(latestUserMessage);
-const imageToVideoRequest=/\b(?:image[- ]to[- ]video|\b(?:isko|iss|is)\b.{0,120}\b(?:image|picture|photo|pic|tasveer|scene)\b.{0,80}\b(?:video|clip|animation)\b|\b(?:video|clip|animation)\b.{0,120}\b(?:from|using|with|isko|iss|is)\b.{0,100}\b(?:image|picture|photo|pic|tasveer|scene)\b)/i.test(latestUserMessage);
+const imageToVideoRequest=/\b(?:image[- ]to[- ]video|\b(?:isko|iss|is)\b.{0,80}\b(?:video|clip|animation)\b|\b(?:isko|iss|is)\b.{0,120}\b(?:image|picture|photo|pic|tasveer|scene)\b.{0,80}\b(?:video|clip|animation)\b|\b(?:video|clip|animation)\b.{0,120}\b(?:from|using|with|isko|iss|is)\b.{0,100}\b(?:image|picture|photo|pic|tasveer|scene)\b)/i.test(latestUserMessage);
 if(directVideoRequest){
  try{
   await reserveMedia(db,account.id,"video",3);

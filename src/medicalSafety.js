@@ -71,15 +71,17 @@ function repairKnownUnsafeClaims(text,task){
     corrections.push("Pulse number alone is not an automatic ambulance threshold; emergency care depends on symptoms and the clinical situation.");
   }
 
-  // Known bad pattern: wrong 180/110-style BP emergency cutoff.
+  // Remove a known unsafe BP cutoff sentence rather than leaving the wrong instruction
+  // visible next to the correction.
   if(/\b(?:bp\s*)?180\s*\/\s*1[01]\d\b/i.test(out)){
+    out=out.split("\n").filter(line=>!/(?:bp\s*)?180\s*\/\s*1[01]\d.*(?:emergency|cutoff|ambulance|112)/i.test(line)).join("\n");
     corrections.push("BP safety correction: the severe threshold used here is above 180/120 mm Hg, not 180/110. A BP above 180/120 needs a repeat reading and prompt medical assessment; emergency symptoms make it an emergency.");
   }
 
-  // Known bad pattern: repeated BP checks every few minutes.
+  // Remove the known unsafe advice to measure BP every 15-20 minutes.
   if(/(?:every|हर)\s*15\s*[-–]?\s*20\s*(?:minutes|मिनट)/i.test(out)
      ||/(?:15\s*[-–]?\s*20\s*(?:minutes|मिनट)).*(?:bp|blood pressure)/i.test(out)){
-    out=out.replace(/[^\n]*(?:every|हर)\s*15\s*[-–]?\s*20\s*(?:minutes|मिनट)[^\n]*/gi,"");
+    out=out.split("\n").filter(line=>!/(?:every|हर)\s*15\s*[-–]?\s*20\s*(?:minutes|मिनट)/i.test(line)).join("\n");
     corrections.push("BP ko har 15-20 minute baar-baar check karna zaroori nahi hai; high reading ko proper rest ke baad ek baar repeat karna better hai.");
   }
 
@@ -92,6 +94,7 @@ function repairKnownUnsafeClaims(text,task){
   }
 
   if(risk.systolic===150&&risk.diastolic===95&&/(?:hypertensive crisis|hypertensive emergency|crisis)/i.test(out)){
+    out=out.split("\n").filter(line=>!/(?:150\s*\/\s*95).*(?:hypertensive crisis|hypertensive emergency|crisis)/i.test(line)).join("\n");
     corrections.push("BP 150/95 ko hypertensive crisis/emergency na kahen; yeh high BP reading hai, aur diagnosis doctor confirm karta hai.");
   }
 

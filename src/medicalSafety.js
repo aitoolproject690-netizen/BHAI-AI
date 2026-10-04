@@ -53,9 +53,12 @@ export function getMedicalSafetyPrompt(task=""){
 }
 
 function removeUnsafeLine(line){
-  return /(?:every|har)\s*15\s*[-–]?\s*20\s*(?:minutes|minute|मिनट)/i.test(line)
-    || /(?:coconut water|electrolyte(?:s)?|electrolyte drink|ORS|snack).*(?:treatment|treat|fix|cure|must|should|necessary|zaroori)/i.test(line)
-    || /(?:start|stop|double|increase|decrease|change|skip|hold|resume).{0,60}(?:dose|dosage|medicine|medication|tablet|goli)/i.test(line);
+  const s=String(line);
+  return /(?:every|har)\s*15\s*[-–]?\s*20\s*(?:minutes|minute|मिनट)/i.test(s)
+    || /(?:coconut water|electrolyte(?:s)?|electrolyte drink|ORS|snack)/i.test(s)
+       && /(?:take|drink|lo|lelo|lijiye|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat)/i.test(s)
+    || /(?:start|stop|double|increase|decrease|change|skip|hold|resume|dose\s+double|double\s+the\s+dose).{0,80}(?:dose|dosage|medicine|medication|tablet|goli)?/i.test(s)
+       && /(?:dose|dosage|medicine|medication|tablet|goli|prescription)/i.test(s);
 }
 
 function repairKnownUnsafeClaims(text,task){
@@ -90,10 +93,10 @@ function repairKnownUnsafeClaims(text,task){
     if(/(?:start|stop|double|increase|decrease|change|skip|hold|resume).{0,60}(?:dose|dosage|medicine|medication|tablet|goli)/i.test(String(text))) corrections.push("Prescription medicine ki dose/start-stop/change chat se decide nahi karni chahiye; clinician/pharmacist se confirm karein.");
   }
 
-  // Definitive emergency exclusion is not appropriate in chat.
+  // Definitive emergency exclusion is not appropriate in chat. Remove the
+  // sentence rather than replacing text inside the replacement itself.
   if(/\b(?:this|the current situation|it)\s+(?:is|seems)\s+not\s+an\s+emergency\b|\b(?:not an emergency|no emergency|no immediate emergency)\b/i.test(out)){
-    out=out.replace(/\b(?:this|the current situation|it)\s+(?:is|seems)\s+not\s+an\s+emergency\b/gi,"an emergency cannot be completely ruled out from chat alone");
-    out=out.replace(/\b(?:not an emergency|no emergency|no immediate emergency)\b/gi,"an emergency cannot be completely ruled out from chat alone");
+    out=out.split("\n").filter(line=>!/(?:not an emergency|no emergency|no immediate emergency|current situation.*not.*emergency)/i.test(line)).join("\n");
     corrections.push("Given information mein classic emergency red flag report nahi hua ho sakta hai, lekin chat se emergency completely rule out nahi ki ja sakti. New/worsening red flags par urgent help lein.");
   }
 

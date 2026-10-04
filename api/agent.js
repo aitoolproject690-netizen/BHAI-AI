@@ -461,8 +461,8 @@ export default async function handler(req,res){
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
  // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
- const normalizedCasual=String(latestUserMessage).toLowerCase().replace(/[!?.,]+/g," ").replace(/\s+/g," ").replace(/\s+bhai$/i,"").trim();
- const serverCasual=/^(?:hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal|kya chal raha(?: hai)?|kya chal rha(?: hai)?|kya kar rahe ho|kya kr rahe ho|kya kar reh ho|kya kr reh ho|kya kaam kar rahe ho|kya kam kar reh ho|kya kaam kr rahe ho|kya kam kr reh ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|bye|goodbye|khana kha liya(?: hai)?|khana khaya(?: hai)?|kha liya|chai pi liya|so gaye|so rahe ho|kahan ho|busy ho|free ho)$/i.test(normalizedCasual);
+ const normalizedCasual=String(latestUserMessage).toLowerCase().replace(/[!?.,]+/g," ").replace(/^\s*bhai\b\s*/i,"").replace(/\s+bhai$/i,"").replace(/\s+/g," ").trim();
+ const serverCasual=/^(?:hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal(?: hai)?|kya chal raha(?: hai)?|kya chal rha(?: hai)?|kya kar rahe ho|kya kr rahe ho|kya kar reh ho|kya kr reh ho|kya kaam kar rahe ho|kya kam kar reh ho|kya kaam kr rahe ho|kya kam kr reh ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|bye|goodbye|khana kha liya(?: hai)?|khana khaya(?: hai)?|kha liya|chai pi liya|so gaye|so rahe ho|kahan ho|busy ho|free ho)$/i.test(normalizedCasual);
  if(serverCasual){
   const casualReplies={
    "kya chal raha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
@@ -479,6 +479,7 @@ export default async function handler(req,res){
    "kaise ho":"Ekdum badhiya bhai 😎 Tum batao?",
    "kaisa hai":"Badhiya bhai 😎 Main full ready hoon!",
    "kya haal":"Mast bhai 😄 Tum batao kya haal?",
+   "kya haal hai":"Mast bhai 😄 Tum batao kya haal?",
    "hi":"Arre bhai! 😄 Main yahin hoon. Batao kya scene hai? 🚀",
    "hello":"Hello bhai! 😎 BHAI X ready hai. Batao kya karna hai? 🚀",
    "hey":"Hey bhai! 😄 Kya chal raha hai? 🚀",

@@ -312,6 +312,7 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
       if(/watermark/.test(label)) return false;
       if(/negative.?prompt/.test(label)) return "";
       if(/steps|inference/.test(label)) return 8;
+      if(/frame/.test(label)) return 9;
       if(/guidance|cfg/.test(label)) return 3.0;
       if(p.default!==undefined) return p.default;
       return undefined;

@@ -1,12 +1,12 @@
 /** BHAI X Engineering Core: deterministic safety helpers. */
-const SAFE_PATH = /^[A-Za-z0-9._~!$&'()*+,;=:@%\\/~-]+$/;
+const SAFE_PATH = /^[A-Za-z0-9._~!$&'()*+,;=:@%\/-]+$/;
 const REPO_PART='[A-Za-z0-9][A-Za-z0-9._-]{0,99}';
 const NON_REPO_PAIRS=new Set(["logs/steps","steps/logs","logs/jobs","jobs/logs","logs/errors","errors/logs"]);
 
-export function normalizeRepoName(value=''){ return String(value).trim().replace(/^\\/+|\\/+$/g,''); }
+export function normalizeRepoName(value=''){ return String(value).trim().replace(/^\/+|\/+$/g,''); }
 export function normalizeFilePath(value=''){
  let p=String(value||'').trim().replace(/^[\s"\x27]+|[\s"\x27]+$/g,'');
- p=p.split(/[?#]/,1)[0].replace(/^\\/+|\\/+$/g,'').replace(/\\\\+/g,'/');
+ p=p.split(/[?#]/,1)[0].replace(/^\/+|\/+$/g,'').replace(/\\+/g,'/');
  p=p.split('/').filter(Boolean).join('/');
  if(!p||p==='.'||p==='..') return '';
  if(p.split('/').some(part=>part==='..'||part==='.' )) throw new Error('Unsafe repository path.');
@@ -20,7 +20,7 @@ function isLikelyRepoPair(owner='',repo=''){
 }
 
 function extractRepoPathFromGithubWebPath(rawPath=''){
- const clean=String(rawPath||'').split(/[?#]/,1)[0].replace(/^\\/+|\\/+$/g,'');
+ const clean=String(rawPath||'').split(/[?#]/,1)[0].replace(/^\/+|\/+$/g,'');
  if(!clean) return '';
  const parts=clean.split('/').filter(Boolean);
  if(!parts.length) return '';

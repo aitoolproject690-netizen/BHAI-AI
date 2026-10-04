@@ -13,23 +13,10 @@ import ResellerPanel from'./ResellerPanel.jsx';
 import ProjectBrainPanel from'./ProjectBrainPanel.jsx';
 import APIKeysPanel from'./APIKeysPanel.jsx';
 import {normalizeIntent,isCasualIntent,detectMediaIntent,isGeneralChatIntent,isLocalCodingIntent} from './intentRouter.js';
+import {apiUrl,readJsonResponse,requestJson} from './apiClient.js';
 
-const API_BASE='https://bhai-ai-vpna.onrender.com';
-const apiUrl=p=>API_BASE+p;
 const authToken=()=>localStorage.getItem('bhai_user_session')||sessionStorage.getItem('bhai_user_session')||'';
 const authHeaders=()=>{const h={'Content-Type':'application/json'},t=authToken();if(t)h.Authorization='Bearer '+t;return h;}
-
-// Defensive JSON reader for API responses. Prevents raw "Unexpected end of JSON input"
-// when a proxy/server returns an empty or truncated response body.
-async function readJsonResponse(response,label='Backend'){
- const raw=await response.text();
- if(!raw.trim()) throw new Error(label+' returned an empty response (HTTP '+response.status+').');
- try{return JSON.parse(raw);}catch{
-  const preview=raw.replace(/\s+/g,' ').slice(0,220);
-  throw new Error(label+' returned invalid JSON (HTTP '+response.status+'): '+preview);
- }
-}
-
 function extractExplicitGithubRepo(text=''){
  const raw=String(text||'');
  const url=raw.match(/https?:\/\/github\.com\/([^/\s?#]+)\/([^/\s?#]+)/i);
@@ -184,14 +171,12 @@ function App(){
     {id:id+'2',step:'Verifying',text:'✅ Repository aur file response verify kiya jayega...',state:'pending'}
    ]);
    try{
-    const rr=await fetch(apiUrl('/api/github'),{method:'POST',headers:authHeaders(),body:JSON.stringify({
+    const d=await requestJson('/api/github',{method:'POST',headers:authHeaders(),body:JSON.stringify({
      action:targetPath?'read':'info',
      owner:explicitGithubRepo.owner,
      repo:explicitGithubRepo.repo,
      ...(targetPath?{path:targetPath}:{})
-    })});
-    const d=await readJsonResponse(rr,'/api/github');
-    if(!rr.ok||d.error)throw new Error(d.error||('GitHub backend HTTP '+rr.status));
+    })},{label:'/api/github',retrySafe:true});
     const fileSummary=targetPath
       ? '## ✅ GitHub file verified\\n\\n**Repository:** '+explicitGithubRepo.owner+'/'+explicitGithubRepo.repo+'\\n\\n**File:** '+(d.path||targetPath)+'\\n\\n**Verification:** GitHub API se file successfully read hui.\\n\\n<pre>'+String(d.content||'').slice(0,12000).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</pre>'
       : '## ✅ GitHub repository verified\\n\\n**Repository:** '+(d.name||explicitGithubRepo.owner+'/'+explicitGithubRepo.repo)+'\\n\\n**Default branch:** '+(d.default_branch||'main')+'\\n\\n**Verification:** GitHub API se repository successfully read hui.';
@@ -210,9 +195,7 @@ function App(){
    const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'⚡ Bhai, soch raha hoon...'}];
    upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
    try{
-    const rr=await fetch(apiUrl('/api/chat'),{method:'POST',headers:authHeaders(),body:JSON.stringify({messages:next})});
-    const d=await rr.json().catch(()=>({}));
-    if(!rr.ok||d.error)throw new Error(d.error||('Chat backend HTTP '+rr.status));
+    const d=await requestJson('/api/chat',{method:'POST',headers:authHeaders(),body:JSON.stringify({messages:next})},{label:'/api/chat',retrySafe:true});
     upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||'✅'}:x));
    }catch(e){
     upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ Chat error\\n\\n'+e.message}:x));
@@ -257,21 +240,9 @@ function App(){
    let dnaContext=''; if(!casualChat){try{const dr=await fetch(apiUrl('/api/dna?project=default'),{headers:authHeaders()}).then(x=>x.json()); dnaContext=JSON.stringify(dr.data||{}).slice(0,5000)}catch{}}
    const agentMessages=dnaContext?[...next,{id:crypto.randomUUID(),role:'user',text:'PROJECT DNA CONTEXT (use as context, do not repeat): '+dnaContext}]:next;
    const agentToken=account?.session||localStorage.getItem("bhai_user_session")||sessionStorage.getItem("bhai_user_session")||""; const agentHeaders={"Content-Type":"application/json"}; if(agentToken)agentHeaders.Authorization="Bearer "+agentToken; const controller=new AbortController(); const agentTimeout=setTimeout(()=>controller.abort(),300000);
-   let r,d,lastResponseError=null;
+   let d;
    try{
-    for(let attempt=0;attempt<2;attempt++){
-     try{
-      r=await fetch(apiUrl('/api/agent'),{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:agentMessages,doIt:true}),signal:controller.signal});
-      d=await readJsonResponse(r,'/api/agent');
-      lastResponseError=null;
-      break;
-     }catch(e){
-      lastResponseError=e;
-      if(attempt===1||e?.name==='AbortError')throw e;
-      await new Promise(resolve=>setTimeout(resolve,1200));
-     }
-    }
-    if(lastResponseError&&!d)throw lastResponseError;
+    d=await requestJson('/api/agent',{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:agentMessages,doIt:true}),signal:controller.signal},{label:'/api/agent',retrySafe:false,retries:0});
    }finally{clearTimeout(agentTimeout)}
    if(!r.ok||d.error){const rr=await fetch(apiUrl('/api/control'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'recovery_plan',error:d.error||('HTTP '+r.status),stage:'agent'})}).catch(()=>null);const rp=rr?await rr.json().catch(()=>({})):{};upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ ERROR DETECTOR\n\n'+(d.error||('Backend HTTP '+r.status))+'\n\n🛡️ Preventive recovery: '+(rp.plan||[]).map(x=>x.action).join(' → ')+'\n\nBHAI X ne is result ko verified DONE nahi maana.'}]);setActivity(a=>a.map(x=>({...x,state:'failed'})));return;}
    if(d.usage)setUsage(d.usage); setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));

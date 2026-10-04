@@ -19,6 +19,17 @@ const apiUrl=p=>API_BASE+p;
 const authToken=()=>localStorage.getItem('bhai_user_session')||sessionStorage.getItem('bhai_user_session')||'';
 const authHeaders=()=>{const h={'Content-Type':'application/json'},t=authToken();if(t)h.Authorization='Bearer '+t;return h;}
 
+// Defensive JSON reader for API responses. Prevents raw "Unexpected end of JSON input"
+// when a proxy/server returns an empty or truncated response body.
+async function readJsonResponse(response,label='Backend'){
+ const raw=await response.text();
+ if(!raw.trim()) throw new Error(label+' returned an empty response (HTTP '+response.status+').');
+ try{return JSON.parse(raw);}catch{
+  const preview=raw.replace(/\\s+/g,' ').slice(0,220);
+  throw new Error(label+' returned invalid JSON (HTTP '+response.status+'): '+preview);
+ }
+}
+
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. jahan zarurat hogi BHAI X khud actual tools se kaam karega.\n\nMain sirf jawab dene wala chatbot nahi hoon — project ka context yaad rakhkar bataunga ki kya complete hua, kya baaki hai, aur next mein kya add/fix karna useful rahega.'};
 
@@ -193,8 +204,22 @@ function App(){
    let dnaContext=''; if(!casualChat){try{const dr=await fetch(apiUrl('/api/dna?project=default'),{headers:authHeaders()}).then(x=>x.json()); dnaContext=JSON.stringify(dr.data||{}).slice(0,5000)}catch{}}
    const agentMessages=dnaContext?[...next,{id:crypto.randomUUID(),role:'user',text:'PROJECT DNA CONTEXT (use as context, do not repeat): '+dnaContext}]:next;
    const agentToken=account?.session||localStorage.getItem("bhai_user_session")||sessionStorage.getItem("bhai_user_session")||""; const agentHeaders={"Content-Type":"application/json"}; if(agentToken)agentHeaders.Authorization="Bearer "+agentToken; const controller=new AbortController(); const agentTimeout=setTimeout(()=>controller.abort(),300000);
-   let r; try{r=await fetch(apiUrl('/api/agent'),{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:agentMessages,doIt:true}),signal:controller.signal});}finally{clearTimeout(agentTimeout)}
-   const d=await r.json();
+   let r,d,lastResponseError=null;
+   try{
+    for(let attempt=0;attempt<2;attempt++){
+     try{
+      r=await fetch(apiUrl('/api/agent'),{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:agentMessages,doIt:true}),signal:controller.signal});
+      d=await readJsonResponse(r,'/api/agent');
+      lastResponseError=null;
+      break;
+     }catch(e){
+      lastResponseError=e;
+      if(attempt===1||e?.name==='AbortError')throw e;
+      await new Promise(resolve=>setTimeout(resolve,1200));
+     }
+    }
+    if(lastResponseError&&!d)throw lastResponseError;
+   }finally{clearTimeout(agentTimeout)}
    if(!r.ok||d.error){const rr=await fetch(apiUrl('/api/control'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'recovery_plan',error:d.error||('HTTP '+r.status),stage:'agent'})}).catch(()=>null);const rp=rr?await rr.json().catch(()=>({})):{};upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ ERROR DETECTOR\n\n'+(d.error||('Backend HTTP '+r.status))+'\n\n🛡️ Preventive recovery: '+(rp.plan||[]).map(x=>x.action).join(' → ')+'\n\nBHAI X ne is result ko verified DONE nahi maana.'}]);setActivity(a=>a.map(x=>({...x,state:'failed'})));return;}
    if(d.usage)setUsage(d.usage); setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
@@ -207,7 +232,7 @@ function App(){
     ]);
     try{
      const sr=await fetch(apiUrl('/api/suggestions'),{method:'POST',headers:authHeaders(),body:JSON.stringify({goal:t,completed:d.completed||[],remaining:d.remaining||[]})});
-     const sd=await sr.json();
+     const sd=await readJsonResponse(sr,'/api/suggestions');
      if(Array.isArray(sd.suggestions)&&sd.suggestions.length){
       const suggestionText='💡 SMART SUGGESTIONS\\n\\n'+sd.suggestions.map(x=>'• '+x).join('\\n');
       upd(m=>{const last=m[m.length-1];if(last?.text===suggestionText)return m;return [...m,{id:crypto.randomUUID(),role:'assistant',text:suggestionText}]});
@@ -273,7 +298,7 @@ function App(){
    const pf=await fetch(apiUrl('/api/control'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'preflight'})}).then(r=>r.json()).catch(e=>({ready:false,risks:[{message:e.message}]}));
    if(!pf.ready){upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:'🛡️ PRE-FLIGHT STOP\n\n'+(pf.risks||[]).map(x=>'⚠️ '+x.message).join('\n')+'\n\nMission ko predictable failure se pehle rok diya gaya.'}]);return;}
    const r=await fetch(apiUrl('/api/control'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'compile_goal',goal})});
-   const d=await r.json(); if(!r.ok)throw new Error(d.error||'Mission compile failed');
+   const d=await readJsonResponse(r,'/api/agent'); if(!r.ok)throw new Error(d.error||'Mission compile failed');
    const m=d.mission;
    const plan='🎯 MISSION MODE\\n\\nGoal: '+m.goal+'\\n\\n'+m.steps.map((s,i)=>(i+1)+'. '+s.name).join('\n')+'\n\nStatus: '+m.steps.length+' steps compiled.'+(doIt?'\\n\\nDO IT ON — mission execution start ho raha hai.':'\\n\\nDO IT OFF — plan ready hai; execute karne ke liye DO IT ON karo.');
    const userMsg={id:crypto.randomUUID(),role:'user',text:goal};
@@ -288,7 +313,7 @@ function App(){
     const missionHeaders={"Content-Type":"application/json"}; if(missionToken)missionHeaders.Authorization="Bearer "+missionToken;
     const controller=new AbortController(); const missionTimeout=setTimeout(()=>controller.abort(),300000);
     let er; try{er=await fetch(apiUrl('/api/mission'),{method:'POST',headers:missionHeaders,body:JSON.stringify({task:goal,projectName:m.goal||'BHAI-App',platform:'android',branch:'main',doIt:true,maxFixes:2,autoDeploy:true}),signal:controller.signal});}finally{clearTimeout(missionTimeout)}
-    const ed=await er.json();
+    const ed=await readJsonResponse(er,'/api/mission');
     upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:ed.text||('⚠️ '+(ed.error||'Mission execution failed')),images:ed.images||[]}]);
     try{await fetch(apiUrl('/api/diff'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:'mission',summary:goal,files:(ed.activity||[]).map(x=>x.tool||'mission-step'),commit:ed.commit||null,verification:ed.verified||ed.verification||null})})}catch{}
     try{await fetch(apiUrl('/api/dna'),{method:'POST',headers:authHeaders(),body:JSON.stringify({project:'default',data:{lastMission:goal,lastMissionResult:String(ed.text||'').slice(0,2500),lastMissionVerified:ed.verified||ed.verification||null,lastUpdated:new Date().toISOString()}})})}catch{}

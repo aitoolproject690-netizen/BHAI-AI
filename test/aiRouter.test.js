@@ -141,6 +141,21 @@ test("AI router falls back when the primary provider has a transient network fai
 });
 
 
+test("BHAI-CORE stays configured when URL is omitted but its server key exists",()=>{
+  const oldUrl=process.env.BHAI_CORE_URL;
+  const oldKey=process.env.BHAI_CORE_API_KEY;
+  delete process.env.BHAI_CORE_URL;
+  process.env.BHAI_CORE_API_KEY="test-core-key";
+  try{
+    const status=getAIProviderStatus().find(p=>p.id==="core");
+    assert.equal(status?.configured,true);
+    assert.equal(routeAI({task:"fix this code"}),"core");
+  }finally{
+    if(oldUrl===undefined)delete process.env.BHAI_CORE_URL; else process.env.BHAI_CORE_URL=oldUrl;
+    if(oldKey===undefined)delete process.env.BHAI_CORE_API_KEY; else process.env.BHAI_CORE_API_KEY=oldKey;
+  }
+});
+
 test("BHAI-CORE sends its server-side API key and accepts the OpenAI-compatible response",async()=>{
   const oldUrl=process.env.BHAI_CORE_URL;
   const oldKey=process.env.BHAI_CORE_API_KEY;

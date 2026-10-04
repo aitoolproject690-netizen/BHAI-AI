@@ -631,6 +631,7 @@ if(directImageRequest){
  const contextNote=`CONTEXT ROUTER: ${contextRoute.mode}. ${contextRoute.reason} Never revive an older Mission, repository, file, commit, or build unless the current user message explicitly refers to that existing task.`;
  const medicalMode=isMedicalIntent(latestUserMessage);
  const medicalSafety=medicalMode?getMedicalSafetyPrompt(latestUserMessage):"";
+ const safeResponseText=(text)=>medicalMode?applyMedicalSafetyFooter(text,latestUserMessage):String(text||"");
  const system=`You are BHAI AI, a practical personal work agent. ${contextNote} ${skillContext} ${medicalSafety}
 Reply in Hinglish when the user does. Talk naturally like a helpful project partner and friend: explain what you are doing, why it matters, what is already complete, what is still pending, and what should be added or fixed next.
 
@@ -1001,7 +1002,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
     }
     return json(res,200,{text:"⚠️ GitHub execution was not verified. I will not claim the task is completed without actual repository/file/commit evidence.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
    }
-   return json(res,200,{text:text||"Media ready.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
+   return json(res,200,{text:safeResponseText(text||"Media ready."),activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   }
   contents.push(candidate.content);
   const allowedCalls=calls.slice(0,2),responseParts=[];
@@ -1144,7 +1145,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   if(requiresGithubExecution && githubVerificationConfirmed && (!githubFileRequest || githubFileVerified)){ if(recovery.state==="diagnose") recoveryStep("patch_and_verify","GitHub evidence collected"); if(recovery.state==="patch_and_verify" && evidence.verify()) recoveryStep("done","Commit and read-back evidence verified."); if(missionMode&&mission.phase==="verify"&&evidence.verify()){try{missionStep("complete","Mission evidence verified.");}catch{}} }
   if(missionMode && mission.phase==="verify" && !mission.canClaimDone(evidence)) return json(res,200,{text:"⚠️ Mission Mode reached verification but could not prove completion. No DONE claim was made.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
   if(requiresGithubExecution && (!githubVerificationConfirmed || (githubFileRequest && !githubFileVerified) || !evidence.verify())) return json(res,200,{text:"⚠️ GitHub execution was not fully verified. No completion claim was made. The repository/file/commit/test evidence is incomplete.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
-  return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
+  return json(res,200,{text:safeResponseText(ft||"Task completed."),activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }
 

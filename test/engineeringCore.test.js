@@ -56,7 +56,7 @@ test("accepts explicit labeled or URL GitHub repositories",()=>{
   const url=resolveGithubTarget("https://github.com/owner/demo/blob/main/index.html");
   assert.equal(url.owner,"owner");
   assert.equal(url.repo,"demo");
-  assert.equal(url.path,"blob/main/index.html");
+  assert.equal(url.path,"index.html");
 });
 
 test("does not mistake log paths for repositories",()=>{

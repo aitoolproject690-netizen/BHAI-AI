@@ -6,7 +6,7 @@ export async function getDb(){
   if(!process.env.DATABASE_URL)return null;
   try{
    const {Client}=await import("pg");
-   const c=new Client({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false}});
+   const c=new Client({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false},connectionTimeoutMillis:5000});
    await c.connect(); client=c; return c;
   }catch(e){console.error("Database unavailable:",e.message);client=null;return null}
  })();

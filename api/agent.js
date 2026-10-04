@@ -469,6 +469,50 @@ export default async function handler(req,res){
  if(control.serverMode==="maintenance") return json(res,503,{error:"BHAI X is in owner maintenance mode.",maintenance:true});
  if(control.emergencyLock) return json(res,423,{error:"BHAI X is temporarily locked by the owner.",locked:true});
  if(req.method!=="POST") return json(res,405,{error:"Method not allowed"});
+ const endpoint=new URL(req.url||"/","http://localhost").pathname;
+ const body=req.body||{};
+ if(endpoint==="/api/chat"){
+  const chatMessages=Array.isArray(body.messages)?body.messages.slice(-20):[];
+  const task=String(chatMessages.find(m=>m?.role==="user"&&m?.text)?.text||"").trim();
+  if(!task)return json(res,400,{error:"Chat message is required."});
+  try{
+   const routed=await generateWithRouter({
+    task,
+    system:"You are BHAI X, a friendly practical AI chat assistant. Never claim external tools were used in this chat endpoint. Answer directly and naturally. When the user writes Hindi or Hinglish, reply in the same style.",
+    messages:chatMessages,
+    preferred:"core",role:"chat",fallback:true
+   });
+   return json(res,200,{ok:true,text:routed.text,provider:routed.provider,model:routed.model,verified:true});
+  }catch(e){return json(res,502,{error:"Chat provider failed: "+String(e?.message||e)});}
+ }
+ if(endpoint==="/api/media"){
+  const type=String(body.type||"").toLowerCase(),prompt=String(body.prompt||"").trim();
+  const aspectRatio=/^(?:9:16|1:1|4:5|16:9)$/.test(String(body.aspectRatio||""))?String(body.aspectRatio):"16:9";
+  if(!prompt)return json(res,400,{error:"Media prompt is required."});
+  if(type==="image"){
+   try{
+    await reserveMedia(db,account.id,"image",10);
+    try{
+     const media=await generateImage(prompt,aspectRatio); await saveMediaAsset(db,account.id,"image",media);
+     return json(res,200,{ok:true,text:"## 🖼️ Image generated\\n\\nBHAI X ne direct media pipeline se image banayi aur output validate kiya.",activity:[{tool:"generate_image",state:"done",details:"Dedicated media endpoint generated and validated the image."}],images:[{mimeType:media.mimeType,data:media.data}],usage:await getMediaUsage(db,account.id)});
+    }catch(e){await releaseMedia(db,account.id,"image");return json(res,502,{error:"Image generation failed: "+String(e?.message||e),activity:[{tool:"generate_image",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});}
+   }catch(e){return json(res,502,{error:"Image generation pre-flight failed: "+String(e?.message||e)});}
+  }
+  if(type==="video"){
+   try{
+    await reserveMedia(db,account.id,"video",3);
+    try{
+     const wantsImage=body.imageToVideo===true;
+     const sourceImage=wantsImage?await getLatestMediaAsset(db,account.id,"image"):null;
+     const videoPrompt=wantsImage&&!sourceImage?"Create a cinematic video based on this visual request: "+prompt:prompt;
+     const media=await generateVideo(videoPrompt,Math.min(5,Math.max(1,Number(body.duration)||5)),aspectRatio,sourceImage);
+     return json(res,200,{ok:true,text:"## 🎬 Video generated\\n\\nBHAI X ne dedicated video pipeline, provider fallback aur output validation complete ki.",activity:[{tool:"generate_video",state:"done",details:"Dedicated media endpoint generated and validated the video."}],images:[{mimeType:media.mimeType,data:media.data,video:true,duration:media.duration}],usage:await getMediaUsage(db,account.id)});
+    }catch(e){await releaseMedia(db,account.id,"video");return json(res,502,{error:"Video generation failed: "+String(e?.message||e),activity:[{tool:"generate_video",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});}
+   }catch(e){return json(res,502,{error:"Video generation pre-flight failed: "+String(e?.message||e)});
+   }
+  }
+  return json(res,400,{error:"Media type must be image or video."});
+ }
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
  const {messages=[]}=req.body||{},activity=[];
   // Automatic execution: no user-facing DO IT switch is required.

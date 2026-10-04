@@ -12,7 +12,7 @@ import SystemPanel from'./SystemPanel.jsx';
 import ResellerPanel from'./ResellerPanel.jsx';
 import ProjectBrainPanel from'./ProjectBrainPanel.jsx';
 import APIKeysPanel from'./APIKeysPanel.jsx';
-import {normalizeIntent,isCasualIntent,detectMediaIntent,isGeneralChatIntent} from './intentRouter.js';
+import {normalizeIntent,isCasualIntent,detectMediaIntent,isGeneralChatIntent,isLocalCodingIntent} from './intentRouter.js';
 
 const API_BASE='https://bhai-ai-vpna.onrender.com';
 const apiUrl=p=>API_BASE+p;
@@ -130,7 +130,7 @@ function App(){
   const instantReply=instantCasual[fastKey]||fastLocal[fastKey];
   const instantMessage=Boolean(instantReply);
   const mediaMessage=!instantMessage&&Boolean(mediaIntent.type);
-  const generalChatMessage=!instantMessage&&!mediaMessage&&isGeneralChatIntent(userIntentText);
+  const generalChatMessage=!instantMessage&&!mediaMessage&&(isGeneralChatIntent(userIntentText)||isLocalCodingIntent(userIntentText));
   if(instantMessage){
    const id=crypto.randomUUID();
    setInput('');setFileInfo(null);setToolsOpen(false);

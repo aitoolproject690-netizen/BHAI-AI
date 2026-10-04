@@ -9,7 +9,7 @@ import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, create
 import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
-import {normalizeIntent,isCasualIntent,detectMediaIntent,isMediaToolAllowed} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -713,6 +713,23 @@ async function getModelsFast(){
   return list;
 }
 const latestText=String(latestUserMessage||"").trim();
+// Deterministic local-coding isolation: short coding-help requests stay on the chat provider.
+const localCodingRequest=isLocalCodingIntent(latestText);
+if(localCodingRequest){
+ try{
+  const routed=await generateWithRouter({
+   task:latestText,
+   system:"You are BHAI X, a practical coding assistant. For standalone code questions, answer directly with the corrected code and a brief explanation. Do not claim GitHub, repository, build, deploy, or file changes unless they were actually performed.",
+   messages:[{role:"user",text:latestText}],
+   preferred:"core",
+   role:"chat",
+   fallback:true
+  });
+  return json(res,200,{ok:true,text:String(routed?.text||"I could not generate a coding answer."),activity:[{tool:"coding-chat",state:"done",details:"Standalone coding request kept out of engineering execution."}],images:[],usage:await getMediaUsage(db,account.id),verified:true});
+ }catch(e){
+  return json(res,502,{error:"Coding chat provider failed: "+String(e?.message||e),activity:[{tool:"coding-chat",state:"failed",details:String(e?.message||e)}]});
+ }
+}
 const missionMode=/\b(?:app|project|repo|repository|website|apk)\b/i.test(latestText) && /\b(?:create|make|build|bana|ban[a-z]*|fix|deploy|publish|push|commit|update|repair|test|verify)\b/i.test(latestText);
 const mission=createMissionController();
 const missionStep=(next,details="")=>{ mission.transition(next); activity.push({tool:"mission:"+next,state:"done",details}); };

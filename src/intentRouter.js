@@ -61,3 +61,14 @@ export function isGeneralChatIntent(text="") {
   if(isCasualIntent(raw)||detectMediaIntent(raw).type) return false;
   return !/\b(?:github|git\s*hub|repo(?:sitory)?|create|make|generate|draw|design|render|visualize|produce|banao|bana|banado|ban[aā]o|build|deploy|publish|commit|push|pull\s+request|fix|repair|debug|update|implement|refactor|ship|release)\b/i.test(raw);
 }
+
+/**
+ * Server-side tool gate for media generation.
+ * A model must never turn a non-media request into an image/video job.
+ */
+export function isMediaToolAllowed(toolName,text="") {
+  const type=detectMediaIntent(text).type;
+  if(toolName==="generate_image") return type==="image";
+  if(toolName==="generate_video") return type==="video";
+  return true;
+}

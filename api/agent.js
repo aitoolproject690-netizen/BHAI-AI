@@ -473,8 +473,10 @@ export default async function handler(req,res){
  const endpoint=new URL(req.url||"/","http://localhost").pathname;
  const body=req.body||{};
  if(endpoint==="/api/chat"){
-  const chatMessages=Array.isArray(body.messages)?body.messages.slice(-20):[];
-  const task=String(chatMessages.find(m=>m?.role==="user"&&m?.text)?.text||"").trim();
+  let chatMessages=Array.isArray(body.messages)?body.messages.slice(-20):[];
+  chatMessages=chatMessages.filter(m=>m&&["user","assistant"].includes(m.role)&&String(m.text??m.content??"").trim()).map(m=>({role:m.role,text:String(m.text??m.content??"").trim()}));
+  while(chatMessages.length&&chatMessages[chatMessages.length-1].role==="assistant") chatMessages.pop();
+  const task=String([...chatMessages].reverse().find(m=>m.role==="user")?.text||"").trim();
   if(!task)return json(res,400,{error:"Chat message is required."});
   try{
    const routed=await generateWithRouter({

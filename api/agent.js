@@ -277,7 +277,6 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
    }
   }
  }catch(e){ errors.push("Hugging Face fallback unavailable: "+String(e?.message||e).slice(0,350)); }
- }
  throw new Error("Video generation failed: all configured providers were unavailable. "+errors.join(" | "));
 }
 

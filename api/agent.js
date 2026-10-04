@@ -254,7 +254,7 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
      const imageRef=handle_file(new Blob([imageBuffer],{type:sourceImage.mimeType||"image/png"}));
      args=labels.map(label=>/image|img/.test(label)?imageRef:/prompt|text/.test(label)?String(prompt).trim():/watermark/.test(label)?false:/seed/.test(label)?-1:undefined);
     }else{
-     args=labels.map(label=>/prompt|text/.test(label)?String(prompt).trim():/size|resolution/.test(label)?"480P":/watermark/.test(label)?false:/seed/.test(label)?-1:undefined);
+     args=labels.map(label=>/prompt|text/.test(label)?String(prompt).trim():/size|resolution/.test(label)?(aspectRatio==="9:16"?"720*1280":aspectRatio==="1:1"?"960*960":aspectRatio==="4:5"?"832*1088":"1280*720"):/watermark/.test(label)?false:/seed/.test(label)?-1:undefined);
     }
     const submitted=await client.predict(wanted,args);
     const submittedData=submitted?.data??submitted;

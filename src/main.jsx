@@ -12,7 +12,7 @@ import SystemPanel from'./SystemPanel.jsx';
 import ResellerPanel from'./ResellerPanel.jsx';
 import ProjectBrainPanel from'./ProjectBrainPanel.jsx';
 import APIKeysPanel from'./APIKeysPanel.jsx';
-import {normalizeIntent,isCasualIntent,detectMediaIntent} from './intentRouter.js';
+import {normalizeIntent,isCasualIntent,detectMediaIntent,isGeneralChatIntent} from './intentRouter.js';
 
 const API_BASE='https://bhai-ai-vpna.onrender.com';
 const apiUrl=p=>API_BASE+p;
@@ -130,12 +130,29 @@ function App(){
   const instantReply=instantCasual[fastKey]||fastLocal[fastKey];
   const instantMessage=Boolean(instantReply);
   const mediaMessage=!instantMessage&&Boolean(mediaIntent.type);
+  const generalChatMessage=!instantMessage&&!mediaMessage&&isGeneralChatIntent(userIntentText);
   if(instantMessage){
    const id=crypto.randomUUID();
    setInput('');setFileInfo(null);setToolsOpen(false);
    const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id,role:'assistant',text:instantReply}];
    upd(()=>next);
    if(chat.title==='New chat')setSessions(a=>a.map(s=>s.id===active?{...s,title:t.slice(0,32)}:s));
+   return;
+  }
+  if(generalChatMessage){
+   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(false);
+   const id=crypto.randomUUID();
+   const replyId=id+'-chat-reply';
+   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'⚡ Bhai, soch raha hoon...'}];
+   upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
+   try{
+    const rr=await fetch(apiUrl('/api/chat'),{method:'POST',headers:authHeaders(),body:JSON.stringify({messages:next})});
+    const d=await rr.json().catch(()=>({}));
+    if(!rr.ok||d.error)throw new Error(d.error||('Chat backend HTTP '+rr.status));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||'✅':x.text}:x));
+   }catch(e){
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ Chat error\\n\\n'+e.message}:x));
+   }finally{setRunning(false)}
    return;
   }
   if(mediaMessage){

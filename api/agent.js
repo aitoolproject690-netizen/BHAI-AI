@@ -1091,3 +1091,6 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   return json(res,200,{text:ft||"Task completed.",activity,images:generatedImages,usage:await getMediaUsage(db,account.id)});
  }catch(e){return json(res,500,{error:"Safe execution limit reached. The agent stopped to avoid an endless tool loop.",activity});}
 }
+
+
+export { generateImage,generateVideo,saveMediaAsset,getLatestMediaAsset,reserveMedia,releaseMedia,getMediaUsage };

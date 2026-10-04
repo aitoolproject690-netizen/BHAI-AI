@@ -207,7 +207,7 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error("Pollinations image-to-video returned HTTP "+r.status+" — "+JSON.stringify(d).slice(0,500));
     const text=String(d?.choices?.[0]?.message?.content||d?.output_text||"");
-    const url=(text.match(/https?:\\/\\/[^\\s)\\]]+\\.(?:mp4|webm)(?:\\?[^\\s)\\]]*)?/i)||[])[0]||d?.data?.[0]?.url;
+    const url=(text.match(/https?:\/\/[^\s)\]]+\.(?:mp4|webm)(?:\?[^\s)\]]*)?/i)||[])[0]||d?.data?.[0]?.url;
     if(!url)throw new Error("Pollinations image-to-video returned no video URL.");
     const video=await downloadVideo(url);
     if(!video)throw new Error("Pollinations image-to-video returned an invalid video.");

@@ -24,6 +24,7 @@ export function normalizeIntent(text="") {
   return String(text)
     .toLowerCase()
     .replace(/[!?.,;:]+/g," ")
+    .replace(/\s+/g," ")
     .replace(/^\s*bhai\b\s*/i,"")
     .replace(/\s+bhai$/i,"")
     .replace(/\s+/g," ")

@@ -44,7 +44,7 @@ export function extractGithubRepoReference(text=''){
  m=input.match(new RegExp('[`\\"]('+REPO_PART+')\\/('+REPO_PART+')[`\\"]','i'));
  if(m && /(?:github|repo(?:sitory)?)/i.test(input)) return make(m);
  m=input.match(new RegExp('(?:^|[\\s`\\"])('+REPO_PART+')\\/('+REPO_PART+')\\/([^\\s`\\"<>?#]+)','i'));
- if(m && /\\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml)$/i.test(m[3]) && isLikelyRepoPair(m[1],m[2])) return {owner:m[1],repo:m[2]};
+ if(m && /\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml)$/i.test(m[3]) && isLikelyRepoPair(m[1],m[2])) return {owner:m[1],repo:m[2]};
  m=input.match(new RegExp('(?:^|[\\s`\\"] )('+REPO_PART+')\\/('+REPO_PART+')(?:\\s+)(?:repo|repository)\\b','i'));
  if(m) return make(m);
  return null;

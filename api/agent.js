@@ -8,6 +8,7 @@ import { getSession } from "./accounts.js";
 import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
 import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 import { routeConversationContext } from "./contextRouter.js";
+import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,detectMediaIntent} from "../src/intentRouter.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
@@ -479,13 +480,19 @@ export default async function handler(req,res){
   const task=String([...chatMessages].reverse().find(m=>m.role==="user")?.text||"").trim();
   if(!task)return json(res,400,{error:"Chat message is required."});
   try{
+   const medicalMode=isMedicalIntent(task);
+   const system=[
+    "You are BHAI X, a friendly practical AI chat assistant. Never claim external tools were used in this chat endpoint. Answer directly and naturally. When the user writes Hindi or Hinglish, reply in the same style.",
+    medicalMode ? getMedicalSafetyPrompt(task) : ""
+   ].filter(Boolean).join("\n");
    const routed=await generateWithRouter({
     task,
-    system:"You are BHAI X, a friendly practical AI chat assistant. Never claim external tools were used in this chat endpoint. Answer directly and naturally. When the user writes Hindi or Hinglish, reply in the same style.",
+    system,
     messages:chatMessages,
     preferred:"core",role:"chat",fallback:true
    });
-   return json(res,200,{ok:true,text:routed.text,provider:routed.provider,model:routed.model,verified:true});
+   const safeText=medicalMode?applyMedicalSafetyFooter(routed.text,task):routed.text;
+   return json(res,200,{ok:true,text:safeText,provider:routed.provider,model:routed.model,verified:true});
   }catch(e){return json(res,502,{error:"Chat provider failed: "+String(e?.message||e)});}
  }
  if(endpoint==="/api/media"){
@@ -609,7 +616,7 @@ if(directImageRequest){
   return json(res,502,{error:"Image generation pre-flight failed: "+String(e?.message||e),activity:[{tool:"generate_image",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});
  }
 }
- if(!key) return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
+ if(!getConfiguredAIProviders().length) return json(res,503,{error:"No AI provider is configured. Configure BHAI-CORE or another supported AI provider in Render Environment."});
  const contextRoute=routeConversationContext(messages,latestUserMessage);
  const routedMessages=contextRoute.messages;
  const userTaskMessages=routedMessages.filter(m=>m&&m.role==="user").map(m=>String(m.text||"")).filter(Boolean);
@@ -622,7 +629,9 @@ if(directImageRequest){
  const selectedSkills=selectSkillsForTask(latestUserMessage);
  const skillContext=getSkillPromptContext(selectedSkills);
  const contextNote=`CONTEXT ROUTER: ${contextRoute.mode}. ${contextRoute.reason} Never revive an older Mission, repository, file, commit, or build unless the current user message explicitly refers to that existing task.`;
- const system=`You are BHAI AI, a practical personal work agent. ${contextNote} ${skillContext}
+ const medicalMode=isMedicalIntent(latestUserMessage);
+ const medicalSafety=medicalMode?getMedicalSafetyPrompt(latestUserMessage):"";
+ const system=`You are BHAI AI, a practical personal work agent. ${contextNote} ${skillContext} ${medicalSafety}
 Reply in Hinglish when the user does. Talk naturally like a helpful project partner and friend: explain what you are doing, why it matters, what is already complete, what is still pending, and what should be added or fixed next.
 
 RESPONSE STYLE / MARKDOWN:

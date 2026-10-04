@@ -54,7 +54,7 @@ export function getMedicalSafetyPrompt(task=""){
 
 const MED_ACTION_RE = /(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|rok|roko|rok de|rok dein|band|band karo|band kar|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोक|रोकें|बंद|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें).{0,120}(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली)/i;
 const MED_ACTION_RE_REVERSED = /(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली).{0,120}(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|rok|roko|rok de|rok dein|band|band karo|band kar|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोक|रोकें|बंद|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें)/i;
-const SPECIFIC_DOSE_RE = /(?:\b(?:aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|tablet|capsule|syrup|medicine|medication|goli|dawai|dava|dawa)\b|(?:पेरासिटामोल|पैरासिटामोल|इबुप्रोफेन|आईबुप्रोफेन|एस्पिरिन|दवा|दवाई|गोली|टैबलेट|कैप्सूल|सिरप))[^\n]{0,120}\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml)\b/i;
+const SPECIFIC_DOSE_RE = /(?:\b(?:aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|tablet|capsule|syrup|medicine|medication|goli|dawai|dava|dawa)\b|(?:पेरासिटामोल|पैरासिटामोल|इबुप्रोफेन|आईबुप्रोफेन|इब्रूफ़ेन|इब्रोफेन|आईब्रोफेन|एस्पिरिन|दवा|दवाई|गोली|टैबलेट|कैप्सूल|सिरप))[^\n]{0,120}\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml)\b/i;
 
 function removeUnsafeLine(line){
   const s=String(line);

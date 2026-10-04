@@ -154,23 +154,85 @@ async function getMediaUsage(db,accountId){
 
 async function generateVideo(prompt,duration=5,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
- const key=process.env.POLLINATIONS_API_KEY;
- if(!key) throw new Error("POLLINATIONS_API_KEY is not configured.");
  const seconds=Math.min(5,Math.max(1,Number(duration)||5));
- const model=process.env.POLLINATIONS_VIDEO_MODEL||"veo";
- const qs=new URLSearchParams({model,duration:String(seconds)});
- if(aspectRatio==="9:16")qs.set("aspectRatio","9:16");
- else if(aspectRatio==="1:1")qs.set("aspectRatio","1:1");
- const url="https://gen.pollinations.ai/video/"+encodeURIComponent(String(prompt).trim())+"?"+qs.toString();
- const r=await fetch(url,{headers:{Authorization:"Bearer "+key},signal:timeout(300000)});
- if(!r.ok){
-  const body=await r.text().catch(()=> "");
-  throw new Error("Pollinations video returned HTTP "+r.status+(body?" — "+body.slice(0,300):""));
+ const errors=[];
+ const maxBytes=20*1024*1024;
+ const downloadVideo=async(value)=>{
+  let url=null;
+  if(typeof value==="string") url=value;
+  else if(value&&typeof value==="object") url=value.url||value.video_url||value.videoUrl||value.path||value.output||null;
+  if(url&&/^https?:\/\//i.test(url)){
+   const r=await fetch(url,{signal:timeout(120000)});
+   if(!r.ok) throw new Error("Video download returned HTTP "+r.status);
+   const b=Buffer.from(await r.arrayBuffer());
+   if(!b.length) throw new Error("Provider returned an empty video.");
+   if(b.length>maxBytes) throw new Error("Provider returned a video larger than 20 MB.");
+   return {mimeType:r.headers.get("content-type")||"video/mp4",data:b.toString("base64")};
+  }
+  return null;
+ };
+
+ // Primary paid provider. If its balance is exhausted, continue automatically.
+ const key=process.env.POLLINATIONS_API_KEY;
+ if(key){
+  try{
+   const model=process.env.POLLINATIONS_VIDEO_MODEL||"veo";
+   const qs=new URLSearchParams({model,duration:String(seconds)});
+   if(aspectRatio==="9:16")qs.set("aspectRatio","9:16");
+   else if(aspectRatio==="1:1")qs.set("aspectRatio","1:1");
+   const url="https://gen.pollinations.ai/video/"+encodeURIComponent(String(prompt).trim())+"?"+qs.toString();
+   const r=await fetch(url,{headers:{Authorization:"Bearer "+key},signal:timeout(300000)});
+   if(!r.ok){
+    const body=await r.text().catch(()=> "");
+    throw new Error("Pollinations video returned HTTP "+r.status+(body?" — "+body.slice(0,300):""));
+   }
+   const b=Buffer.from(await r.arrayBuffer());
+   if(!b.length)throw new Error("Pollinations returned an empty video.");
+   if(b.length>maxBytes)throw new Error("Pollinations returned a video larger than 20 MB.");
+   return {mimeType:r.headers.get("content-type")||"video/mp4",data:b.toString("base64"),duration:seconds,provider:"pollinations"};
+  }catch(e){errors.push("Pollinations: "+String(e?.message||e).slice(0,500));}
+ }else{
+  errors.push("Pollinations: POLLINATIONS_API_KEY is not configured");
  }
- const b=Buffer.from(await r.arrayBuffer());
- if(!b.length)throw new Error("Pollinations returned an empty video.");
- if(b.length>20*1024*1024)throw new Error("Pollinations returned a video larger than 20 MB.");
- return {mimeType:r.headers.get("content-type")||"video/mp4",data:b.toString("base64"),duration:seconds,provider:"pollinations"};
+
+ // Free/public Hugging Face Gradio fallback chain.
+ // Spaces can be busy or change endpoints, so each candidate is isolated and failure moves on.
+ const spaces=(process.env.HF_VIDEO_SPACES||"Wan-AI/Wan2.1-T2V-1.3B,Lightricks/LTX-Video-Playground,Wan-AI/Wan2.1")
+  .split(",").map(x=>x.trim()).filter(Boolean).slice(0,5);
+ try{
+  const {Client}=await import("@gradio/client");
+  for(const space of spaces){
+   try{
+    const client=await Client.connect(space);
+    const attempts=[
+     async()=>client.predict("/generate",{prompt:String(prompt).trim()}),
+     async()=>client.predict("/predict",{prompt:String(prompt).trim()}),
+     async()=>client.predict("/generate",[String(prompt).trim()]),
+     async()=>client.predict("/predict",[String(prompt).trim()])
+    ];
+    let out=null,lastErr=null;
+    for(const attempt of attempts){
+     try{out=await attempt(); if(out)break;}catch(e){lastErr=e;}
+    }
+    if(!out) throw lastErr||new Error("No Gradio result");
+    const data=out?.data??out;
+    const candidates=Array.isArray(data)?data:[data];
+    let video=null;
+    for(const item of candidates){
+     video=await downloadVideo(item).catch(()=>null);
+     if(video)break;
+    }
+    if(!video) throw new Error("Gradio Space returned no downloadable video.");
+    return {...video,duration:seconds,provider:"huggingface-space:"+space};
+   }catch(e){
+    errors.push("Hugging Face "+space+": "+String(e?.message||e).slice(0,350));
+   }
+  }
+ }catch(e){
+  errors.push("Hugging Face fallback unavailable: "+String(e?.message||e).slice(0,350));
+ }
+
+ throw new Error("Video generation failed: all configured providers were unavailable. "+errors.join(" | "));
 }
 
 async function github(action,a){

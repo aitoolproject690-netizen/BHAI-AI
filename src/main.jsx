@@ -30,6 +30,22 @@ async function readJsonResponse(response,label='Backend'){
  }
 }
 
+function extractExplicitGithubRepo(text=''){
+ const raw=String(text||'');
+ const url=raw.match(/https?:\/\/github\.com\/([^/\s?#]+)\/([^/\s?#]+)/i);
+ if(url)return {owner:url[1],repo:url[2]};
+ const contextual=raw.match(/\b(?:github|git\s*hub)\b[\s\S]{0,100}?\b([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\b/i);
+ if(contextual)return {owner:contextual[1],repo:contextual[2]};
+ return null;
+}
+function extractGithubFilePath(text=''){
+ const raw=String(text||'');
+ const m=raw.match(/\b([A-Za-z0-9_.-]+\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))\b/i);
+ if(m)return m[1];
+ const simple=raw.match(/\b([A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))\b/i);
+ return simple?.[1]||'';
+}
+
 const K='bhai_x_v3';
 const starter={id:crypto.randomUUID(),role:'assistant',text:'Bhai 😎 BHAI X ready hai.\n\nJo kaam chahiye seedha bol — research, coding, GitHub, image, files ya build. jahan zarurat hogi BHAI X khud actual tools se kaam karega.\n\nMain sirf jawab dene wala chatbot nahi hoon — project ka context yaad rakhkar bataunga ki kya complete hua, kya baaki hai, aur next mein kya add/fix karna useful rahega.'};
 
@@ -141,13 +157,50 @@ function App(){
   const instantReply=instantCasual[fastKey]||fastLocal[fastKey];
   const instantMessage=Boolean(instantReply);
   const mediaMessage=!instantMessage&&Boolean(mediaIntent.type);
-  const generalChatMessage=!instantMessage&&!mediaMessage&&(isGeneralChatIntent(userIntentText)||isLocalCodingIntent(userIntentText));
+  const explicitGithubRepo=extractExplicitGithubRepo(userIntentText);
+  const githubFilePath=extractGithubFilePath(userIntentText);
+  const githubMutationRequest=/\b(?:fix|repair|update|modify|change|write|commit|push|delete|create|build|deploy|publish)\b/i.test(userIntentText);
+  const githubReadIntent=/\b(?:check|inspect|read|open|verify|dekh|dekho)\b/i.test(userIntentText);
+  const directGithubRead=Boolean(explicitGithubRepo&&githubReadIntent&&!githubMutationRequest&&(githubFilePath||/\b(?:repo|repository)\b/i.test(userIntentText)));
+  const generalChatMessage=!instantMessage&&!mediaMessage&&!directGithubRead&&(isGeneralChatIntent(userIntentText)||isLocalCodingIntent(userIntentText));
   if(instantMessage){
    const id=crypto.randomUUID();
    setInput('');setFileInfo(null);setToolsOpen(false);
    const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id,role:'assistant',text:instantReply}];
    upd(()=>next);
    if(chat.title==='New chat')setSessions(a=>a.map(s=>s.id===active?{...s,title:t.slice(0,32)}:s));
+   return;
+  }
+  if(directGithubRead){
+   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
+   const id=crypto.randomUUID();
+   const replyId=id+'-github-read-reply';
+   const targetPath=githubFilePath.replace(/^\/+/,'');
+   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'🔎 GitHub target verify kar raha hoon...'}];
+   upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
+   setActivity([
+    {id:id+'0',step:'Target',text:'🎯 Exact GitHub repository target identify kiya...',state:'done'},
+    {id:id+'1',step:'Reading',text:'📖 GitHub API se requested repository/file read ho raha hai...',state:'running'},
+    {id:id+'2',step:'Verifying',text:'✅ Repository aur file response verify kiya jayega...',state:'pending'}
+   ]);
+   try{
+    const rr=await fetch(apiUrl('/api/github'),{method:'POST',headers:authHeaders(),body:JSON.stringify({
+     action:targetPath?'read':'info',
+     owner:explicitGithubRepo.owner,
+     repo:explicitGithubRepo.repo,
+     ...(targetPath?{path:targetPath}:{})
+    })});
+    const d=await readJsonResponse(rr,'/api/github');
+    if(!rr.ok||d.error)throw new Error(d.error||('GitHub backend HTTP '+rr.status));
+    const fileSummary=targetPath
+      ? '## ✅ GitHub file verified\\n\\n**Repository:** '+explicitGithubRepo.owner+'/'+explicitGithubRepo.repo+'\\n\\n**File:** '+(d.path||targetPath)+'\\n\\n**Verification:** GitHub API se file successfully read hui.\\n\\n<pre>'+String(d.content||'').slice(0,12000).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</pre>'
+      : '## ✅ GitHub repository verified\\n\\n**Repository:** '+(d.name||explicitGithubRepo.owner+'/'+explicitGithubRepo.repo)+'\\n\\n**Default branch:** '+(d.default_branch||'main')+'\\n\\n**Verification:** GitHub API se repository successfully read hui.';
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:fileSummary}:x));
+    setActivity(a=>a.map(x=>x.id===id+'1'||x.id===id+'2'?{...x,state:'done'}:x));
+   }catch(e){
+    setActivity(a=>a.map(x=>({...x,state:x.state==='running'?'failed':x.state})));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ GitHub check failed\\n\\n'+e.message}:x));
+   }finally{setRunning(false)}
    return;
   }
   if(generalChatMessage){

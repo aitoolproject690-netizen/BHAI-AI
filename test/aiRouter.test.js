@@ -102,15 +102,17 @@ test("AI router falls back when the primary provider reports high demand",async(
 
 
 test("BHAI-CORE is a first-class router provider without exposing its API key",()=>{
-  const original=process.env.BHAI_CORE_URL;
+  const original={url:process.env.BHAI_CORE_URL,key:process.env.BHAI_CORE_API_KEY};
   process.env.BHAI_CORE_URL="https://core.test";
+  process.env.BHAI_CORE_API_KEY="test-core-key";
   try{
     const status=getAIProviderStatus().find(p=>p.id==="core");
     assert.equal(status?.configured,true);
     assert.equal(routeAI({task:"fix this code"}),"core");
     assert.equal(Object.prototype.hasOwnProperty.call(status||{},"apiKey"),false);
   }finally{
-    if(original===undefined)delete process.env.BHAI_CORE_URL; else process.env.BHAI_CORE_URL=original;
+    if(original.url===undefined)delete process.env.BHAI_CORE_URL; else process.env.BHAI_CORE_URL=original.url;
+    if(original.key===undefined)delete process.env.BHAI_CORE_API_KEY; else process.env.BHAI_CORE_API_KEY=original.key;
   }
 });
 

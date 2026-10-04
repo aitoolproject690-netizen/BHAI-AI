@@ -72,3 +72,16 @@ export function isMediaToolAllowed(toolName,text="") {
   if(toolName==="generate_video") return type==="video";
   return true;
 }
+
+
+/**
+ * Detects local coding-help requests that should stay in the chat path.
+ * Only explicit project/GitHub execution cues should enter the engineering agent.
+ */
+export function isLocalCodingIntent(text="") {
+  const raw=String(text);
+  if(isCasualIntent(raw)||detectMediaIntent(raw).type) return false;
+  const codingCue=/(?:python|javascript|typescript|code|coding|function|def\s+\w+|return\b|stack\s*trace|exception|traceback|bug|error|fix\s+(?:this|the)?\s*code|debug)/i.test(raw);
+  const executionCue=/(?:github|git\s*hub|repo(?:sitory)?|app\b|project\b|website\b|apk\b|deploy|publish|commit|push|pull\s+request|create\s+(?:a\s+)?repo)/i.test(raw);
+  return codingCue && !executionCue;
+}

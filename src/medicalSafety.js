@@ -121,3 +121,4 @@ export function applyMedicalSafetyFooter(text="",task=""){
 }
 
 export { repairKnownUnsafeClaims };
+// Production guard: medical requests never use the unsafe fast-chat bypass.

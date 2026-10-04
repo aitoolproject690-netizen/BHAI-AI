@@ -79,9 +79,9 @@ function repairKnownUnsafeClaims(text,task){
   }
 
   // Remove the known unsafe advice to measure BP every 15-20 minutes.
-  if(/(?:every|हर)\s*15\s*[-–]?\s*20\s*(?:minutes|मिनट)/i.test(out)
+  if(/(?:every|हर|har)\s*15\s*[-–]?\s*20\s*(?:minutes|मिनट)/i.test(out)
      ||/(?:15\s*[-–]?\s*20\s*(?:minutes|मिनट)).*(?:bp|blood pressure)/i.test(out)){
-    out=out.split("\n").filter(line=>!/(?:every|हर)\s*15\s*[-–]?\s*20\s*(?:minutes|मिनट)/i.test(line)).join("\n");
+    out=out.split("\n").filter(line=>!/(?:every|हर|har)\s*15\s*[-–]?\s*20\s*(?:minutes|मिनट)/i.test(line)).join("\n");
     corrections.push("BP ko har 15-20 minute baar-baar check karna zaroori nahi hai; high reading ko proper rest ke baad ek baar repeat karna better hai.");
   }
 

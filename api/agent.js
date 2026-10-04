@@ -9,7 +9,7 @@ import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, create
 import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
-import {normalizeIntent,isCasualIntent,detectMediaIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,detectMediaIntent,isMediaToolAllowed} from "../src/intentRouter.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -679,7 +679,8 @@ EXECUTION POLICY:
 - Never claim an action happened unless a tool result confirms it. Never say DONE when verification is missing. Every final report must state completed work, remaining work, verification performed, and one or more useful next-step recommendations when appropriate.`;
 
  let contents=compactContents(toGeminiContents(routedMessages));
- const activeToolDefinitions=selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search");
+ const activeToolDefinitions=(selectedSkills.includes("web-research") ? toolDefinitions : toolDefinitions.filter(t=>t.name!=="web_search"))
+  .filter(t=>isMediaToolAllowed(t.name,latestUserMessage)||!["generate_image","generate_video"].includes(t.name));
 
  async function getAvailableModels(){
  try{

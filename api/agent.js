@@ -932,10 +932,21 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
     } else if(name==="generate_video"){
      await reserveMedia(db,account.id,"video",3);
      try{
-      const toolImageToVideo=/\b(?:image[- ]to[- ]video|video\b.{0,100}\b(?:from|using|with|isko|iss)\b.{0,100}\b(?:image|picture|photo|pic))\b/i.test(latestUserMessage);
+      const toolImageToVideo=/\b(?:image[- ]to[- ]video|video\b.{0,100}\b(?:from|using|with|isko|iss|is)\b.{0,100}\b(?:image|picture|photo|pic|tasveer|scene))\b|\b(?:isko|iss|is)\b.{0,80}\b(?:video|clip|animation)\b/i.test(latestUserMessage);
       const sourceImage=toolImageToVideo?await getLatestMediaAsset(db,account.id,"image"):null;
-      if(toolImageToVideo&&!sourceImage) throw new Error("Image-to-video requested, but no previous BHAI X image asset is available.");
-      result=await generateVideo(a.prompt,Math.min(5,Number(a.duration)||5),a.aspectRatio||"16:9",sourceImage);
+      // If the image was created before persistent media storage existed, recover gracefully:
+      // reuse the latest visual user prompt as a T2V fallback instead of failing the whole request.
+      let videoPrompt=a.prompt;
+      if(toolImageToVideo&&!sourceImage){
+       const priorVisual=Array.isArray(messages)
+        ? [...messages].reverse().find(m=>m?.role==="user" && m?.text && m.text!==latestUserMessage && /(?:scene|image|picture|photo|poster|illustration|artwork|tasveer|visual|cinematic|3d)/i.test(String(m.text)))
+        : null;
+       videoPrompt=priorVisual?.text
+        ? "Create a cinematic video based on this previously requested scene: "+String(priorVisual.text).trim()
+        : "Create a cinematic video based on the most recent visual request.";
+       activity.push({tool:"media:recovery",state:"done",details:"Previous image asset was not persisted; recovered the latest visual prompt and switched to compatible text-to-video generation."});
+      }
+      result=await generateVideo(videoPrompt,Math.min(5,Number(a.duration)||5),a.aspectRatio||"16:9",sourceImage);
      }catch(e){await releaseMedia(db,account.id,"video");throw e;}
     } else result=await github(name,{...a,path:normalizedPath});
     if(name==="generate_image"){

@@ -62,7 +62,11 @@ function firstEnv(names) {
 }
 
 function configured(id) {
-  if (id === "core") return Boolean(process.env.BHAI_CORE_URL);
+  if (id === "core") {
+    // Core uses the canonical BHAI-CORE endpoint when URL is not explicitly set.
+    // A server-side BHAI-CORE API key is still required for authentication.
+    return Boolean(coreBaseUrl() && firstEnv(PROVIDERS.core.env));
+  }
   return !!firstEnv(PROVIDERS[id]?.env || []);
 }
 

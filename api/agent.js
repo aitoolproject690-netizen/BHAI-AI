@@ -867,8 +867,10 @@ if(githubFileRequest && latestHasExplicitGithub && githubRequestedRepo && github
   const fixes=[];
   if(/\.html?$/i.test(path)){
    const before=fixed;
-   fixed=fixed.replace(/console\.log\(([^;\n]+);/g,"console.log($1);");
-   if(fixed!==before) fixes.push("Fixed malformed console.log call (missing closing parenthesis).");
+   fixed=fixed
+    .replace(/console\.log\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)+\s*;/g,"console.log($1);")
+    .replace(/console\.log\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*;/g,"console.log($1);");
+   if(fixed!==before) fixes.push("Fixed malformed console.log syntax.");
   }
   const forceRecoveryTest=missionMode && /(?:force|forced|simulate|test).{0,40}recovery|recovery.{0,40}(?:force|forced|simulate|test)/i.test(githubTaskText);
   const missionRecovery=missionMode && fixed!==original;

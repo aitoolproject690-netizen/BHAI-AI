@@ -1,7 +1,7 @@
 import { routeConversationContext, shouldCarryPreviousContext, shouldAutoExecuteTask } from "../api/contextRouter.js";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFilePath, resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createDeploymentCheckpoint, verifyDeploymentCheckpoint, createMissionController } from "../api/engineeringCore.js";
+import { normalizeFilePath, resolveGithubTarget, extractGithubRepoReference, classifyEngineeringError, createRetryGuard, createEvidence, createDeploymentCheckpoint, verifyDeploymentCheckpoint, createMissionController } from "../api/engineeringCore.js";
 
 test("resolves explicit GitHub owner/repo/file target",()=>{
   const x=resolveGithubTarget("fix aitoolproject690-netizen/BHAI-TASK-APP-TEST/index.html");
@@ -21,6 +21,31 @@ test("resolves GitHub target only from an explicit GitHub/repo context",()=>{
   assert.equal(x.owner,"aitoolproject690-netizen");
   assert.equal(x.repo,"BHAI-AI");
   assert.equal(x.path,"index.html");
+});
+
+test("normalizes GitHub blob/tree URLs to the real repository file path",()=>{
+  const blob=resolveGithubTarget("https://github.com/owner/demo/blob/main/index.html?raw=1");
+  assert.equal(blob.owner,"owner");
+  assert.equal(blob.repo,"demo");
+  assert.equal(blob.path,"index.html");
+  const tree=resolveGithubTarget("https://github.com/owner/demo/tree/main/src/components/App.jsx");
+  assert.equal(tree.owner,"owner");
+  assert.equal(tree.repo,"demo");
+  assert.equal(tree.path,"src/components/App.jsx");
+});
+
+test("keeps repository extraction and target resolution consistent",()=>{
+  for(const text of [
+    "Bhai GitHub repository aitoolproject690-netizen/BHAI-AI me index.html check karo.",
+    "https://github.com/owner/demo/blob/main/index.html",
+    "GitHub par owner/demo/index.html check karo."
+  ]){
+    const ref=extractGithubRepoReference(text);
+    const target=resolveGithubTarget(text);
+    assert.ok(ref?.owner&&ref?.repo);
+    assert.equal(target.owner,ref.owner);
+    assert.equal(target.repo,ref.repo);
+  }
 });
 
 test("accepts explicit labeled or URL GitHub repositories",()=>{

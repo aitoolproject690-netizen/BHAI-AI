@@ -1069,6 +1069,16 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
      continue;
     }
     let result;
+    if(name==="generate_image" && !isMediaToolAllowed(name,latestUserMessage)){
+     activity[activity.length-1].state="blocked";
+     responseParts.push({functionResponse:{name,response:{error:"Media tool blocked: current request is not an explicit image-generation request."}}});
+     continue;
+    }
+    if(name==="generate_video" && !isMediaToolAllowed(name,latestUserMessage)){
+     activity[activity.length-1].state="blocked";
+     responseParts.push({functionResponse:{name,response:{error:"Media tool blocked: current request is not an explicit video-generation request."}}});
+     continue;
+    }
     if(name==="web_search") result=await webSearch(a.query);
     else if(name==="generate_image"){
      await reserveMedia(db,account.id,"image",10);

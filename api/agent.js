@@ -470,7 +470,6 @@ export default async function handler(req,res){
  if(control.emergencyLock) return json(res,423,{error:"BHAI X is temporarily locked by the owner.",locked:true});
  if(req.method!=="POST") return json(res,405,{error:"Method not allowed"});
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
- if(!key) return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
  const {messages=[]}=req.body||{},activity=[];
   // Automatic execution: no user-facing DO IT switch is required.
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
@@ -563,6 +562,7 @@ if(directImageRequest){
   return json(res,502,{error:"Image generation pre-flight failed: "+String(e?.message||e),activity:[{tool:"generate_image",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});
  }
 }
+ if(!key) return json(res,503,{error:"AI provider is not configured. Add GEMINI_API_KEY in Render Environment."});
  const contextRoute=routeConversationContext(messages,latestUserMessage);
  const routedMessages=contextRoute.messages;
  const userTaskMessages=routedMessages.filter(m=>m&&m.role==="user").map(m=>String(m.text||"")).filter(Boolean);

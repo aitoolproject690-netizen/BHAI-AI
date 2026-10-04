@@ -5,6 +5,7 @@ import { getSession } from "./accounts.js";
 import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
 import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 import { routeConversationContext } from "./contextRouter.js";
+import {normalizeIntent,isCasualIntent,detectMediaIntent} from "../src/intentRouter.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -461,8 +462,8 @@ export default async function handler(req,res){
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
  // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
- const normalizedCasual=String(latestUserMessage).toLowerCase().replace(/[!?.,]+/g," ").replace(/^\s*bhai\b\s*/i,"").replace(/\s+bhai$/i,"").replace(/\s+/g," ").trim();
- const serverCasual=/^(?:hi|hello|hey|hii|helo|namaste|salam|good morning|good night|good evening|kaise ho|kaisa hai|kya haal(?: hai)?|kya chal raha(?: hai)?|kya chal rha(?: hai)?|kya kar rahe ho|kya kr rahe ho|kya kar reh ho|kya kr reh ho|kya kaam kar rahe ho|kya kam kar reh ho|kya kaam kr rahe ho|kya kam kr reh ho|kya scene hai|kya hua|thanks|thank you|thik hai|theek hai|ok|okay|nice|wah|haha|bye|goodbye|khana kha liya(?: hai)?|khana khaya(?: hai)?|kha liya|chai pi liya|so gaye|so rahe ho|kahan ho|busy ho|free ho)$/i.test(normalizedCasual);
+ const normalizedCasual=normalizeIntent(latestUserMessage);
+ const serverCasual=isCasualIntent(latestUserMessage);
  if(serverCasual){
   const casualReplies={
    "kya chal raha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
@@ -493,8 +494,9 @@ export default async function handler(req,res){
 
 // Deterministic media routing: explicit video requests always win over image-reference wording in video prompts.
 // Intent routing accepts natural Hinglish/Hindi forms such as "isko video bana", "is image ko video bana do".
-const directVideoRequest=/\b(?:generate|create|make|render|produce|banao|bana|banado|ban[aā]o)\b.{0,120}\b(?:video|clip|animation|animated)\b|\b(?:video|clip|animation|animated)\b.{0,120}\b(?:generate|create|make|render|produce|banao|bana|banado|ban[aā]o)\b|\bimage[- ]to[- ]video\b|\b(?:isko|iss|is)\b.{0,80}\b(?:video|clip|animation)\b.{0,40}\b(?:banao|bana|banado|ban[aā]o|make|create|generate)\b/i.test(latestUserMessage);
-const imageToVideoRequest=/\b(?:image[- ]to[- ]video|\b(?:isko|iss|is)\b.{0,80}\b(?:video|clip|animation)\b|\b(?:isko|iss|is)\b.{0,120}\b(?:image|picture|photo|pic|tasveer|scene)\b.{0,80}\b(?:video|clip|animation)\b|\b(?:video|clip|animation)\b.{0,120}\b(?:from|using|with|isko|iss|is)\b.{0,100}\b(?:image|picture|photo|pic|tasveer|scene)\b)/i.test(latestUserMessage);
+const mediaIntent=detectMediaIntent(latestUserMessage);
+const directVideoRequest=mediaIntent.type==="video";
+const imageToVideoRequest=mediaIntent.type==="video"&&mediaIntent.imageToVideo;
 if(directVideoRequest){
  try{
   await reserveMedia(db,account.id,"video",3);
@@ -528,11 +530,7 @@ if(directVideoRequest){
 // Deterministic media routing: explicit image requests must never fall through to the engineering/GitHub agent.
 // This is intentionally server-side so stale frontend bundles or AI routing cannot turn an image request into repo work.
 // Visual intent also covers prompts like "cinematic 3D scene banao" where the word "image" is never written.
-const directImageRequest=(
- /\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b.{0,140}\b(?:image|picture|photo|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b/i.test(latestUserMessage) ||
- /\b(?:image|picture|photo|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b.{0,140}\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b/i.test(latestUserMessage) ||
- /\b(?:scene|tasveer|visual|picture|image|photo)\b\s*(?:banao|bana|banado|ban[aā]o|create|make|generate|draw|design|render)\b/i.test(latestUserMessage)
-) && !/\b(?:video|clip|animation|animated)\b/i.test(latestUserMessage);
+const directImageRequest=mediaIntent.type==="image";
 if(directImageRequest){
  try{
   await reserveMedia(db,account.id,"image",10);

@@ -145,6 +145,17 @@ async function releaseMedia(db,accountId,type){
  await ensureUsageTable(db);
  await db.query("UPDATE bhai_media_usage SET "+col+"=GREATEST("+col+"-1,0) WHERE account_id=$1 AND usage_date=(NOW() AT TIME ZONE 'Asia/Kolkata')::date",[accountId]);
 }
+async function saveMediaAsset(db,accountId,type,media){
+ await db.query("CREATE TABLE IF NOT EXISTS bhai_media_assets (id BIGSERIAL PRIMARY KEY, account_id TEXT NOT NULL, type TEXT NOT NULL, mime_type TEXT NOT NULL, data TEXT NOT NULL, provider TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+ await db.query("DELETE FROM bhai_media_assets WHERE account_id=$1 AND type=$2",[accountId,type]);
+ await db.query("INSERT INTO bhai_media_assets(account_id,type,mime_type,data,provider) VALUES($1,$2,$3,$4,$5)",[accountId,type,media.mimeType,media.data,media.provider||null]);
+}
+async function getLatestMediaAsset(db,accountId,type){
+ await db.query("CREATE TABLE IF NOT EXISTS bhai_media_assets (id BIGSERIAL PRIMARY KEY, account_id TEXT NOT NULL, type TEXT NOT NULL, mime_type TEXT NOT NULL, data TEXT NOT NULL, provider TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+ const q=await db.query("SELECT mime_type,data,provider,created_at FROM bhai_media_assets WHERE account_id=$1 AND type=$2 ORDER BY id DESC LIMIT 1",[accountId,type]);
+ return q.rows[0]||null;
+}
+
 async function getMediaUsage(db,accountId){
  await ensureUsageTable(db);
  const q=await db.query("SELECT images,videos FROM bhai_media_usage WHERE account_id=$1 AND usage_date=(NOW() AT TIME ZONE 'Asia/Kolkata')::date",[accountId]);
@@ -152,7 +163,7 @@ async function getMediaUsage(db,accountId){
  return {images:Number(x.images||0),videos:Number(x.videos||0),imageLimit:10,videoLimit:3};
 }
 
-async function generateVideo(prompt,duration=5,aspectRatio="16:9"){
+async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=null){
  const timeout=(ms)=>AbortSignal.timeout(ms);
  const seconds=Math.min(5,Math.max(1,Number(duration)||5));
  const errors=[];
@@ -167,7 +178,9 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9"){
    const b=Buffer.from(await r.arrayBuffer());
    if(!b.length) throw new Error("Provider returned an empty video.");
    if(b.length>maxBytes) throw new Error("Provider returned a video larger than 20 MB.");
-   return {mimeType:r.headers.get("content-type")||"video/mp4",data:b.toString("base64")};
+   const mime=r.headers.get("content-type")||"video/mp4";
+   if(!/^video\//i.test(mime) && !/\.mp4(?:$|\?)/i.test(url) && !/\.webm(?:$|\?)/i.test(url)) throw new Error("Provider returned a non-video payload.");
+   return {mimeType:mime,data:b.toString("base64")};
   }
   return null;
  };
@@ -176,7 +189,30 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9"){
  const key=process.env.POLLINATIONS_API_KEY;
  if(key){
   try{
-   const model=process.env.POLLINATIONS_VIDEO_MODEL||"veo";
+   const model=process.env.POLLINATIONS_VIDEO_MODEL||"google/veo-3.1-fast";
+   if(sourceImage?.data){
+    const r=await fetch("https://gen.pollinations.ai/v1/chat/completions",{
+     method:"POST",
+     headers:{Authorization:"Bearer "+key,"Content-Type":"application/json"},
+     body:JSON.stringify({
+      model,
+      messages:[{role:"user",content:[
+       {type:"text",text:String(prompt).trim()},
+       {type:"image_url",image_url:{url:"data:"+(sourceImage.mimeType||"image/png")+";base64,"+sourceImage.data}}
+      ]}],
+      duration:seconds
+     }),
+     signal:timeout(300000)
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error("Pollinations image-to-video returned HTTP "+r.status+" — "+JSON.stringify(d).slice(0,500));
+    const text=String(d?.choices?.[0]?.message?.content||d?.output_text||"");
+    const url=(text.match(/https?:\\/\\/[^\\s)\\]]+\\.(?:mp4|webm)(?:\\?[^\\s)\\]]*)?/i)||[])[0]||d?.data?.[0]?.url;
+    if(!url)throw new Error("Pollinations image-to-video returned no video URL.");
+    const video=await downloadVideo(url);
+    if(!video)throw new Error("Pollinations image-to-video returned an invalid video.");
+    return {...video,duration:seconds,provider:"pollinations:i2v"};
+   }
    const qs=new URLSearchParams({model,duration:String(seconds)});
    if(aspectRatio==="9:16")qs.set("aspectRatio","9:16");
    else if(aspectRatio==="1:1")qs.set("aspectRatio","1:1");
@@ -195,43 +231,53 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9"){
   errors.push("Pollinations: POLLINATIONS_API_KEY is not configured");
  }
 
- // Free/public Hugging Face Gradio fallback chain.
- // Spaces can be busy or change endpoints, so each candidate is isolated and failure moves on.
- const spaces=(process.env.HF_VIDEO_SPACES||"Wan-AI/Wan2.1-T2V-1.3B,Lightricks/LTX-Video-Playground,Wan-AI/Wan2.1")
+ // Capability-aware Hugging Face Gradio fallback. Inspect the live API first; never guess endpoint names.
+ const spaces=(process.env.HF_VIDEO_SPACES||"Wan-AI/Wan2.1,techfreakworm/LTX2.3-Studio")
   .split(",").map(x=>x.trim()).filter(Boolean).slice(0,5);
  try{
-  const {Client}=await import("@gradio/client");
+  const {Client,handle_file}=await import("@gradio/client");
   for(const space of spaces){
    try{
-    const client=await Client.connect(space);
-    const attempts=[
-     async()=>client.predict("/generate",{prompt:String(prompt).trim()}),
-     async()=>client.predict("/predict",{prompt:String(prompt).trim()}),
-     async()=>client.predict("/generate",[String(prompt).trim()]),
-     async()=>client.predict("/predict",[String(prompt).trim()])
-    ];
-    let out=null,lastErr=null;
-    for(const attempt of attempts){
-     try{out=await attempt(); if(out)break;}catch(e){lastErr=e;}
+    const options=process.env.HF_TOKEN?{token:process.env.HF_TOKEN}:{};
+    const client=await Client.connect(space,options);
+    const api=await client.view_api();
+    const named=api?.named_endpoints||{};
+    const names=Object.keys(named);
+    const wanted=sourceImage
+      ? names.find(n=>/i2v|image.*video|video.*image/i.test(n))
+      : names.find(n=>/t2v|text.*video|video.*text/i.test(n));
+    if(!wanted) throw new Error("No compatible "+(sourceImage?"image-to-video":"text-to-video")+" endpoint exposed by Space.");
+    const meta=named[wanted]||{};
+    const labels=(meta.parameters||[]).map(p=>String(p.label||p.name||"").toLowerCase());
+    let args;
+    if(sourceImage){
+      const imageBuffer=Buffer.from(sourceImage.data,"base64");
+      const imageRef=handle_file(new Blob([imageBuffer],{type:sourceImage.mimeType||"image/png"}));
+      args=labels.length
+       ? labels.map(label=>/image|img/.test(label)?imageRef:/prompt|text/.test(label)?String(prompt).trim():/watermark/.test(label)?false:/seed/.test(label)?-1:undefined)
+       : [String(prompt).trim(),imageRef,false,-1];
+    }else{
+      args=labels.length
+       ? labels.map(label=>/prompt|text/.test(label)?String(prompt).trim():/size|resolution/.test(label)?"480P":/watermark/.test(label)?false:/seed/.test(label)?-1:undefined)
+       : [String(prompt).trim(),"480P",false,-1];
     }
-    if(!out) throw lastErr||new Error("No Gradio result");
+    const out=await client.predict(wanted,args);
     const data=out?.data??out;
     const candidates=Array.isArray(data)?data:[data];
     let video=null;
-    for(const item of candidates){
-     video=await downloadVideo(item).catch(()=>null);
-     if(video)break;
+    for(const item of candidates){ video=await downloadVideo(item).catch(()=>null); if(video)break; }
+    if(!video){
+      const url=String(JSON.stringify(data)).match(/https?:\\/\\/[^"\\s]+\\.(?:mp4|webm)(?:\\?[^"\\s]*)?/i)?.[0];
+      if(url) video=await downloadVideo(url).catch(()=>null);
     }
-    if(!video) throw new Error("Gradio Space returned no downloadable video.");
-    return {...video,duration:seconds,provider:"huggingface-space:"+space};
+    if(!video)throw new Error("Compatible endpoint returned no downloadable video.");
+    return {...video,duration:seconds,provider:"huggingface-space:"+space+":"+wanted};
    }catch(e){
-    errors.push("Hugging Face "+space+": "+String(e?.message||e).slice(0,350));
+    errors.push("Hugging Face "+space+": "+String(e?.message||e).slice(0,450));
    }
   }
- }catch(e){
-  errors.push("Hugging Face fallback unavailable: "+String(e?.message||e).slice(0,350));
+ }catch(e){ errors.push("Hugging Face fallback unavailable: "+String(e?.message||e).slice(0,350)); }
  }
-
  throw new Error("Video generation failed: all configured providers were unavailable. "+errors.join(" | "));
 }
 
@@ -386,7 +432,8 @@ export default async function handler(req,res){
  }
 
 // Deterministic media routing: explicit video requests always win over image-reference wording in video prompts.
-const directVideoRequest=/\b(?:generate|create|make|render|produce)\b.{0,100}\b(?:video|clip|animation|animated)\b|\b(?:video|clip|animation|animated)\b.{0,100}\b(?:generate|create|make|render|produce)\b|\bimage[- ]to[- ]video\b|\bvideo\b.{0,100}\b(?:from|using|with)\b.{0,100}\bimage\b/i.test(latestUserMessage);
+const directVideoRequest=/\b(?:generate|create|make|render|produce)\b.{0,100}\b(?:video|clip|animation|animated)\b|\b(?:video|clip|animation|animated)\b.{0,100}\b(?:generate|create|make|render|produce)\b|\bimage[- ]to[- ]video\b|\bvideo\b.{0,100}\b(?:from|using|with|isko|iss)\b.{0,100}\b(?:image|picture|photo|pic)\b/i.test(latestUserMessage);
+const imageToVideoRequest=/\b(?:image[- ]to[- ]video|video\b.{0,100}\b(?:from|using|with|isko|iss)\b.{0,100}\b(?:image|picture|photo|pic))\b/i.test(latestUserMessage);
 if(directVideoRequest){
  try{
   await reserveMedia(db,account.id,"video",3);
@@ -394,8 +441,10 @@ if(directVideoRequest){
    const cleanPrompt=latestUserMessage
     .replace(/^\s*(?:create|generate|make|render|produce)\s+(?:a\s+)?(?:video|clip|animation|animated\s+video)\s*(?:of|from|using)?\s*/i,"")
     .trim()||latestUserMessage;
-   const media=await generateVideo(cleanPrompt,5,"16:9");
-   return json(res,200,{ok:true,text:"## 🎬 Video generated\\n\\nBHAI X ne request ko direct video pipeline par route kiya — image/GitHub/Mission routing bypass ki gayi.",activity:[{tool:"generate_video",state:"done",details:"Direct video request routed to the video generator."}],images:[{mimeType:media.mimeType,data:media.data,video:true,duration:media.duration}],usage:await getMediaUsage(db,account.id)});
+   const sourceImage=imageToVideoRequest?await getLatestMediaAsset(db,account.id,"image"):null;
+   if(imageToVideoRequest&&!sourceImage) throw new Error("Image-to-video requested, but no previous BHAI X image asset is available. Generate an image first, then say 'isko video bana'.");
+   const media=await generateVideo(cleanPrompt,5,"16:9",sourceImage);
+   return json(res,200,{ok:true,text:"## 🎬 Video generated\\n\\nBHAI X ne request ko verified video pipeline par route kiya — capability match + fallback + output validation complete.",activity:[{tool:"generate_video",state:"done",details:"Direct video request routed to the video generator."}],images:[{mimeType:media.mimeType,data:media.data,video:true,duration:media.duration}],usage:await getMediaUsage(db,account.id)});
   }catch(e){
    await releaseMedia(db,account.id,"video");
    return json(res,502,{error:"Video generation failed: "+String(e?.message||e),activity:[{tool:"generate_video",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});
@@ -416,6 +465,7 @@ if(directImageRequest){
     .replace(/^\s*(?:create|generate|make|draw|design|render|visualize)\s+(?:an?\s+)?(?:image|picture|photo|poster|illustration|artwork)\s*(?:of|for)?\s*/i,"")
     .trim()||latestUserMessage;
    const media=await generateImage(cleanPrompt,"16:9");
+   await saveMediaAsset(db,account.id,"image",media);
    return json(res,200,{ok:true,text:"## 🖼️ Image generated\n\nBHAI X ne request ko direct image pipeline par route kiya — GitHub/Mission execution bypass kiya gaya.",activity:[{tool:"generate_image",state:"done",details:"Direct image request routed to the media generator."}],images:[{mimeType:media.mimeType,data:media.data}],usage:await getMediaUsage(db,account.id)});
   }catch(e){
    await releaseMedia(db,account.id,"image");

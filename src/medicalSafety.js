@@ -52,7 +52,8 @@ export function getMedicalSafetyPrompt(task=""){
   ].filter(Boolean).join("\n");
 }
 
-const UNSAFE_ACTION_RE = /(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat).{0,120}(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug)/i;
+const MED_ACTION_RE = /(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोकें|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें).{0,120}(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली)/i;
+const MED_ACTION_RE_REVERSED = /(?:dose|dosage|medicine|medication|tablet|goli|aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|beta[- ]?blocker|drug|दवा|दवाई|गोली).{0,120}(?:start|stop|restart|double|increase|decrease|change|skip|hold|resume|take|lo|lelo|lijiye|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|रोकें|बंद करें|दोगुना|बढ़ाएँ|कम करें|बदलें|लें|लेें)/i;
 const SPECIFIC_DOSE_RE = /\b(?:aspirin|paracetamol|acetaminophen|ibuprofen|nitrate|nitroglycerin|tablet|capsule|syrup|medicine|medication|goli)\b[^\n]{0,100}\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml)\b/i;
 
 function removeUnsafeLine(line){
@@ -60,7 +61,7 @@ function removeUnsafeLine(line){
   if(/(?:every|har)\s*15\s*[-–]?\s*20\s*(?:minutes|minute|मिनट)/i.test(s)) return true;
   if(/(?:coconut water|electrolyte(?:s)?|electrolyte drink|ORS|snack|नारियल पानी|इलेक्ट्रोलाइट|ओआरएस)/i.test(s)
      && /(?:take|drink|lo|lelo|lijiye|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|पीएँ|लेें|लें|जरूरी|इलाज)/i.test(s)) return true;
-  if(UNSAFE_ACTION_RE.test(s)||SPECIFIC_DOSE_RE.test(s)) return true;
+  if(MED_ACTION_RE.test(s)||MED_ACTION_RE_REVERSED.test(s)||SPECIFIC_DOSE_RE.test(s)) return true;
   if(/(?:\b(?:PCI|percutaneous coronary intervention|catheterization|intubation)\b|\b(?:flashlight|torch)\b)/i.test(s)) return true;
   return false;
 }

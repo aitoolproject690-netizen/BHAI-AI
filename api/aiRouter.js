@@ -12,6 +12,10 @@
 
 const timeout = ms => AbortSignal.timeout(ms);
 
+const CORE_TIMEOUT_MS = 8000;
+const CORE_COOLDOWN_MS = 30000;
+let coreCircuitOpenUntil = 0;
+
 const PROVIDERS = {
   core: {
     id: "core",
@@ -122,17 +126,27 @@ function normalizeMessages(messages=[]) {
 }
 
 async function callCore({apiKey,model,system,messages}) {
-  const r = await fetch(coreBaseUrl()+"/v1/chat/completions", {
+  if (Date.now() < coreCircuitOpenUntil) {
+    throw new Error("BHAI-CORE circuit open; skipping unavailable Core.");
+  }
+
+  try {
+    const r = await fetch(coreBaseUrl()+"/v1/chat/completions", {
     method:"POST",
     headers:{...(apiKey?{"x-bhai-key":apiKey}:{}),"Content-Type":"application/json"},
     body:JSON.stringify({messages:[...(system?[{role:"system",content:String(system)}]:[]),...normalizeMessages(messages).map(m=>({role:m.role,content:m.text}))],temperature:0.2}),
-    signal:timeout(30000)
-  });
-  const d = await r.json().catch(()=>({}));
-  if (!r.ok) throw new Error(d?.error || "BHAI-CORE request failed");
-  const text = typeof d?.text === "string" ? d.text.trim() : (typeof d?.output_text === "string" ? d.output_text.trim() : String(d?.choices?.[0]?.message?.content || "").trim());
-  if (!text) throw new Error("BHAI-CORE returned no text.");
-  return {text,provider:"core",model:d.model || model || null};
+    signal:timeout(CORE_TIMEOUT_MS)
+    });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(d?.error || "BHAI-CORE request failed");
+    const text = typeof d?.text === "string" ? d.text.trim() : (typeof d?.output_text === "string" ? d.output_text.trim() : String(d?.choices?.[0]?.message?.content || "").trim());
+    if (!text) throw new Error("BHAI-CORE returned no text.");
+    coreCircuitOpenUntil = 0;
+    return {text,provider:"core",model:d.model || model || null};
+  } catch (error) {
+    coreCircuitOpenUntil = Date.now() + CORE_COOLDOWN_MS;
+    throw error;
+  }
 }
 
 async function callGemini({apiKey,model,system,messages}) {
@@ -263,7 +277,7 @@ async function callProvider(id,args) {
 
 function isFallbackError(error) {
   const s=String(error?.message||error);
-  return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporarily unavailable|currently experiencing high demand|high demand|service unavailable|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution/i.test(s);
+  return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporarily unavailable|currently experiencing high demand|high demand|service unavailable|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open/i.test(s);
 }
 
 /**

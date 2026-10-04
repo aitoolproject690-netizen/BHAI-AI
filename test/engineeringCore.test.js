@@ -23,6 +23,23 @@ test("resolves GitHub target only from an explicit GitHub/repo context",()=>{
   assert.equal(x.path,"index.html");
 });
 
+test("accepts explicit labeled or URL GitHub repositories",()=>{
+  const labeled=resolveGithubTarget("GitHub repository: owner/demo/index.html");
+  assert.equal(labeled.owner,"owner");
+  assert.equal(labeled.repo,"demo");
+  assert.equal(labeled.path,"index.html");
+  const url=resolveGithubTarget("https://github.com/owner/demo/blob/main/index.html");
+  assert.equal(url.owner,"owner");
+  assert.equal(url.repo,"demo");
+  assert.equal(url.path,"blob/main/index.html");
+});
+
+test("does not mistake log paths for repositories",()=>{
+  const x=resolveGithubTarget("GitHub file execution failed: HTTP 404 for logs/steps. Check token access.");
+  assert.equal(x.owner,"");
+  assert.equal(x.repo,"");
+});
+
 test("normalizes safe repository paths",()=>{
   assert.equal(normalizeFilePath("/src//app.js/"),"src/app.js");
   assert.throws(()=>normalizeFilePath("../secret.js"),/Unsafe repository path/);

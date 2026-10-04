@@ -99,6 +99,21 @@ test("emergency sanitizer replaces unsafe provider output with a minimal safe re
   assert.doesNotMatch(fixed,/नई दवा.*रोकें|aspirin dose/i);
 });
 
+test("Hindi medication doses and blanket hydration advice are removed",()=>{
+  const bad=[
+    "पेरासिटामोल 500 mg ले सकते हैं।",
+    "इब्रूफ़ेन 200-400 mg भोजन के बाद लें।",
+    "रोज़ 2-3 लीटर पानी पीएँ, इससे सिरदर्द ठीक होगा।",
+    "सबसे अधिकतर डिहाइड्रेशन या तनाव से ही ये लक्षण होते हैं।"
+  ].join("\n");
+
+  const fixed=sanitizeMedicalResponse(bad,"एक हफ्ते से हल्का headache और fatigue");
+  assert.doesNotMatch(fixed,/पेरासिटामोल 500\s*mg|इब्रूफ़ेन 200-400\s*mg/i);
+  assert.doesNotMatch(fixed,/2-3 लीटर पानी पीएँ/i);
+  assert.doesNotMatch(fixed,/सबसे अधिकतर डिहाइड्रेशन या तनाव से ही/i);
+  assert.match(fixed,/चैट से निश्चित नहीं किया जा सकता|Unsafe medication/i);
+});
+
 test("medicine doses and medication changes are removed from non-emergency answers",()=>{
   const bad=[
     "Paracetamol 500 mg le lo.",

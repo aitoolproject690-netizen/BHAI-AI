@@ -4,29 +4,46 @@ function runMedicalSafetySelfCheck(){
   const failures=[];
   const assert=(name,condition)=>{ if(!condition) failures.push(name); };
 
-  const medical=isMedicalIntent("pulse 130 bpm aur BP 150/95 hai");
+  const medical=isMedicalIntent("2 din se halka headache aur fatigue hai");
   const risk=getMedicalRiskSignals("BP 180/120");
-  const unsafe=[
-    "Tez dhadkan >120-130 bpm ho to ambulance 112 bulayein.",
-    "BP 150/95 high-normal hai.",
-    "BP ko har 15-20 minutes mein check karein.",
-    "BP 180/110 emergency cutoff hai.",
-    "Coconut water aur electrolytes lo, isi se situation theek ho jayegi.",
+  const unsafeNormal=[
+    "Paracetamol 500 mg le lo.",
+    "Ibuprofen 200-400 mg khane ke baad lo.",
     "Apni medicine ki dose double kar do.",
+    "Nayi medicine ko ab rok dein.",
+    "Coconut water aur electrolytes treatment ke liye lo.",
+    "BP ko har 15-20 minutes mein check karo.",
     "Current situation is not an emergency."
   ].join("\n");
-  const fixed=sanitizeMedicalResponse(unsafe,"pulse 130 bpm, BP 150/95");
+  const normalFixed=sanitizeMedicalResponse(unsafeNormal,"headache aur fatigue");
 
-  assert("medical_intent",medical===true);
+  const unsafeEmergency=[
+    "Ye acute coronary syndrome ya pulmonary embolism ho sakta hai.",
+    "112 par ambulance bulayein.",
+    "Gehri 4-4-4 saans lein.",
+    "Agar aspirin 300 mg available hai to ek tablet le sakte hain.",
+    "Agar beta-blocker/nitrate nayi hai to ab rok dein.",
+    "PCI ya intubation hospital mein ho sakta hai.",
+    "Raat mein torch/flashlight lagayein."
+  ].join("\n");
+  const emergencyFixed=sanitizeMedicalResponse(unsafeEmergency,"chest pressure, difficulty breathing aur cold sweat");
+
+  assert("medical_intent_common_symptoms",medical===true);
   assert("severe_bp_boundary",risk.veryHighBP===true);
-  assert("pulse_blanket_ambulance_removed",!/>120-130 bpm ho to ambulance/i.test(fixed));
-  assert("150_95_not_crisis",!/150\/95 high-normal/i.test(fixed));
-  assert("rapid_bp_checking_removed",!/har 15-20 minutes mein check/i.test(fixed));
-  assert("180_110_claim_removed",!/180\/110 emergency cutoff/i.test(fixed));
-  assert("electrolyte_blanket_treatment_removed",!/Coconut water aur electrolytes lo, isi se situation theek ho jayegi/i.test(fixed));
-  assert("medicine_change_removed",!/dose double kar do/i.test(fixed));
-  assert("definitive_no_emergency_removed",!/Current situation is not an emergency/i.test(fixed));
-  assert("cautious_safety_wording",/emergency completely rule out nahi ki ja/i.test(fixed));
+
+  assert("normal_no_paracetamol_dose",!/Paracetamol 500\s*mg/i.test(normalFixed));
+  assert("normal_no_ibuprofen_dose",!/Ibuprofen 200-400\s*mg/i.test(normalFixed));
+  assert("normal_no_dose_change",!/dose double kar do|Nayi medicine ko ab rok dein/i.test(normalFixed));
+  assert("normal_no_blanket_electrolytes",!/Coconut water.*treatment/i.test(normalFixed));
+  assert("normal_no_rapid_bp_monitoring",!/har 15-20 minutes/i.test(normalFixed));
+  assert("normal_no_definitive_emergency_exclusion",!/Current situation is not an emergency/i.test(normalFixed));
+
+  assert("emergency_routes_to_112",/112/.test(emergencyFixed));
+  assert("emergency_no_self_drive",/khud drive n/i.test(emergencyFixed));
+  assert("emergency_no_specific_diagnosis",!/acute coronary syndrome|pulmonary embolism/i.test(emergencyFixed));
+  assert("emergency_no_medication_dose",!/aspirin|300\s*mg|beta-blocker|nitrate/i.test(emergencyFixed));
+  assert("emergency_no_procedure_or_irrelevant_tip",!/PCI|intubation|torch|flashlight|4-4-4/i.test(emergencyFixed));
+  assert("emergency_no_medicine_stop_instruction",!/नयी दवा.*रोकें|अब रोक दें/i.test(emergencyFixed));
 
   return {ok:failures.length===0, failures, checkedAt:new Date().toISOString()};
 }

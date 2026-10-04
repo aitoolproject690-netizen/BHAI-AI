@@ -20,9 +20,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ready=0
           for attempt in $(seq 1 72); do
             http_code="$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 15 "$LIVE_URL" || true)"
             if [ "$http_code" = "200" ]; then
+              set +e
               python - <<'PY'
           import json, os, sys
           with open("/tmp/health.json", "r", encoding="utf-8") as f:
@@ -33,20 +35,27 @@ jobs:
           actual=deployment.get("commit","")
           ok=medical.get("ok") is True
           exact=actual==expected
-          print(f"production_http={200}")
+          print(f"production_http=200")
           print(f"deployment_status={deployment.get('status')}")
           print(f"deployment_commit_matches_expected={exact}")
           print(f"medical_safety_ok={ok}")
           print(f"medical_safety_failures={len(medical.get('failures') or [])}")
-          if exact and ok:
-              sys.exit(0)
-          sys.exit(2)
+          sys.exit(0 if exact and ok else 2)
           PY
-              echo "Production smoke passed on attempt $attempt."
-              exit 0
+              rc=$?
+              set -e
+              if [ "$rc" -eq 0 ]; then
+                ready=1
+                echo "Production medical smoke passed on attempt $attempt."
+                break
+              fi
+            else
+              echo "Attempt $attempt/72: production endpoint not ready yet (HTTP $http_code)."
             fi
-            echo "Attempt $attempt/72: production endpoint not ready yet (HTTP $http_code)."
-            sleep 10
+            if [ "$attempt" -lt 72 ]; then sleep 10; fi
           done
-          echo "Production medical smoke test timed out waiting for exact commit + medical safety PASS."
-          exit 1
+
+          if [ "$ready" -ne 1 ]; then
+            echo "Production medical smoke test failed: exact commit did not become live with medicalSafety.ok=true."
+            exit 1
+          fi

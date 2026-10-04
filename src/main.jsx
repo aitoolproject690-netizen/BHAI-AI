@@ -25,6 +25,17 @@ function extractExplicitGithubRepo(text=''){
  if(contextual)return {owner:contextual[1],repo:contextual[2]};
  return null;
 }
+function compactChatMessages(messages=[]){
+ const list=Array.isArray(messages)?messages:[];
+ const recent=list.slice(-18);
+ const MAX_TEXT=8000;
+ return recent.map((m,i)=>{
+  const role=m?.role==='assistant'||m?.role==='model'?'assistant':'user';
+  let text=String(m?.text??m?.content??'');
+  if(text.length>MAX_TEXT) text=text.slice(0,MAX_TEXT)+"\n[…older content trimmed…]";
+  return {role,text};
+ }).filter(m=>m.text).slice(-18);
+}
 function extractGithubFilePath(text=''){
  const raw=String(text||'');
  const m=raw.match(/\b([A-Za-z0-9_.-]+\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))\b/i);
@@ -195,7 +206,7 @@ function App(){
    const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'⚡ Bhai, soch raha hoon...'}];
    upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
    try{
-    const d=await requestJson('/api/chat',{method:'POST',headers:authHeaders(),body:JSON.stringify({messages:next})},{label:'/api/chat',retrySafe:true});
+    const d=await requestJson('/api/chat',{method:'POST',headers:authHeaders(),body:JSON.stringify({messages:compactChatMessages(next)})},{label:'/api/chat',retrySafe:true});
     upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||'✅'}:x));
    }catch(e){
     upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ Chat error\\n\\n'+e.message}:x));
@@ -242,9 +253,9 @@ function App(){
    const agentToken=account?.session||localStorage.getItem("bhai_user_session")||sessionStorage.getItem("bhai_user_session")||""; const agentHeaders={"Content-Type":"application/json"}; if(agentToken)agentHeaders.Authorization="Bearer "+agentToken; const controller=new AbortController(); const agentTimeout=setTimeout(()=>controller.abort(),300000);
    let d;
    try{
-    d=await requestJson('/api/agent',{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:agentMessages,doIt:true}),signal:controller.signal},{label:'/api/agent',retrySafe:false,retries:0});
+    d=await requestJson('/api/agent',{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:compactChatMessages(agentMessages),doIt:true}),signal:controller.signal},{label:'/api/agent',retrySafe:false,retries:0});
    }finally{clearTimeout(agentTimeout)}
-   if(!r.ok||d.error){const rr=await fetch(apiUrl('/api/control'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'recovery_plan',error:d.error||('HTTP '+r.status),stage:'agent'})}).catch(()=>null);const rp=rr?await rr.json().catch(()=>({})):{};upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ ERROR DETECTOR\n\n'+(d.error||('Backend HTTP '+r.status))+'\n\n🛡️ Preventive recovery: '+(rp.plan||[]).map(x=>x.action).join(' → ')+'\n\nBHAI X ne is result ko verified DONE nahi maana.'}]);setActivity(a=>a.map(x=>({...x,state:'failed'})));return;}
+   if(d?.error){const rr=await fetch(apiUrl('/api/control'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'recovery_plan',error:d.error||('HTTP '+r.status),stage:'agent'})}).catch(()=>null);const rp=rr?await rr.json().catch(()=>({})):{};upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ ERROR DETECTOR\n\n'+(d.error||('Backend HTTP '+r.status))+'\n\n🛡️ Preventive recovery: '+(rp.plan||[]).map(x=>x.action).join(' → ')+'\n\nBHAI X ne is result ko verified DONE nahi maana.'}]);setActivity(a=>a.map(x=>({...x,state:'failed'})));return;}
    if(d.usage)setUsage(d.usage); setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
    upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}:x));

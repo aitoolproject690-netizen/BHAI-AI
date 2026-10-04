@@ -929,10 +929,17 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
      catch(e){await releaseMedia(db,account.id,"image");throw e;}
     } else if(name==="generate_video"){
      await reserveMedia(db,account.id,"video",3);
-     try{result=await generateVideo(a.prompt,Math.min(5,Number(a.duration)||5),a.aspectRatio||"16:9");}
-     catch(e){await releaseMedia(db,account.id,"video");throw e;}
+     try{
+      const toolImageToVideo=/\b(?:image[- ]to[- ]video|video\b.{0,100}\b(?:from|using|with|isko|iss)\b.{0,100}\b(?:image|picture|photo|pic))\b/i.test(latestUserMessage);
+      const sourceImage=toolImageToVideo?await getLatestMediaAsset(db,account.id,"image"):null;
+      if(toolImageToVideo&&!sourceImage) throw new Error("Image-to-video requested, but no previous BHAI X image asset is available.");
+      result=await generateVideo(a.prompt,Math.min(5,Number(a.duration)||5),a.aspectRatio||"16:9",sourceImage);
+     }catch(e){await releaseMedia(db,account.id,"video");throw e;}
     } else result=await github(name,{...a,path:normalizedPath});
-    if(name==="generate_image") generatedImages.push({mimeType:result.mimeType,data:result.data});
+    if(name==="generate_image"){
+     await saveMediaAsset(db,account.id,"image",result);
+     generatedImages.push({mimeType:result.mimeType,data:result.data});
+    }
     if(name==="generate_video") generatedImages.push({mimeType:result.mimeType,data:result.data,video:true,duration:result.duration});
     if(name==="github_read" && result?.type==="directory"){
      if(normalizedPath==="") rootListed=true;

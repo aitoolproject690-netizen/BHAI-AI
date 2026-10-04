@@ -39,7 +39,7 @@ function runMedicalSafetySelfCheck(){
   assert("normal_no_definitive_emergency_exclusion",!/Current situation is not an emergency/i.test(normalFixed));
 
   assert("emergency_routes_to_112",/112/.test(emergencyFixed));
-  assert("emergency_no_self_drive",/khud drive n/i.test(emergencyFixed));
+  assert("emergency_no_self_drive",/खुद drive न करें/.test(emergencyFixed));
   assert("emergency_no_specific_diagnosis",!/acute coronary syndrome|pulmonary embolism/i.test(emergencyFixed));
   assert("emergency_no_medication_dose",!/aspirin|300\s*mg|beta-blocker|nitrate/i.test(emergencyFixed));
   assert("emergency_no_procedure_or_irrelevant_tip",!/PCI|intubation|torch|flashlight|4-4-4/i.test(emergencyFixed));

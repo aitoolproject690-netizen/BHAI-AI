@@ -431,8 +431,9 @@ export default async function handler(req,res){
  }
 
 // Deterministic media routing: explicit video requests always win over image-reference wording in video prompts.
-const directVideoRequest=/\b(?:generate|create|make|render|produce)\b.{0,100}\b(?:video|clip|animation|animated)\b|\b(?:video|clip|animation|animated)\b.{0,100}\b(?:generate|create|make|render|produce)\b|\bimage[- ]to[- ]video\b|\bvideo\b.{0,100}\b(?:from|using|with|isko|iss)\b.{0,100}\b(?:image|picture|photo|pic)\b/i.test(latestUserMessage);
-const imageToVideoRequest=/\b(?:image[- ]to[- ]video|video\b.{0,100}\b(?:from|using|with|isko|iss)\b.{0,100}\b(?:image|picture|photo|pic))\b/i.test(latestUserMessage);
+// Intent routing accepts natural Hinglish/Hindi forms such as "isko video bana", "is image ko video bana do".
+const directVideoRequest=/\b(?:generate|create|make|render|produce|banao|bana|banado|ban[aā]o)\b.{0,120}\b(?:video|clip|animation|animated)\b|\b(?:video|clip|animation|animated)\b.{0,120}\b(?:generate|create|make|render|produce|banao|bana|banado|ban[aā]o)\b|\bimage[- ]to[- ]video\b|\b(?:isko|iss|is)\b.{0,80}\b(?:video|clip|animation)\b.{0,40}\b(?:banao|bana|banado|ban[aā]o|make|create|generate)\b/i.test(latestUserMessage);
+const imageToVideoRequest=/\b(?:image[- ]to[- ]video|\b(?:isko|iss|is)\b.{0,120}\b(?:image|picture|photo|pic|tasveer|scene)\b.{0,80}\b(?:video|clip|animation)\b|\b(?:video|clip|animation)\b.{0,120}\b(?:from|using|with|isko|iss|is)\b.{0,100}\b(?:image|picture|photo|pic|tasveer|scene)\b)/i.test(latestUserMessage);
 if(directVideoRequest){
  try{
   await reserveMedia(db,account.id,"video",3);
@@ -455,13 +456,14 @@ if(directVideoRequest){
 
 // Deterministic media routing: explicit image requests must never fall through to the engineering/GitHub agent.
 // This is intentionally server-side so stale frontend bundles or AI routing cannot turn an image request into repo work.
-const directImageRequest=/\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b.{0,100}\b(?:image|picture|photo|poster|illustration|artwork|tasveer|photo)\b|\b(?:image|picture|photo|poster|illustration|artwork|tasveer|photo)\b.{0,100}\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b/i.test(latestUserMessage);
+// Visual intent also covers prompts like "cinematic 3D scene banao" where the word "image" is never written.
+const directImageRequest=/\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b.{0,120}\b(?:image|picture|photo|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b|\b(?:image|picture|photo|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b.{0,120}\b(?:generate|create|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\b/i.test(latestUserMessage);
 if(directImageRequest){
  try{
   await reserveMedia(db,account.id,"image",10);
   try{
    const cleanPrompt=latestUserMessage
-    .replace(/^\s*(?:create|generate|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\s+(?:an?\s+)?(?:image|picture|photo|poster|illustration|artwork|tasveer)\s*(?:of|for)?\s*/i,"")
+    .replace(/^\s*(?:create|generate|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\s+(?:an?\s+)?(?:image|picture|photo|poster|illustration|artwork|tasveer|scene)\s*(?:of|for)?\s*/i,"")
     .trim()||latestUserMessage;
    const media=await generateImage(cleanPrompt,"16:9");
    await saveMediaAsset(db,account.id,"image",media);

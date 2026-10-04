@@ -61,7 +61,8 @@ function removeUnsafeLine(line){
   if(/(?:every|har)\s*15\s*[-–]?\s*20\s*(?:minutes|minute|मिनट)/i.test(s)) return true;
   if(/(?:coconut water|electrolyte(?:s)?|electrolyte drink|ORS|snack|नारियल पानी|इलेक्ट्रोलाइट|ओआरएस)/i.test(s)
      && /(?:take|drink|lo|lelo|lijiye|must|should|necessary|zaroori|treatment|treat|fix|cure|theek|rehydrat|पीएँ|लेें|लें|जरूरी|इलाज)/i.test(s)) return true;
-  if(MED_ACTION_RE.test(s)||MED_ACTION_RE_REVERSED.test(s)||SPECIFIC_DOSE_RE.test(s)) return true;\n  if(/(?:\b(?:2|3)\\s*[-–]?\\s*(?:litre|liter|liters|litres|L)\\b|(?:2|3)\\s*[-–]?\\s*लीटर|\\b(?:drink|drink plenty|पीएँ|पिएँ|पीना)\\b)[^\\n]*(?:water|पानी|hydration|हाइड्रेशन)/i.test(s) && /(?:must|should|take|drink|पीएँ|पिएँ|लेें|जरूरी|treatment|इलाज|headache|fatigue|thakan)/i.test(s)) return true;
+  if(MED_ACTION_RE.test(s)||MED_ACTION_RE_REVERSED.test(s)||SPECIFIC_DOSE_RE.test(s)) return true;
+  if(/(?:\b(?:2|3)\s*[-–]?\s*(?:litre|liter|liters|litres|L)\b|(?:2|3)\s*[-–]?\s*लीटर|\b(?:drink|drink plenty|पीएँ|पिएँ|पीना)\b)[^\n]*(?:water|पानी|hydration|हाइड्रेशन)/i.test(s) && /(?:must|should|take|drink|पीएँ|पिएँ|लेें|जरूरी|treatment|इलाज|headache|fatigue|thakan)/i.test(s)) return true;
   if(/(?:\b(?:PCI|percutaneous coronary intervention|catheterization|intubation)\b|\b(?:flashlight|torch)\b)/i.test(s)) return true;
   return false;
 }
@@ -149,7 +150,12 @@ function repairKnownUnsafeClaims(text,task){
     corrections.push("Given information mein classic emergency red flag report nahi hua ho sakta hai, lekin chat se emergency completely rule out nahi ki ja sakti. New/worsening red flags par urgent help lein.");
   }
 
-  if(/(?:most likely|सबसे अधिकतर|सबसे ज्यादा|likely causes|सबसे आम कारणों में से).*?(?:dehydration|डिहाइड्रेशन|नींद|stress|तनाव|screen|कैफीन|caffeine)/i.test(out)){\n    out=out.split("\\n").filter(line=>!/(?:most likely|सबसे अधिकतर|सबसे ज्यादा|likely causes|सबसे आम कारणों में से)/i.test(line)).join("\\n");\n    corrections.push("इन लक्षणों के कारण को चैट से निश्चित नहीं किया जा सकता; केवल सामान्य संभावनाएँ बताई जा सकती हैं.");\n  }\n\n  if(corrections.length){
+  if(/(?:most likely|सबसे अधिकतर|सबसे ज्यादा|likely causes|सबसे आम कारणों में से).*?(?:dehydration|डिहाइड्रेशन|नींद|stress|तनाव|screen|कैफीन|caffeine)/i.test(out)){
+    out=out.split("\n").filter(line=>!/(?:most likely|सबसे अधिकतर|सबसे ज्यादा|likely causes|सबसे आम कारणों में से)/i.test(line)).join("\n");
+    corrections.push("इन लक्षणों के कारण को चैट से निश्चित नहीं किया जा सकता; केवल सामान्य संभावनाएँ बताई जा सकती हैं.");
+  }
+
+  if(corrections.length){
     out=out.replace(/\n{3,}/g,"\n\n").trim();
     out="⚠️ **Medical safety correction:**\n"+corrections.join("\n")+(out?"\n\n"+out:"");
   }

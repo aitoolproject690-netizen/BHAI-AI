@@ -10,17 +10,19 @@ export async function readJsonResponse(response,label="Backend"){
  const raw=await response.text();
  const requestId=response.headers?.get?.("x-bhai-request-id")||"";
  if(!raw.trim()){
-  const err=new Error(label+" returned an empty response (HTTP "+response.status+")"+(requestId?"; requestId="+requestId:"")+"." );
+  const suffix=requestId?"; requestId="+requestId:"";
+  const err=new Error(label+" returned an empty response (HTTP "+response.status+")"+suffix+".");
   err.requestId=requestId; err.status=response.status; err.empty=true; throw err;
  }
  let data;
  try{data=JSON.parse(raw);}
  catch{
   const preview=raw.replace(/\s+/g," ").slice(0,220);
-  const err=new Error(label+" returned invalid JSON (HTTP "+response.status+")"+(requestId?"; requestId="+requestId:"")+": "+preview);
+  const suffix=requestId?"; requestId="+requestId:"";
+  const err=new Error(label+" returned invalid JSON (HTTP "+response.status+")"+suffix+": "+preview);
   err.requestId=requestId; err.status=response.status; throw err;
  }
- if(requestId&&!data?.requestId) data.requestId=requestId;
+ if(requestId&&!data?.requestId)data.requestId=requestId;
  return data;
 }
 
@@ -31,27 +33,21 @@ export async function requestJson(path,options={},config={}){
  for(let attempt=0;attempt<=retries;attempt++){
   try{
    const response=await fetch(apiUrl(path),{...options,headers});
-   try{
-    const data=await readJsonResponse(response,label);
-    if(!response.ok||data?.error){
-     const err=new Error(data?.error||(`\${label} failed with HTTP \${response.status}`));
-     err.status=response.status; err.requestId=data?.requestId||response.headers?.get?.("x-bhai-request-id")||headers["X-BHAI-Request-ID"]; err.data=data;
-     if(retrySafe&&attempt<retries&&retryStatuses.includes(response.status)){await new Promise(r=>setTimeout(r,retryDelayMs*(attempt+1)));continue;}
-     throw err;
-    }
-    return data;
-   }catch(error){
-    lastError=error;
-    const canRetry=retrySafe&&attempt<retries&&(error?.empty||retryStatuses.includes(error?.status)||/fetch|network|timeout/i.test(String(error?.message||"")));
-    if(!canRetry)throw error;
-    await new Promise(r=>setTimeout(r,retryDelayMs*(attempt+1)));
-   }
+   const data=await readJsonResponse(response,label);
+   if(!response.ok||data?.error){
+    const err=new Error(data?.error|| (label+" failed with HTTP "+response.status));
+    err.status=response.status;
+    err.requestId=data?.requestId||response.headers?.get?.("x-bhai-request-id")||headers["X-BHAI-Request-ID"];
+    err.data=data;
+    if(!retrySafe||attempt>=retries||!retryStatuses.includes(response.status))throw err;
+    lastError=err;
+   }else{return data;}
   }catch(error){
    lastError=error;
    const canRetry=retrySafe&&attempt<retries&&(error?.empty||retryStatuses.includes(error?.status)||/fetch|network|timeout/i.test(String(error?.message||"")));
    if(!canRetry)throw error;
-   await new Promise(r=>setTimeout(r,retryDelayMs*(attempt+1)));
   }
+  await new Promise(r=>setTimeout(r,retryDelayMs*(attempt+1)));
  }
  throw lastError||new Error(label+" failed.");
 }

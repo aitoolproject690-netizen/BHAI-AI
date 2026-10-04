@@ -5,7 +5,7 @@ import path from "node:path";
 import { ownerState, ownerReady } from "./owner.js";
 import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
-import { resolveGithubTarget, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
+import { resolveGithubTarget, extractGithubRepoReference, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
 import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
@@ -1003,6 +1003,11 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];
  const retryGuard=createRetryGuard();
  const requiresGithubExecution=githubLinkRequest||(/\bgithub\b/i.test(latestText)&&(/\b(create|make|build|update|push|commit|repo|repository|file|index\.html|verify|proof|actual|work|kaam)\b/i.test(latestText)||/do it on/i.test(latestText)));
+ const exactGithubRepo=extractGithubRepoReference(githubTaskText);
+ const repoCreationRequest=/\b(?:create|make|new)\s+(?:a\s+)?(?:github\s+)?repo(?:sitory)?\b/i.test(latestText);
+ if(requiresGithubExecution && !exactGithubRepo && !repoCreationRequest){
+  return json(res,200,{ok:false,text:"⚠️ GitHub task blocked safely. Exact repository target missing hai. BHAI X kisi purane repo ya logs/steps jaise path ko repository nahi maanega. Exact owner/repo ya GitHub repository URL do; tabhi GitHub file/repo execution hoga.",activity:[{tool:"github-target-guard",state:"blocked",details:"No explicit repository target in the current user message."}],images:[],usage:await getMediaUsage(db,account.id),verified:false});
+ }
  
  const githubRequestedPath=(latestText.match(/(?:`|\b)(index\.html|[A-Za-z0-9._/-]+\.(?:html|css|js|jsx|ts|tsx|json|md))(?=`|\b)/i)||[])[1]||"";
  
@@ -1038,7 +1043,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
    // Deterministic GitHub target override: only the current request (or one unambiguous contextual repo) may select a repository.
    const explicitToolTarget=resolveGithubTarget(githubTaskText);
    const explicitToolRepo=explicitToolTarget.owner&&explicitToolTarget.repo
-     ? [null,explicitToolTarget.owner,explicitToolTarget.repo]
+     ? {owner:explicitToolTarget.owner,repo:explicitToolTarget.repo}
      : null;
    const explicitToolIndexHtml=/\bindex\.html\b/i.test(githubTaskText);
    if(/^github_/.test(name)){
@@ -1052,7 +1057,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
        responseParts.push({functionResponse:{name,response:{error:"GitHub action blocked: exact repository target is missing or ambiguous. Ask for an explicit owner/repository before reading or modifying files."}}});
        continue;
      }
-    if(explicitToolRepo){ a.owner=explicitToolRepo[1]; a.repo=explicitToolRepo[2]; }
+    if(explicitToolRepo){ a.owner=explicitToolRepo.owner; a.repo=explicitToolRepo.repo; }
     else {
      if(githubTarget.owner) a.owner=githubTarget.owner;
      if(githubTarget.repo) a.repo=githubTarget.repo;

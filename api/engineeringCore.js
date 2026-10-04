@@ -1,42 +1,65 @@
 /** BHAI X Engineering Core: deterministic safety helpers. */
-const SAFE_PATH = /^[A-Za-z0-9._~!$&'()*+,;=:@%\/-]+$/;
-export function normalizeRepoName(value=''){ return String(value).trim().replace(/^\/+|\/+$/g,''); }
+const SAFE_PATH = /^[A-Za-z0-9._~!$&'()*+,;=:@%\\/~-]+$/;
+const REPO_PART='[A-Za-z0-9][A-Za-z0-9._-]{0,99}';
+const NON_REPO_PAIRS=new Set(["logs/steps","steps/logs","logs/jobs","jobs/logs","logs/errors","errors/logs"]);
+
+export function normalizeRepoName(value=''){ return String(value).trim().replace(/^\\/+|\\/+$/g,''); }
 export function normalizeFilePath(value=''){
- let p=String(value||'').trim().replace(/^[\s"\x27]+|[\s"\x27]+$/g,'');
- p=p.replace(/^\/+|\/+$/g,'').replace(/\\+/g,'/');
+ let p=String(value||'').trim().replace(/^[\\s"\\x27]+|[\\s"\\x27]+$/g,'');
+ p=p.split(/[?#]/,1)[0].replace(/^\\/+|\\/+$/g,'').replace(/\\\\+/g,'/');
  p=p.split('/').filter(Boolean).join('/');
  if(!p||p==='.'||p==='..') return '';
  if(p.split('/').some(part=>part==='..'||part==='.' )) throw new Error('Unsafe repository path.');
  if(!SAFE_PATH.test(p)) throw new Error('Invalid repository path.');
  return p;
 }
-const REPO_PART='[A-Za-z0-9][A-Za-z0-9._-]{0,99}';
+
+function isLikelyRepoPair(owner='',repo=''){
+ const key=(String(owner).trim()+'/'+String(repo).trim()).toLowerCase();
+ return !!owner&&!!repo&&!NON_REPO_PAIRS.has(key);
+}
+
+function extractRepoPathFromGithubWebPath(rawPath=''){
+ const clean=String(rawPath||'').split(/[?#]/,1)[0].replace(/^\\/+|\\/+$/g,'');
+ if(!clean) return '';
+ const parts=clean.split('/').filter(Boolean);
+ if(!parts.length) return '';
+ if(/^(blob|tree)$/i.test(parts[0])){
+  if(parts.length<3) return '';
+  return normalizeFilePath(parts.slice(2).join('/'));
+ }
+ if(/^(actions|issues|pulls|commit|commits|releases|settings)$/i.test(parts[0])) return '';
+ return normalizeFilePath(parts.join('/'));
+}
+
 export function extractGithubRepoReference(text=''){
  const input=String(text||'').trim();
- const make=(m)=>m?{owner:m[1],repo:m[2]}:null;
+ const make=(m)=>m&&isLikelyRepoPair(m[1],m[2])?{owner:m[1],repo:m[2]}:null;
  let m=input.match(new RegExp('(?:https?:\\/\\/)?(?:www\\.)?github\\.com\\/('+REPO_PART+')\\/('+REPO_PART+')(?:[\\/\\s?#]|$)','i'));
  if(m) return make(m);
- m=input.match(new RegExp('(?:github\\s+(?:repository|repo)|repository|repo)\\s*(?:name\\s*)?(?:[:=#-]\\s*)?[`\\\"]?('+REPO_PART+')\\/('+REPO_PART+')(?:[`\\\"]|\\b)','i'));
+ m=input.match(new RegExp('(?:github\\s+(?:repository|repo)|repository|repo)\\s*(?:name\\s*)?(?:[:=#-]\\s*)?[`\\"]?('+REPO_PART+')\\/('+REPO_PART+')(?:[`\\"]|\\b)','i'));
  if(m) return make(m);
- m=input.match(new RegExp('github\\s+(?:par|pe)\\s*[`\\\"]?('+REPO_PART+')\\/('+REPO_PART+')(?:[`\\\"]|\\s+(?:repo|repository)\\b|[.,;!?]|$)','i'));
+ m=input.match(new RegExp('github\\s+(?:par|pe)\\s*[`\\"]?('+REPO_PART+')\\/('+REPO_PART+')(?:[`\\"]|\\s+(?:repo|repository)\\b|[.,;!?]|$)','i'));
  if(m) return make(m);
- m=input.match(new RegExp('[`\\\"]('+REPO_PART+')\\/('+REPO_PART+')[`\\\"]','i'));
+ m=input.match(new RegExp('[`\\"]('+REPO_PART+')\\/('+REPO_PART+')[`\\"]','i'));
  if(m && /(?:github|repo(?:sitory)?)/i.test(input)) return make(m);
- m=input.match(new RegExp('(?:^|[\\s`\\\"] )('+REPO_PART+')\\/('+REPO_PART+')\\/([^\\s`\\\"<>]+)','i'));
- if(m && /\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml)$/i.test(m[3])) return {owner:m[1],repo:m[2]};
- m=input.match(new RegExp('(?:^|[\\s`\\\"] )('+REPO_PART+')\\/('+REPO_PART+')(?:\\s+)(?:repo|repository)\\b','i'));
+ m=input.match(new RegExp('(?:^|[\\s`\\"] )('+REPO_PART+')\\/('+REPO_PART+')\\/([^\\s`\\"<>?#]+)','i'));
+ if(m && /\\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml)$/i.test(m[3]) && isLikelyRepoPair(m[1],m[2])) return {owner:m[1],repo:m[2]};
+ m=input.match(new RegExp('(?:^|[\\s`\\"] )('+REPO_PART+')\\/('+REPO_PART+')(?:\\s+)(?:repo|repository)\\b','i'));
  if(m) return make(m);
  return null;
 }
+
 export function resolveGithubTarget(text=''){
  const input=String(text||'').trim();
- const githubUrl=input.match(/https?:\/\/github\.com\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})(?:\/([^\s\x60"\x27<>]+))?/i);
- const contextual=input.match(/\b(?:github(?:\s+par)?(?:\s+(?:repo|repository))?|(?:my\s+)?(?:repo|repository))\s*[:=-]?\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})(?:\/([^\s\x60"\x27<>]+))?/i);
- const actionTarget=input.match(/\b(?:fix|update|check|inspect|open|read|edit|modify|repair|work\s+on|use)\s+(?:the\s+)?([A-Za-z0-9][A-Za-z0-9._-]{0,99})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})(?:\/([^\s\x60"\x27<>]+))?/i);
- const explicit=githubUrl||contextual||actionTarget;
- let owner=explicit?.[1]||'', repo=explicit?.[2]||'', path=explicit?.[3]||'';
- if(path) path=normalizeFilePath(path);
- const fileMatch=input.match(/(?:^|[\s\x60"\x27\/])((?:[A-Za-z0-9._~-]+\/)*[A-Za-z0-9._~-]+\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml))/i);
+ const githubUrl=input.match(new RegExp('https?:\\/\\/github\\.com\\/('+REPO_PART+')\\/('+REPO_PART+')(?:\\/([^\\s\\x60"\\x27<>?#]+))?','i'));
+ const contextual=input.match(new RegExp('\\b(?:github(?:\\s+par)?(?:\\s+(?:repo|repository))?|(?:my\\s+)?(?:repo|repository))\\s*[:=-]?\\s*('+REPO_PART+')\\/('+REPO_PART+')(?:\\/([^\\s\\x60"\\x27<>?#]+))?','i'));
+ const actionTarget=input.match(new RegExp('\\b(?:fix|update|check|inspect|open|read|edit|modify|repair|work\\s+on|use)\\s+(?:the\\s+)?('+REPO_PART+')\\/('+REPO_PART+')(?:\\/([^\\s\\x60"\\x27<>?#]+))?','i'));
+ let owner='',repo='',path='';
+ if(githubUrl){ owner=githubUrl[1]; repo=githubUrl[2]; path=extractRepoPathFromGithubWebPath(githubUrl[3]||''); }
+ else if(contextual){ owner=contextual[1]; repo=contextual[2]; path=contextual[3] ? normalizeFilePath(contextual[3]) : ''; }
+ else if(actionTarget && isLikelyRepoPair(actionTarget[1],actionTarget[2])){ owner=actionTarget[1]; repo=actionTarget[2]; path=actionTarget[3] ? normalizeFilePath(actionTarget[3]) : ''; }
+ const fileMatch=input.match(new RegExp('(?:^|[\\s\\x60"\\x27\\/])((?:[A-Za-z0-9._~-]+\\/)*[A-Za-z0-9._~-]+\\.(?:html?|css|js|jsx|ts|tsx|json|md|yml|yaml))(?=[\\s\\x60"\\x27<>?#]|$)','i'));
  if(!path&&fileMatch) path=normalizeFilePath(fileMatch[1]);
  if(repo&&path){ const marker=repo+'/'; const at=path.toLowerCase().indexOf(marker.toLowerCase()); if(at>=0) path=normalizeFilePath(path.slice(at+marker.length)); }
  return {owner:owner.trim(),repo:repo.trim(),path,raw:input};

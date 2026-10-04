@@ -139,3 +139,39 @@ test("AI router falls back when the primary provider has a transient network fai
     Object.assign(process.env,old);
   }
 });
+
+
+test("BHAI-CORE sends its server-side API key and accepts the OpenAI-compatible response",async()=>{
+  const oldUrl=process.env.BHAI_CORE_URL;
+  const oldKey=process.env.BHAI_CORE_API_KEY;
+  const originalFetch=global.fetch;
+  process.env.BHAI_CORE_URL="https://core.test";
+  process.env.BHAI_CORE_API_KEY="test-core-key";
+  try{
+    let seenUrl="";
+    let seenKey="";
+    global.fetch=async(url,options)=>{
+      seenUrl=String(url);
+      seenKey=String(options?.headers?.["x-bhai-key"]||"");
+      return new Response(JSON.stringify({
+        model:"bhai-local",
+        choices:[{message:{content:"core-ok"}}]
+      }),{status:200,headers:{"content-type":"application/json"}});
+    };
+    const {generateWithRouter}=await import("../api/aiRouter.js?core-auth="+Date.now());
+    const out=await generateWithRouter({
+      task:"hello",
+      preferred:"core",
+      role:"chat",
+      fallback:false
+    });
+    assert.equal(out.provider,"core");
+    assert.equal(out.text,"core-ok");
+    assert.equal(seenUrl,"https://core.test/v1/chat/completions");
+    assert.equal(seenKey,"test-core-key");
+  }finally{
+    global.fetch=originalFetch;
+    if(oldUrl===undefined)delete process.env.BHAI_CORE_URL; else process.env.BHAI_CORE_URL=oldUrl;
+    if(oldKey===undefined)delete process.env.BHAI_CORE_API_KEY; else process.env.BHAI_CORE_API_KEY=oldKey;
+  }
+});

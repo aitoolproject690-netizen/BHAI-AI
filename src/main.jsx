@@ -206,7 +206,7 @@ function App(){
    upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
    try{
     const d=await requestJson('/api/chat',{method:'POST',headers:authHeaders(),body:JSON.stringify({messages:compactChatMessages(next)})},{label:'/api/chat',retrySafe:true});
-    upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||'✅'}:x));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||'✅',providerMeta:d.provider?{provider:d.provider,backend_provider:d.backend_provider||null,model:d.model||null}:null}:x));
    }catch(e){
     upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ Chat error\\n\\n'+e.message}:x));
    }finally{setRunning(false)}
@@ -382,6 +382,7 @@ function App(){
       <div className={m.role==='user'?'bubble userBubble':'bubble'}>
        {m.role==='assistant'&&<div className="assistantLabel"><div className="miniLogo">B</div><b>BHAI X</b></div>}
        <div className="messageText">{renderText(m.text,v=>copyText(v,'code-'+m.id))}</div>
+       {m.role==='assistant'&&m.providerMeta&&<div style={{marginTop:8,fontSize:11,opacity:.72,display:'flex',gap:6,flexWrap:'wrap'}}><span>🔌 Route: <b>{m.providerMeta.provider==='core'?'BHAI-CORE':m.providerMeta.provider}</b></span>{m.providerMeta.backend_provider&&<span>→ Backend: <b>{m.providerMeta.backend_provider}</b></span>}{m.providerMeta.model&&<span>· Model: <b>{m.providerMeta.model}</b></span>}</div>}
        {m.images?.map((im,i)=>{const src='data:'+im.mimeType+';base64,'+im.data;return <div className="generatedWrap" key={i}>{im.video?<video className="generatedImage" src={src} controls playsInline/>:<img className="generatedImage" src={src}/>}<a className="downloadBtn" href={src} download={im.video?'bhai-x-video-'+(i+1)+'.mp4':'bhai-x-image-'+(i+1)+'.png'}><Download size={14}/> Download</a></div>})}
        {m.role==='assistant'&&!running&&<div className="messageActions"><button onClick={()=>copyText(m.text,m.id)}>{copied===m.id?<Check size={13}/>:<Copy size={13}/>} {copied===m.id?'Copied':'Copy'}</button></div>}
       </div>

@@ -459,7 +459,7 @@ export default async function handler(req,res){
     preferred:"core",role:"chat",fallback:true
    });
    const safeText=medicalMode?applyMedicalSafetyFooter(routed.text,task):routed.text;
-   return json(res,200,{ok:true,text:safeText,provider:routed.provider,model:routed.model,verified:true});
+   return json(res,200,{ok:true,text:safeText,provider:routed.provider,backend_provider:routed.backend_provider||null,model:routed.model,verified:true});
   }catch(e){return json(res,502,{error:"Chat provider failed: "+String(e?.message||e)});}
  }
  if(endpoint==="/api/media"){
@@ -697,7 +697,7 @@ if(localCodingRequest){
    role:"chat",
    fallback:true
   });
-  return json(res,200,{ok:true,text:String(routed?.text||"I could not generate a coding answer."),activity:[{tool:"coding-chat",state:"done",details:"Standalone coding request kept out of engineering execution."}],images:[],usage:await getMediaUsage(db,account.id),verified:true});
+  return json(res,200,{ok:true,text:String(routed?.text||"I could not generate a coding answer."),provider:routed?.provider||null,backend_provider:routed?.backend_provider||null,model:routed?.model||null,activity:[{tool:"coding-chat",state:"done",details:"Standalone coding request kept out of engineering execution."}],images:[],usage:await getMediaUsage(db,account.id),verified:true});
  }catch(e){
   return json(res,502,{error:"Coding chat provider failed: "+String(e?.message||e),activity:[{tool:"coding-chat",state:"failed",details:String(e?.message||e)}]});
  }

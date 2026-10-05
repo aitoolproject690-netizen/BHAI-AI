@@ -55,13 +55,16 @@ export async function runE2ESmoke(){
   ]);
 
   const fixtureHtml='<!doctype html><html><body><script>const ok=true; console.log(ok));</script></body></html>';
+  let existingFixture=null;
+  try{existingFixture=await githubApiJson(target+"?ref=main");}catch(error){if(Number(error?.status)!==404)throw error;}
   const created=await githubApiJson(target,{
    method:"PUT",
    headers:{"Content-Type":"application/json"},
    body:JSON.stringify({
     message:"test: create temporary BHAI X E2E fixture",
     content:Buffer.from(fixtureHtml,"utf8").toString("base64"),
-    branch:"main"
+    branch:"main",
+    ...(existingFixture?.sha?{sha:existingFixture.sha}:{})
    })
   });
   fixtureSha=created?.content?.sha||null;

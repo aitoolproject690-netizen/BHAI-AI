@@ -10,7 +10,7 @@ const PATH_RE=/^[A-Za-z0-9._~!$&'()*+,;=:@%\/-]+$/;
 function makeError(message,status=0){const e=new Error(String(message));if(status)e.status=status;return e;}
 function scrubSecret(value){const secret=String(process.env.GITHUB_TOKEN||"");const text=String(value||"");return secret?text.split(secret).join("[redacted]"):text;}
 export function githubConfigured(){return Boolean(String(process.env.GITHUB_TOKEN||"").trim());}
-export function assertGithubName(value,label="GitHub name"){const v=String(value||"").trim();if(!NAME_RE.test(v))throw makeError("Invalid "+label+".");return v;}
+export function assertGithubName(value,label="GitHub name"){const v=String(value||"").trim();if(!NAME_RE.test(v))throw makeError("Invalid GitHub name.");return v;}
 export function assertGithubRef(value="main"){const v=String(value||"").trim();if(!REF_RE.test(v)||v.includes("..")||v.includes("\\")||v.startsWith("/")||v.endsWith("/"))throw makeError("Invalid GitHub branch/ref.");return v;}
 export function assertGithubPath(value="",{required=true,maxLength=1000}={}){let v=String(value||"").trim().replace(/^\/+|\/+$/g,"").replace(/\\+/g,"/");if(!v){if(required)throw makeError("GitHub file path is required.");return "";}if(v.length>maxLength||v.split("/").some(p=>p==="."||p==="..")||!PATH_RE.test(v))throw makeError("Invalid or unsafe GitHub file path.");return v;}
 export function encodeGithubPath(value=""){const p=assertGithubPath(value,{required:false});return p.split("/").filter(Boolean).map(encodeURIComponent).join("/");}

@@ -15,12 +15,12 @@ export function assertGithubRef(value="main"){const v=String(value||"").trim();i
 export function assertGithubPath(value="",{required=true,maxLength=1000}={}){let v=String(value||"").trim().replace(/^\/+|\/+$/g,"").replace(/\\+/g,"/");if(!v){if(required)throw makeError("GitHub file path is required.");return "";}if(v.length>maxLength||v.split("/").some(p=>p==="."||p==="..")||!PATH_RE.test(v))throw makeError("Invalid or unsafe GitHub file path.");return v;}
 export function encodeGithubPath(value=""){const p=assertGithubPath(value,{required:false});return p.split("/").filter(Boolean).map(encodeURIComponent).join("/");}
 export function githubRepoUrl(owner,repo,suffix=""){const o=assertGithubName(owner,"GitHub owner"),r=assertGithubName(repo,"GitHub repository"),tail=String(suffix||"");if(tail&&!tail.startsWith("/"))throw makeError("Invalid GitHub API path.");return API_ORIGIN+"/repos/"+encodeURIComponent(o)+"/"+encodeURIComponent(r)+tail;}
-export async function githubApiFetch(input,{method="GET",headers={},body,timeoutMs=DEFAULT_TIMEOUT_MS,requestId=""}={}){
- if(!githubConfigured())throw makeError("GitHub access is not configured on the server.",503);
+export async function githubApiFetch(input,{method="GET",headers={},body,timeoutMs=DEFAULT_TIMEOUT_MS,requestId="",authenticated=true}={}){
+ if(authenticated&&!githubConfigured())throw makeError("GitHub access is not configured on the server.",503);
  let url;try{url=new URL(String(input),API_ORIGIN);}catch{throw makeError("Invalid GitHub API URL.");}
  if(url.origin!==API_ORIGIN)throw makeError("GitHub executor blocked a non-GitHub API target.");
  const token=String(process.env.GITHUB_TOKEN||"");
- const mergedHeaders={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"BHAI-X/1.0",...headers,Authorization:"Bearer "+token};
+ const mergedHeaders={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"BHAI-X/1.0",...headers,...(authenticated?{Authorization:"Bearer "+token}:{})};
  if(requestId)mergedHeaders["X-BHAI-Request-ID"]=String(requestId);
  try{return await fetch(url.toString(),{method,headers:mergedHeaders,...(body===undefined?{}:{body}),signal:AbortSignal.timeout(Number(timeoutMs)||DEFAULT_TIMEOUT_MS)});}
  catch(error){throw makeError("GitHub network request failed: "+scrubSecret(error?.message||error),error?.status||0);}

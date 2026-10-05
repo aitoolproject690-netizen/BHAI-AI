@@ -89,7 +89,7 @@ export async function runE2ESmoke(){
   const patchText=String(patchProof?.details||"");
   const commitMatch=patchText.match(/Commit\\s+([0-9a-f]{40})/i);
   agentCommit=commitMatch?.[1]||null;
-  verified=Boolean(!fakeRes.writableEnded===false && fakeRes.statusCode<400 && patchProof && evidenceProof && agentCommit);
+  verified=Boolean(fakeRes.writableEnded && fakeRes.statusCode<400 && patchProof && evidenceProof && agentCommit);
   if(!fakeRes.writableEnded || fakeRes.statusCode>=400) throw new Error(String(payload?.error||"BHAI X Agent E2E failed."));
   if(!verified) throw new Error("BHAI X Agent did not produce complete GitHub patch/read-back evidence. Activity tail: "+JSON.stringify(agentActivity.slice(-6)));
 

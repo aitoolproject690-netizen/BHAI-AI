@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState}from'react';
 import{createRoot}from'react-dom/client';
-import{Send,Mic,Activity as ActivityIcon,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,UserCircle,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug,WandSparkles,BrainCircuit,KeyRound}from'lucide-react';
+import{Send,Mic,Activity as ActivityIcon,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,UserCircle,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug,WandSparkles,BrainCircuit}from'lucide-react';
 import'./styles.css';
 import OwnerPanel from'./OwnerPanel.jsx';
 import AccountPanel from'./AccountPanel.jsx';
@@ -11,7 +11,6 @@ import GeneratorPanel from'./GeneratorPanel.jsx';
 import SystemPanel from'./SystemPanel.jsx';
 import ResellerPanel from'./ResellerPanel.jsx';
 import ProjectBrainPanel from'./ProjectBrainPanel.jsx';
-import APIKeysPanel from'./APIKeysPanel.jsx';
 import {normalizeIntent,isCasualIntent,detectMediaIntent,isGeneralChatIntent,isLocalCodingIntent} from './intentRouter.js';
 import {apiUrl,readJsonResponse,requestJson} from './apiClient.js';
 
@@ -96,7 +95,7 @@ function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),doIt=true;
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
- const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[apiKeysOpen,setApiKeysOpen]=useState(false),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3});
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3});
  const end=useRef(null),recognition=useRef(null),workTicker=useRef(null);
  const[authChecked,setAuthChecked]=useState(false);
  useEffect(()=>{let live=true;(async()=>{const t=authToken();if(!t){if(live)setAuthChecked(true);return;}try{const r=await fetch(apiUrl("/api/accounts?me=1"),{headers:authHeaders()});const d=await r.json();if(live&&r.ok&&d.account){setAccount(d.account);setAuthChecked(true);return;}}catch{}localStorage.removeItem("bhai_user_session");sessionStorage.removeItem("bhai_user_session");if(live){setAccount(null);setAuthChecked(true);}})();return()=>{live=false}},[]);
@@ -370,7 +369,7 @@ function App(){
    <button className="newChat" onClick={newChat}><Plus size={17}/> New chat</button>
    <div className="searchBox"><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search chats"/></div>
    <div className="history">{filtered.map(s=><button className={s.id===active?'chat active':'chat'} onClick={()=>setActive(s.id)} key={s.id}>{s.title}</button>)}</div>
-   <div className="sideBottom"><div className="status"><span/> Agent online</div><button className="accountOpenBtn" onClick={()=>setAccountOpen(true)}>⭐ Upgrade / Account</button><button className="accountOpenBtn" onClick={()=>setBrainOpen(true)}><BrainCircuit size={15}/> Project Brain</button><button className="accountOpenBtn" onClick={()=>setApiKeysOpen(true)}><KeyRound size={15}/> API Keys</button><button className="accountOpenBtn" onClick={()=>setResellerOpen(true)}>🧾 Reseller</button><button className="ownerOpenBtn" onClick={()=>setOwnerOpen(true)}><ShieldCheck size={15}/> Owner Control</button><div className="mediaUsage"><span>🖼️ {usage.images}/{usage.imageLimit}</span><span>🎬 {usage.videos}/{usage.videoLimit}</span></div><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><button className="settingsBtn" aria-label="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={16}/></button></div></div>
+   <div className="sideBottom"><div className="status"><span/> Agent online</div><button className="accountOpenBtn" onClick={()=>setAccountOpen(true)}>⭐ Upgrade / Account</button><button className="accountOpenBtn" onClick={()=>setBrainOpen(true)}><BrainCircuit size={15}/> Project Brain</button><button className="accountOpenBtn" onClick={()=>setResellerOpen(true)}>🧾 Reseller</button><button className="ownerOpenBtn" onClick={()=>setOwnerOpen(true)}><ShieldCheck size={15}/> Owner Control</button><div className="mediaUsage"><span>🖼️ {usage.images}/{usage.imageLimit}</span><span>🎬 {usage.videos}/{usage.videoLimit}</span></div><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><button className="settingsBtn" aria-label="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={16}/></button></div></div>
   </aside>
   <main>
    <header>
@@ -402,7 +401,7 @@ function App(){
     <div className="composerHint">🧠 BHAI X khud samjhega request ka intent — chat, research, coding, GitHub, image, video, app ya doosra kaam. Koi tool select karne ki zarurat nahi.</div>
    </div>
   </main>
- {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false)}/>} {brainOpen&&<ProjectBrainPanel onClose={()=>setBrainOpen(false)}/>} {apiKeysOpen&&<APIKeysPanel onClose={()=>setApiKeysOpen(false)}/>} \n </div>
+ {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false)}/>} {brainOpen&&<ProjectBrainPanel onClose={()=>setBrainOpen(false)}/>} \n </div>
 }
 createRoot(document.getElementById('root')).render(<App/>);
 // CI final verification marker

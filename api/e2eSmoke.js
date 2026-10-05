@@ -21,15 +21,12 @@ function makeRes(){
  };
 }
 
-export default async function handler(req,res){
- const expected=process.env.BHAI_E2E_SMOKE_KEY;
- const supplied=String(req.query?.key||"");
- if(!expected||!keyEqual(expected,supplied)) return res.status(404).json({error:"Not found"});
- if(req.method!=="GET") return res.status(405).json({error:"Method not allowed"});
- if(!githubConfigured()) return res.status(503).json({error:"GitHub executor is not configured."});
+export async function runE2ESmoke(){
+ if(!process.env.BHAI_E2E_SMOKE_KEY) throw new Error("E2E smoke key is not configured.");
+ if(!githubConfigured()) throw new Error("GitHub executor is not configured.");
 
  const db=await getDb();
- if(!db) return res.status(503).json({error:"DATABASE_URL is required"});
+ if(!db) throw new Error("DATABASE_URL is required");
  const owner="aitoolproject690-netizen";
  const repo="BHAI-TASK-APP-TEST";
  const filePath="e2e-smoke.html";
@@ -107,28 +104,34 @@ export default async function handler(req,res){
   });
   cleanupCommit=deleted?.commit?.sha||null;
 
-  return res.status(200).json({
-   ok:true,
-   e2e:true,
-   target:owner+"/"+repo+"/"+filePath,
-   agent_http_status:fakeRes.statusCode,
-   agent_verified:Boolean(payload?.verified),
-   agent_commit:agentCommit,
-   readback_verified:verified,
-   cleanup_commit:cleanupCommit
-  });
+  return {ok:true,e2e:true,target:owner+"/"+repo+"/"+filePath,agent_http_status:fakeRes.statusCode,agent_verified:Boolean(payload?.verified),agent_commit:agentCommit,readback_verified:verified,cleanup_commit:cleanupCommit};
  }catch(error){
-  return res.status(502).json({
-   ok:false,
-   e2e:false,
-   error:String(error?.message||"E2E smoke failed").slice(0,800),
-   agent_commit:agentCommit,
-   cleanup_commit:cleanupCommit
-  });
+  throw Object.assign(new Error(String(error?.message||"E2E smoke failed").slice(0,800)),{agent_commit:agentCommit,cleanup_commit:cleanupCommit});
  }finally{
   if(accountId){
    await db.query("DELETE FROM bhai_sessions WHERE account_id=$1",[accountId]).catch(()=>{});
    await db.query("DELETE FROM bhai_accounts WHERE id=$1",[accountId]).catch(()=>{});
   }
  }
+}
+
+
+export default async function handler(req,res){
+ if(req.method!=="GET") return res.status(405).json({error:"Method not allowed"});
+ const expected=process.env.BHAI_E2E_SMOKE_KEY;
+ const supplied=String(req.query?.key||"");
+ if(!expected||!keyEqual(expected,supplied)) return res.status(404).json({error:"Not found"});
+ try{return res.status(200).json(await runE2ESmoke());}
+ catch(error){return res.status(502).json({ok:false,e2e:false,error:String(error?.message||"E2E smoke failed").slice(0,800),agent_commit:error?.agent_commit||null,cleanup_commit:error?.cleanup_commit||null});}
+}
+
+if(process.env.BHAI_E2E_SMOKE_KEY && process.env.RENDER_EXTERNAL_URL){
+ setTimeout(async()=>{
+  try{
+   const result=await runE2ESmoke();
+   console.log("[E2E] GitHub Agent smoke PASS",JSON.stringify({target:result.target,agent_verified:result.agent_verified,agent_commit:result.agent_commit,readback_verified:result.readback_verified,cleanup_commit:result.cleanup_commit}));
+  }catch(error){
+   console.error("[E2E] GitHub Agent smoke FAIL",JSON.stringify({error:String(error?.message||error).slice(0,800),agent_commit:error?.agent_commit||null,cleanup_commit:error?.cleanup_commit||null}));
+  }
+ },2000);
 }

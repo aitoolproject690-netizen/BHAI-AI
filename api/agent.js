@@ -7,6 +7,7 @@ import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
 import { resolveGithubTarget, extractGithubRepoReference, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
 import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
+import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
@@ -358,68 +359,34 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
  throw new Error("Video generation failed: all configured providers were unavailable. "+errors.join(" | "));
 }
 async function github(action,a){
- const token=process.env.GITHUB_TOKEN;
- const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
- if(token) h.Authorization="Bearer "+token;
+ const args=a||{};
  if(action==="github_create_repo"){
-  if(!token) throw new Error("GitHub write access is not configured. Add GITHUB_TOKEN in Render Environment.");
-  if(!a.name) throw new Error("Repository name is required.");
-  
-  const cleanName=String(a.name).trim();
-  let owner=a.owner||"";
-  if(!owner){
-   const me=await fetch("https://api.github.com/user",{headers:h});
-   const md=await me.json().catch(()=>({}));
-   if(!me.ok) throw new Error(md.message||"Unable to determine GitHub account.");
-   owner=md.login;
-  }
-  const create=await fetch("https://api.github.com/user/repos",{method:"POST",headers:{"Content-Type":"application/json",...h},body:JSON.stringify({name:cleanName,description:String(a.description||"Created by BHAI X"),private:!!a.private,auto_init:true})});
-  const d=await create.json().catch(()=>({}));
-  if(create.ok) return{ok:true,created:true,full_name:d.full_name,owner:d.owner?.login||owner,repo:d.name,default_branch:d.default_branch,url:d.html_url,clone_url:d.clone_url};
-  if(create.status===422){
-   const existing=await fetch("https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(cleanName),{headers:h});
-   const ed=await existing.json().catch(()=>({}));
-   if(existing.ok) return{ok:true,created:false,existing:true,full_name:ed.full_name,owner:ed.owner?.login||owner,repo:ed.name,default_branch:ed.default_branch,url:ed.html_url,clone_url:ed.clone_url};
-  }
-  throw new Error(d.message||"GitHub repository creation failed");
+  if(!githubConfigured())throw Object.assign(new Error("GitHub write access is not configured. Add GITHUB_TOKEN in Render Environment."),{status:503});
+  const name=assertGithubName(args.name,"repository name");let owner=String(args.owner||"").trim();
+  if(!owner){const me=await githubApiJson("https://api.github.com/user");owner=me?.login||"";}
+  owner=assertGithubName(owner,"GitHub owner");
+  try{
+   const d=await githubApiJson("https://api.github.com/user/repos",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description:String(args.description||"Created by BHAI X").slice(0,500),private:Boolean(args.private),auto_init:true})});
+   return{ok:true,created:true,full_name:d.full_name,owner:d.owner?.login||owner,repo:d.name,default_branch:d.default_branch,url:d.html_url,clone_url:d.clone_url};
+  }catch(e){if(Number(e?.status)===422){const d=await githubApiJson(githubRepoUrl(owner,name));return{ok:true,created:false,existing:true,full_name:d.full_name,owner:d.owner?.login||owner,repo:d.name,default_branch:d.default_branch,url:d.html_url,clone_url:d.clone_url};}throw e;}
  }
- if(!a.owner||!a.repo) throw new Error("GitHub owner and repo are required.");
- let effectiveOwner=String(a.owner).trim();
- if(token && /^bhai[-_]?ai$/i.test(effectiveOwner)){
-  const me=await fetch("https://api.github.com/user",{headers:h});
-  const md=await me.json().catch(()=>({}));
-  if(me.ok&&md.login) effectiveOwner=md.login;
+ if(!args.owner||!args.repo)throw new Error("GitHub owner and repo are required.");
+ const owner=assertGithubName(args.owner,"GitHub owner"),repo=assertGithubName(args.repo,"GitHub repository"),branch=assertGithubRef(args.branch||"main"),base=githubRepoUrl(owner,repo);
+ if(action==="github_info"){const d=await githubApiJson(base);return{name:d.full_name,default_branch:d.default_branch,private:d.private,url:d.html_url,permissions:d.permissions||null};}
+ if(action==="github_read"){const filePath=assertGithubPath(args.path,{required:false}),d=await githubApiJson(base+"/contents/"+encodeGithubPath(filePath)+"?ref="+encodeURIComponent(branch));if(Array.isArray(d))return{type:"directory",items:d.map(x=>({name:x.name,path:x.path,type:x.type}))};return{type:"file",path:d.path,sha:d.sha,content:Buffer.from(d.content||"","base64").toString("utf8")};}
+ if(action==="github_actions"){
+  const workflow=args.workflow||args.workflow_id;
+  if(args.operation==="list"){const d=await githubApiJson(base+"/actions/workflows");return{workflows:(d.workflows||[]).map(w=>({id:w.id,name:w.name,path:w.path,state:w.state}))};}
+  if(args.operation==="dispatch"){if(!workflow)throw new Error("workflow is required");const w=String(workflow).trim();if(!/^[A-Za-z0-9._\/-]{1,200}$/.test(w)||w.includes("..")||w.includes("\\"))throw new Error("Invalid GitHub workflow.");await githubApiJson(base+"/actions/workflows/"+encodeURIComponent(w)+"/dispatches",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:branch,inputs:args.inputs&&typeof args.inputs==="object"?args.inputs:{}})});return{ok:true,dispatched:true,workflow:w,branch};}
+  if(args.operation==="runs"){const limit=Math.min(20,Math.max(1,Number(args.limit)||5)),d=await githubApiJson(base+"/actions/runs?per_page="+encodeURIComponent(limit));return{runs:(d.workflow_runs||[]).map(w=>({id:w.id,name:w.name,status:w.status,conclusion:w.conclusion,sha:w.head_sha,created_at:w.created_at,url:w.html_url}))};}
+  if(args.operation==="jobs"){const runId=String(args.runId||"");if(!/^[0-9]{1,30}$/.test(runId))throw new Error("runId is required and must be numeric.");const d=await githubApiJson(base+"/actions/runs/"+encodeURIComponent(runId)+"/jobs");return{jobs:(d.jobs||[]).map(j=>({id:j.id,name:j.name,status:j.status,conclusion:j.conclusion,steps:j.steps||[]}))};}
+  throw new Error("Unsupported GitHub actions operation");
  }
- const base="https://api.github.com/repos/"+encodeURIComponent(effectiveOwner)+"/"+encodeURIComponent(a.repo),branch=a.branch||"main";
- if(action==="github_info"){
-  const r=await fetch(base,{headers:h}),d=await r.json(); if(!r.ok) throw new Error(d.message||"GitHub request failed");
-  return{name:d.full_name,default_branch:d.default_branch,private:d.private,url:d.html_url,permissions:d.permissions||null};
- }
- if(action==="github_create_repo"){
-  if(!token) throw new Error("GitHub write access is not configured. Add GITHUB_TOKEN in Render Environment.");
-  if(!a.name) throw new Error("Repository name is required.");
-  
-  const r=await fetch("https://api.github.com/user/repos",{method:"POST",headers:{"Content-Type":"application/json",...h},body:JSON.stringify({name:String(a.name).trim(),description:String(a.description||"Created by BHAI X"),private:!!a.private,auto_init:true})});
-  const d=await r.json(); if(!r.ok) throw new Error(d.message||"GitHub repository creation failed");
-  return{ok:true,created:true,full_name:d.full_name,default_branch:d.default_branch,url:d.html_url,clone_url:d.clone_url};
- }
- if(action==="github_read"){
-  const r=await fetch(base+"/contents/"+a.path+"?ref="+encodeURIComponent(branch),{headers:h}),d=await r.json();
-  if(!r.ok) throw new Error(d.message||"GitHub read failed");
-  if(Array.isArray(d)) return{type:"directory",items:d.map(x=>({name:x.name,path:x.path,type:x.type}))};
-  return{type:"file",path:d.path,sha:d.sha,content:Buffer.from(d.content||"","base64").toString("utf8")};
- }
- if(action==="github_actions"){  if(!token) throw new Error("GITHUB_TOKEN is required for workflow/build actions.");  const workflow=a.workflow||a.workflow_id;  if(a.operation==="list"){const r=await fetch(base+"/actions/workflows",{headers:h}),d=await r.json();if(!r.ok)throw new Error(d.message||"GitHub workflows failed");return{workflows:(d.workflows||[]).map(w=>({id:w.id,name:w.name,path:w.path,state:w.state}))};}  if(a.operation==="dispatch"){if(!workflow)throw new Error("workflow is required");const r=await fetch(base+"/actions/workflows/"+encodeURIComponent(workflow)+"/dispatches",{method:"POST",headers:{"Content-Type":"application/json",...h},body:JSON.stringify({ref:branch,inputs:a.inputs||{}})});if(!r.ok)throw new Error((await r.text()).slice(0,500)||"Workflow dispatch failed");return{ok:true,dispatched:true,workflow,branch};}  if(a.operation==="runs"){const r=await fetch(base+"/actions/runs?per_page="+encodeURIComponent(a.limit||5),{headers:h}),d=await r.json();if(!r.ok)throw new Error(d.message||"Workflow runs failed");return{runs:(d.workflow_runs||[]).map(w=>({id:w.id,name:w.name,status:w.status,conclusion:w.conclusion,sha:w.head_sha,created_at:w.created_at,url:w.html_url}))};}  if(a.operation==="jobs"){if(!a.runId)throw new Error("runId is required");const r=await fetch(base+"/actions/runs/"+encodeURIComponent(a.runId)+"/jobs",{headers:h}),d=await r.json();if(!r.ok)throw new Error(d.message||"Workflow jobs failed");return{jobs:(d.jobs||[]).map(j=>({id:j.id,name:j.name,status:j.status,conclusion:j.conclusion,steps:j.steps||[]}))};}  throw new Error("Unsupported GitHub actions operation"); } if(action==="github_update"){
-  if(!token) throw new Error("GitHub write access is not configured. Add GITHUB_TOKEN in Render to let BHAI AI modify repositories.");
-  
-  if(!a.path||typeof a.content!=="string") throw new Error("path and content are required");
-  if(a.content.length>500000) throw new Error("File is too large for direct agent update.");
-  let sha; const c=await fetch(base+"/contents/"+a.path+"?ref="+encodeURIComponent(branch),{headers:h});
-  if(c.ok) sha=(await c.json()).sha;
-  const body={message:"BHAI AI: update "+a.path,content:Buffer.from(a.content,"utf8").toString("base64"),branch}; if(sha) body.sha=sha;
-  const r=await fetch(base+"/contents/"+a.path,{method:"PUT",headers:{"Content-Type":"application/json",...h},body:JSON.stringify(body)}),d=await r.json();
-  if(!r.ok) throw new Error(d.message||"GitHub update failed");
-  return{ok:true,path:a.path,commit:d.commit?.sha||null};
+ if(action==="github_update"){
+  const filePath=assertGithubPath(args.path,{required:true});if(typeof args.content!=="string")throw new Error("path and content are required");if(Buffer.byteLength(args.content,"utf8")>500000)throw new Error("File is too large for direct agent update.");
+  let sha;try{const current=await githubApiJson(base+"/contents/"+encodeGithubPath(filePath)+"?ref="+encodeURIComponent(branch));if(!Array.isArray(current))sha=current?.sha||"";}catch(e){if(Number(e?.status)!==404)throw e;}
+  const d=await githubApiJson(base+"/contents/"+encodeGithubPath(filePath),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:"BHAI AI: update "+filePath,content:Buffer.from(args.content,"utf8").toString("base64"),branch,...(sha?{sha}:{})})});
+  return{ok:true,path:filePath,commit:d?.commit?.sha||null};
  }
  throw new Error("Unsupported tool");
 }
@@ -432,7 +399,7 @@ const toolDefinitions=[
  {name:"github_create_repo",description:"Create a real GitHub repository for the user. Only use when the user explicitly asks BHAI X to create a repository. Never claim creation unless the GitHub API confirms it.",parameters:{type:"OBJECT",properties:{name:{type:"STRING"},description:{type:"STRING"},private:{type:"BOOLEAN"}},required:["name"]}},
  {name:"github_read",description:"Read a GitHub file or directory. Prefer one root directory read first, then only the minimum key files needed. Never reread a path.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path"]}}, {name:"github_actions",description:"Run and inspect GitHub Actions for builds/tests. Use dispatch after code changes or when the user explicitly asks to build/test. Use runs/jobs to verify real results before claiming success.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},branch:{type:"STRING"},operation:{type:"STRING",description:"list, dispatch, runs, or jobs"},workflow:{type:"STRING"},runId:{type:"STRING"},limit:{type:"NUMBER"},inputs:{type:"OBJECT"}},required:["owner","repo","operation"]}}
 ];
-if(process.env.GITHUB_TOKEN) toolDefinitions.push({name:"github_update",description:"Create or replace a GitHub text file. Only use when the user clearly requested the change. Prefer one update per changed file after inspection.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},content:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path","content"]}});
+if(githubConfigured()) toolDefinitions.push({name:"github_update",description:"Create or replace a GitHub text file. Only use when the user clearly requested the change. Prefer one update per changed file after inspection.",parameters:{type:"OBJECT",properties:{owner:{type:"STRING"},repo:{type:"STRING"},path:{type:"STRING"},content:{type:"STRING"},branch:{type:"STRING"}},required:["owner","repo","path","content"]}});
 
 function toGeminiContents(messages){
  return messages.filter(m=>m&&["user","assistant"].includes(m.role)).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:String(m.text||"")}] }));
@@ -819,10 +786,9 @@ if(githubRequestedFile&&githubRequestedRepo){
 if(githubFileRequest && latestHasExplicitGithub && githubRequestedRepo && githubRequestedFile && autoDoIt){
  if(missionMode){ try{missionStep("plan","Mission request accepted; pre-flight completed by authenticated agent entrypoint."); missionStep("execute","Starting repository diagnosis and execution.");}catch{} }
  try{
-  const token=process.env.GITHUB_TOKEN;
-  if(!token) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
-  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",Authorization:"Bearer "+token};
-  const me=await fetch("https://api.github.com/user",{headers:{...h,"User-Agent":"BHAI-X"},signal:AbortSignal.timeout(8000)});
+  if(!githubConfigured()) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
+  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
+  const me=await githubApiFetch("https://api.github.com/user",{headers:{...h,"User-Agent":"BHAI-X"},signal:AbortSignal.timeout(8000)});
   const md=await me.json().catch(()=>({}));
   if(!me.ok||!md.login) throw new Error(md.message||"Unable to verify GitHub account.");
   const owner=explicitRepoMatch?explicitRepoMatch[1]: (githubTarget.owner||md.login);
@@ -832,10 +798,10 @@ if(githubFileRequest && latestHasExplicitGithub && githubRequestedRepo && github
   const base="https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo);
   const publicHeaders={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"BHAI-X"};
   const authHeaders={...h,"User-Agent":"BHAI-X"};
-  let rr=await fetch(base,{headers:authHeaders,signal:AbortSignal.timeout(8000)});
+  let rr=await githubApiFetch(base,{headers:authHeaders,signal:AbortSignal.timeout(8000)});
   let rd=await rr.json().catch(()=>({}));
   if(!rr.ok && rr.status===404){
-   const accessible=await fetch("https://api.github.com/user/repos?per_page=100&affiliation=owner,collaborator,organization_member",{headers:authHeaders,signal:AbortSignal.timeout(8000)});
+   const accessible=await githubApiFetch("https://api.github.com/user/repos?per_page=100&affiliation=owner,collaborator,organization_member",{headers:authHeaders,signal:AbortSignal.timeout(8000)});
    const ad=await accessible.json().catch(()=>[]);
    const visible=Array.isArray(ad)&&ad.some(x=>String(x.full_name||"").toLowerCase()===String(owner+"/"+repo).toLowerCase());
    const publicPage=await fetch("https://github.com/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo),{headers:{"User-Agent":"BHAI-X"},signal:AbortSignal.timeout(8000)});
@@ -963,17 +929,16 @@ if(githubFileRequest && latestHasExplicitGithub && githubRequestedRepo && github
 }
 if(githubLinkRequest && githubRequestedRepo && autoDoIt && !githubFileRequest){
  try{
-  const token=process.env.GITHUB_TOKEN;
-  if(!token) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
-  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",Authorization:"Bearer "+token};
-  const me=await fetch("https://api.github.com/user",{headers:h,signal:AbortSignal.timeout(8000)});
+  if(!githubConfigured()) return json(res,503,{error:"GitHub is not configured on BHAI X. Add GITHUB_TOKEN in Render Environment.",activity});
+  const h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
+  const me=await githubApiFetch("https://api.github.com/user",{headers:h,signal:AbortSignal.timeout(8000)});
   const md=await me.json().catch(()=>({}));
   if(!me.ok||!md.login) throw new Error(md.message||"Unable to verify GitHub account.");
   const owner=md.login,repo=githubRequestedRepo;
-  let gr=await fetch("https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo),{headers:h,signal:AbortSignal.timeout(8000)});
+  let gr=await githubApiFetch("https://api.github.com/repos/"+encodeURIComponent(owner)+"/"+encodeURIComponent(repo),{headers:h,signal:AbortSignal.timeout(8000)});
   let gd=await gr.json().catch(()=>({}));
   if(gr.status===404){
-   const cr=await fetch("https://api.github.com/user/repos",{method:"POST",headers:{"Content-Type":"application/json",...h},body:JSON.stringify({name:repo,description:"Created by BHAI X",private:false,auto_init:true}),signal:AbortSignal.timeout(10000)});
+   const cr=await githubApiFetch("https://api.github.com/user/repos",{method:"POST",headers:{"Content-Type":"application/json",...h},body:JSON.stringify({name:repo,description:"Created by BHAI X",private:false,auto_init:true}),signal:AbortSignal.timeout(10000)});
    gd=await cr.json().catch(()=>({}));
    if(!cr.ok && cr.status!==422) throw new Error(gd.message||"GitHub repository creation failed.");
   }else if(!gr.ok) throw new Error(gd.message||"GitHub repository lookup failed.");

@@ -816,10 +816,10 @@ if(githubFileRequest && latestHasExplicitGithub && githubRequestedRepo && github
    throw new Error("GitHub repository lookup failed: HTTP "+rr.status+" — "+(rd.message||"Not Found"));
   }
   const branch=rd.default_branch||"main";
-  let existing=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
+  let existing=await githubApiFetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
   let ed=await existing.json().catch(()=>({}));
   if(!existing.ok && existing.status===404){
-   const publicFile=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},signal:AbortSignal.timeout(8000)});
+   const publicFile=await githubApiFetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},signal:AbortSignal.timeout(8000),authenticated:false});
    const pd=await publicFile.json().catch(()=>({}));
    if(publicFile.ok){ existing=publicFile; ed=pd; }
    else throw new Error("GitHub file lookup failed: HTTP "+existing.status+" — "+(ed.message||"Not Found")+"; public lookup also failed: HTTP "+publicFile.status+" — "+(pd.message||"Not Found"));
@@ -858,12 +858,12 @@ if(githubFileRequest && latestHasExplicitGithub && githubRequestedRepo && github
    throw new Error("Diagnosis found no deterministic safe fix for "+path+". Existing content was inspected and left unchanged.");
   }
   const body={message:"BHAI X: diagnose and fix "+path,content:Buffer.from(fixed,"utf8").toString("base64"),branch,sha:ed.sha};
-  const wr=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/"),{method:"PUT",headers:{"Content-Type":"application/json",...h},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});
+  const wr=await githubApiFetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/"),{method:"PUT",headers:{"Content-Type":"application/json",...h},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});
   const wd=await wr.json().catch(()=>({}));
   if(!wr.ok) throw new Error("GitHub file write failed: HTTP "+wr.status+" — "+(wd.message||"Unknown error"));
   const commitSha=wd.commit?.sha||null;
   if(!commitSha) throw new Error("GitHub write returned no commit SHA.");
-  const verify=await fetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
+  const verify=await githubApiFetch(base+"/contents/"+path.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(branch),{headers:h,signal:AbortSignal.timeout(8000)});
   const vd=await verify.json().catch(()=>({}));
   if(!verify.ok) throw new Error("GitHub read-back verification failed: HTTP "+verify.status+" — "+(vd.message||"Not Found"));
   const verifiedContent=vd.content?Buffer.from(vd.content,"base64").toString("utf8"):"";

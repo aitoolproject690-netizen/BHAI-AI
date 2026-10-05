@@ -92,8 +92,8 @@ export default async function handler(req,res){
 
   const readBack=await githubApiJson(target+"?ref=main");
   const fixed=Buffer.from(readBack?.content||"","base64").toString("utf8");
-  if(/console.log(s*oks*))s*;/.test(fixed)) throw new Error("E2E read-back still contains the malformed console.log.");
-  if(!/console.log(s*oks*)s*;/.test(fixed)) throw new Error("E2E read-back did not contain the expected repaired console.log.");
+  if(/console\\.log\\(\\s*ok\\s*\\)\\)\\s*;/.test(fixed)) throw new Error("E2E read-back still contains the malformed console.log.");
+  if(!/console\\.log\\(\\s*ok\\s*\\)\\s*;/.test(fixed)) throw new Error("E2E read-back did not contain the expected repaired console.log.");
   verified=true;
 
   const deleted=await githubApiJson(target,{

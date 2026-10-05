@@ -82,10 +82,16 @@ export async function runE2ESmoke(){
   await agent(fakeReq,fakeRes);
 
   const payload=fakeRes.payload||{};
-  agentCommit=payload?.commit||payload?.githubEvidence?.commit||null;
-  verified=payload?.verified===true && (payload?.githubFileVerified===true || payload?.githubExecutionConfirmed===true || payload?.githubEvidence?.verified===true);
+  const agentActivity=Array.isArray(payload?.activity)?payload.activity:[];
+  const patchProof=agentActivity.find(x=>x?.tool==="github:patch_and_verify"&&x?.state==="done");
+  const evidenceProof=agentActivity.find(x=>x?.tool==="mission:evidence"&&x?.state==="done");
+  const completionProof=agentActivity.find(x=>x?.tool==="mission:complete"&&x?.state==="done");
+  const patchText=String(patchProof?.details||"");
+  const commitMatch=patchText.match(/Commit\\s+([0-9a-f]{40})/i);
+  agentCommit=commitMatch?.[1]||null;
+  verified=Boolean(!fakeRes.writableEnded===false && fakeRes.statusCode<400 && patchProof && evidenceProof && agentCommit);
   if(!fakeRes.writableEnded || fakeRes.statusCode>=400) throw new Error(String(payload?.error||"BHAI X Agent E2E failed."));
-  if(!payload?.verified && !payload?.githubEvidence?.verified) throw new Error("BHAI X Agent completed without a verified proof payload.");
+  if(!verified) throw new Error("BHAI X Agent did not produce complete GitHub patch/read-back evidence. Activity tail: "+JSON.stringify(agentActivity.slice(-6)));
 
   const readBack=await githubApiJson(target+"?ref=main");
   const fixed=Buffer.from(readBack?.content||"","base64").toString("utf8");

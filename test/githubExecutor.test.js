@@ -6,7 +6,7 @@ test("GitHub executor validates repository, ref, and path input",()=>{
  assert.equal(assertGithubName("owner-1","GitHub owner"),"owner-1");
  assert.equal(assertGithubRef("feature/fix"),"feature/fix");
  assert.equal(assertGithubPath("src/index.js"),"src/index.js");
- assert.throws(()=>assertGithubName("../bad"),/Invalid GitHub owner/);
+ assert.throws(()=>assertGithubName("../bad"),/Invalid GitHub name/);
  assert.throws(()=>assertGithubRef("feature/../main"),/Invalid GitHub branch/);
  assert.throws(()=>assertGithubPath("../secret"),/unsafe GitHub file path/i);
  assert.throws(()=>assertGithubPath("a/./b"),/unsafe GitHub file path/i);

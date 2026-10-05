@@ -148,7 +148,7 @@ async function callCore({apiKey,model,system,messages}) {
     const text = typeof d?.text === "string" ? d.text.trim() : (typeof d?.output_text === "string" ? d.output_text.trim() : String(d?.choices?.[0]?.message?.content || "").trim());
     if (!text) throw new Error("BHAI-CORE returned no text.");
     coreCircuitOpenUntil = 0;
-    return {text,provider:"core",model:d.model || model || null};
+    return {text,provider:"core",backend_provider:d.provider || null,model:d.model || model || null};
   } catch (error) {
     coreCircuitOpenUntil = Date.now() + CORE_COOLDOWN_MS;
     throw error;

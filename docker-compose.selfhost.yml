@@ -1,0 +1,32 @@
+services:
+  bhai-x-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bhai
+      POSTGRES_PASSWORD: ${BHAI_X_DB_PASSWORD:?Set BHAI_X_DB_PASSWORD}
+      POSTGRES_DB: bhaix
+    volumes:
+      - bhai-x-db-data:/var/lib/postgresql/data
+
+  bhai-x:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - bhai-x-db
+    ports:
+      - "10000:10000"
+    environment:
+      NODE_ENV: production
+      PORT: 10000
+      DATABASE_URL: postgresql://bhai:${BHAI_X_DB_PASSWORD:?Set BHAI_X_DB_PASSWORD}@bhai-x-db:5432/bhaix
+      BHAI_CORE_URL: ${BHAI_CORE_URL:?Set BHAI_CORE_URL to your self-hosted BHAI-CORE URL}
+      BHAI_CORE_API_KEY: ${BHAI_CORE_API_KEY:?Set BHAI_CORE_API_KEY to a valid BHAI-CORE key}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      POLLINATIONS_API_KEY: ${POLLINATIONS_API_KEY:-}
+
+volumes:
+  bhai-x-db-data:

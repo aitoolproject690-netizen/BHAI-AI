@@ -45,8 +45,19 @@ const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/f
 function runApi(fn,req,res){
   attachRequestId(res,req.__bhaiRequestId||createRequestId());
   let body="";
-  req.on("data",c=>{body+=c;if(body.length>2000000){return sendError(res,413,"Request body too large.");}});
+  let tooLarge=false;
+  const MAX_BODY_BYTES=2000000;
+  req.on("data",c=>{
+    if(tooLarge)return;
+    body+=c.toString("utf8");
+    if(Buffer.byteLength(body,"utf8")>MAX_BODY_BYTES){
+      tooLarge=true;
+      sendError(res,413,"Request body too large.");
+      req.resume();
+    }
+  });
   req.on("end",async()=>{
+   if(tooLarge)return;
    try{
     req.body=body?JSON.parse(body):{};
    }catch(e){

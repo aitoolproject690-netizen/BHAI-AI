@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readJsonResponse,requestJson} from "../src/apiClient.js";
+import {apiUrl,readJsonResponse,requestJson} from "../src/apiClient.js";
 
 test("readJsonResponse rejects empty responses with a useful error",async()=>{
  const response=new Response("",{status:502,headers:{"X-BHAI-Request-ID":"req-empty"}});
@@ -45,4 +45,8 @@ test("requestJson retries an explicit retry-safe request after a transient 502",
   assert.equal(data.ok,true);
   assert.equal(calls,2);
  }finally{globalThis.fetch=originalFetch;}
+});
+
+test("apiUrl stays relative on server-side builds when no browser base is available",()=>{
+ assert.equal(apiUrl("/api/test"),"/api/test");
 });

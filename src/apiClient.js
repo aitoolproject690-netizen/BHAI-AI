@@ -1,6 +1,8 @@
-const API_BASE="https://bhai-ai-vpna.onrender.com";
+const configuredBase=String(import.meta.env?.VITE_BHAI_X_API_BASE||"").trim().replace(/\/+$/,"");
+const runtimeBase=typeof window!=="undefined"?String(window.location.origin||"").replace(/\/+$/,""):"";
+const API_BASE=configuredBase||runtimeBase;
 
-export const apiUrl=(path)=>API_BASE+path;
+export const apiUrl=(path)=>API_BASE?API_BASE+path:path;
 
 function requestId(){
  try{return crypto.randomUUID();}catch{return "bhai-"+Date.now()+"-"+Math.random().toString(36).slice(2);}

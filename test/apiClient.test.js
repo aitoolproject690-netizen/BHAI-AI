@@ -46,3 +46,7 @@ test("requestJson retries an explicit retry-safe request after a transient 502",
   assert.equal(calls,2);
  }finally{globalThis.fetch=originalFetch;}
 });
+
+test("apiUrl stays relative on server-side builds when no browser base is available",()=>{
+ assert.equal(apiUrl("/api/test"),"/api/test");
+});

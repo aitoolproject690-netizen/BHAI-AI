@@ -17,4 +17,3 @@ export function isObviouslyGarbledResponse(text="", task=""){
   return false;
 }
 
-// agent-tool-loop verification note

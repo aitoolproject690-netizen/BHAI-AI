@@ -778,6 +778,7 @@ if(quickChat && !medicalMode){
  const reply=fallbackReply;
  activity.push({tool:"deterministic-casual",state:"done",details:"Common casual message handled locally without invoking an AI provider."});
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
+}
 const recovery=createRecoveryStateMachine();
 const recoveryStep=(next,details="")=>{ recovery.transition(next); activity.push({tool:"recovery:"+next,state:"done",details}); };
 const githubFileMatch=(githubTaskText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";

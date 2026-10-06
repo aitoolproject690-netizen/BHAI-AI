@@ -11,6 +11,7 @@ import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, asse
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
+import {solveSimpleMath} from "../src/simpleMath.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -452,6 +453,10 @@ export default async function handler(req,res){
     "You are BHAI X, a friendly practical AI chat assistant. Never claim external tools were used in this chat endpoint. Answer directly and naturally. When the user writes Hindi or Hinglish, reply in the same style.",
     medicalMode ? getMedicalSafetyPrompt(task) : ""
    ].filter(Boolean).join("\n");
+   const deterministicMath=solveSimpleMath(task);
+   if(deterministicMath!==null){
+    return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true});
+   }
    const routed=await generateWithRouter({
     task,
     system,

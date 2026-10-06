@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {getAIProviderStatus,getConfiguredAIProviders,routeAI} from "../api/aiRouter.js";
 
 test("multi-AI provider status never exposes API keys",()=>{
@@ -146,19 +147,24 @@ test("AI router falls back when the primary provider has a transient network fai
 });
 
 
-test("BHAI-CORE stays configured when URL is omitted but its server key exists",()=>{
+test("BHAI-CORE requires an explicit URL",()=>{
   const oldUrl=process.env.BHAI_CORE_URL;
   const oldKey=process.env.BHAI_CORE_API_KEY;
   delete process.env.BHAI_CORE_URL;
   process.env.BHAI_CORE_API_KEY="test-core-key";
   try{
     const status=getAIProviderStatus().find(p=>p.id==="core");
-    assert.equal(status?.configured,true);
-    assert.equal(routeAI({task:"fix this code"}),"core");
+    assert.equal(status?.configured,false);
+    assert.equal(getConfiguredAIProviders().includes("core"),false);
   }finally{
     if(oldUrl===undefined)delete process.env.BHAI_CORE_URL; else process.env.BHAI_CORE_URL=oldUrl;
     if(oldKey===undefined)delete process.env.BHAI_CORE_API_KEY; else process.env.BHAI_CORE_API_KEY=oldKey;
   }
+});
+
+test("BHAI-CORE has no managed-host fallback",()=>{
+  const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
+  assert.doesNotMatch(source,/bhai-core\\.onrender\\.com/i);
 });
 
 test("BHAI-CORE sends its server-side API key and accepts the OpenAI-compatible response",async()=>{

@@ -18,6 +18,8 @@ services:
       - bhai-x-db
     ports:
       - "10000:10000"
+    networks:
+      - bhai-public
     environment:
       NODE_ENV: production
       PORT: 10000
@@ -30,3 +32,8 @@ services:
 
 volumes:
   bhai-x-db-data:
+
+networks:
+  bhai-public:
+    external: true
+    name: bhai-public

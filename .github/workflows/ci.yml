@@ -25,6 +25,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Validate self-hosted Compose file
+        run: |
+          BHAI_X_DB_PASSWORD=ci-secret BHAI_CORE_URL=http://core.local BHAI_CORE_API_KEY=ci-key docker compose -f docker-compose.selfhost.yml config -q
       - name: Build self-hosted Docker image
         run: docker build --tag bhai-x-ci .
       - name: Smoke-test self-hosted container

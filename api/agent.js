@@ -775,23 +775,9 @@ if(quickChat && !medicalMode){
   "kya haal":"Mast bhai 😄 Tum batao, kya haal hai? Aaj kya kaam karein? 🚀"
  };
  const fallbackReply=playful[k]||casualReplies[k]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀";
- let reply=fallbackReply;
- try{
-  const routed=await generateWithRouter({
-   task:latestText,
-   system:"You are BHAI X, a friendly fast personal AI assistant. Reply naturally in the user language (Hinglish when they use Hinglish). Keep casual replies short and useful. Do not claim actions you did not perform.",
-   messages:[{role:"user",text:latestText}],
-   preferred:process.env.BHAI_CHAT_PROVIDER||"",
-   role:"chat",
-   fallback:true
-  });
-  if(routed?.text) reply=routed.text;
-  activity.push({tool:"ai-router:"+routed.provider,state:"done",details:"Chat routed through "+routed.provider+" / "+routed.model+"."});
- }catch(e){
-  activity.push({tool:"ai-router",state:"fallback",details:"Provider routing unavailable; local fast reply used."});
- }
+ const reply=fallbackReply;
+ activity.push({tool:"deterministic-casual",state:"done",details:"Common casual message handled locally without invoking an AI provider."});
  return json(res,200,{text:reply,activity,images:[],usage:await getMediaUsage(db,account.id)});
-}
 const recovery=createRecoveryStateMachine();
 const recoveryStep=(next,details="")=>{ recovery.transition(next); activity.push({tool:"recovery:"+next,state:"done",details}); };
 const githubFileMatch=(githubTaskText.match(/(?:[A-Za-z0-9_.-]+\/){0,2}(?:[A-Za-z0-9._-]+\/)*(?:index\.html|[A-Za-z0-9._-]+\.(?:html|css|js|jsx|ts|tsx|json|md))/i)||[])[0]||"";

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readJsonResponse,requestJson} from "../src/apiClient.js";
+import {apiUrl,readJsonResponse,requestJson} from "../src/apiClient.js";
 
 test("readJsonResponse rejects empty responses with a useful error",async()=>{
  const response=new Response("",{status:502,headers:{"X-BHAI-Request-ID":"req-empty"}});

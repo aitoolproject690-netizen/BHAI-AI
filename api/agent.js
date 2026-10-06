@@ -962,17 +962,31 @@ if(githubLinkRequest && githubRequestedRepo && autoDoIt && !githubFileRequest){
 }
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  const generateWithFallback=async(useTools=true)=>{
+  const chatMessages=compactContents(contents).flatMap(x=>{
+   const parts=Array.isArray(x?.parts)?x.parts:[];
+   const text=parts.filter(p=>typeof p?.text==="string").map(p=>p.text).join("\n").trim();
+   if(!text)return [];
+   return [{role:x.role==="model"?"assistant":"user",text}];
+  });
+  if(useTools&&key){
+   const models=await getModelsFast();
+   let lastError=null;
+   for(const model of models){
+    try{
+     const d=await geminiGenerate(key,model,system,compactContents(contents),true,activeToolDefinitions);
+     return {candidates:d.candidates||[],provider:"gemini",model};
+    }catch(e){
+     lastError=e;
+     const msg=String(e?.message||e);
+     if(!/(?:404|not found|unsupported|invalid model|model .*?(?:not found|unavailable)|does not support)/i.test(msg))throw e;
+    }
+   }
+   if(lastError)throw lastError;
+  }
   const routed=await generateWithRouter({
    task:latestText,
-   system:system+(useTools
-    ?"\n\nBHAI-CORE EXECUTION MODE: Return the best direct answer. Do not claim that external tools were used unless the deterministic GitHub executor has actually produced evidence."
-    :""),
-   messages:compactContents(contents).flatMap(x=>{
-    const parts=Array.isArray(x?.parts)?x.parts:[];
-    const text=parts.filter(p=>typeof p?.text==="string").map(p=>p.text).join("\n").trim();
-    if(!text)return [];
-    return [{role:x.role==="model"?"assistant":"user",text}];
-   }),
+   system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
+   messages:chatMessages,
    preferred:"core",
    role:"engineering",
    fallback:true

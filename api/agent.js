@@ -12,6 +12,7 @@ import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
+import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -457,12 +458,31 @@ export default async function handler(req,res){
    if(deterministicMath!==null){
     return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true});
    }
-   const routed=await generateWithRouter({
+   let routed=await generateWithRouter({
     task,
     system,
     messages:chatMessages,
     preferred:"core",role:"chat",fallback:true
    });
+   if(routed?.provider==="core"&&isObviouslyGarbledResponse(routed?.text,task)){
+    const alternates=getConfiguredAIProviders().filter(id=>id!=="core");
+    if(alternates.length){
+     routed=await generateWithRouter({
+      task,
+      system,
+      messages:chatMessages,
+      preferred:alternates[0],
+      role:"chat",
+      exclude:["core"],
+      fallback:true
+     });
+    }else{
+     return json(res,502,{error:"Local AI returned malformed output; response was blocked instead of showing corrupted text."});
+    }
+   }
+   if(isObviouslyGarbledResponse(routed?.text,task)){
+    return json(res,502,{error:"AI returned malformed output; response was blocked instead of showing corrupted text."});
+   }
    const safeText=medicalMode?applyMedicalSafetyFooter(routed.text,task):routed.text;
    return json(res,200,{ok:true,text:safeText,provider:routed.provider,backend_provider:routed.backend_provider||null,model:routed.model,verified:true});
   }catch(e){return json(res,502,{error:"Chat provider failed: "+String(e?.message||e)});}

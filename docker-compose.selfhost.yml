@@ -1,0 +1,54 @@
+services:
+  bhai-core:
+    image: bhai-core:local
+    restart: unless-stopped
+    ports:
+      - "10000:10000"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 10000
+      BHAI_STORE_BACKEND: json
+      BHAI_STORE_FILE: /data/bhai-core-store.json
+      BHAI_ENGINE_URL: mobile://local
+      BHAI_ENGINE_MODEL: smollm2.gguf
+      BHAI_MOBILE_NODE_TOKEN: ${BHAI_MOBILE_NODE_TOKEN:?Set BHAI_MOBILE_NODE_TOKEN}
+      BHAI_CORE_BOOTSTRAP_API_KEY: ${BHAI_CORE_BOOTSTRAP_API_KEY:?Set BHAI_CORE_BOOTSTRAP_API_KEY}
+      BHAI_CORE_USERNAME: ${BHAI_CORE_USERNAME:?Set BHAI_CORE_USERNAME}
+      BHAI_CORE_PASSWORD: ${BHAI_CORE_PASSWORD:?Set BHAI_CORE_PASSWORD}
+    volumes:
+      - bhai-core-data:/data
+
+  bhai-x-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bhai
+      POSTGRES_PASSWORD: ${BHAI_X_DB_PASSWORD:?Set BHAI_X_DB_PASSWORD}
+      POSTGRES_DB: bhaix
+    volumes:
+      - bhai-x-db-data:/var/lib/postgresql/data
+
+  bhai-x:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - bhai-x-db
+      - bhai-core
+    ports:
+      - "10001:10000"
+    environment:
+      NODE_ENV: production
+      PORT: 10000
+      DATABASE_URL: postgresql://bhai:${BHAI_X_DB_PASSWORD:?Set BHAI_X_DB_PASSWORD}@bhai-x-db:5432/bhaix
+      BHAI_CORE_URL: http://bhai-core:10000
+      BHAI_CORE_API_KEY: ${BHAI_CORE_BOOTSTRAP_API_KEY:?Set BHAI_CORE_BOOTSTRAP_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      POLLINATIONS_API_KEY: ${POLLINATIONS_API_KEY:-}
+
+volumes:
+  bhai-core-data:
+  bhai-x-db-data:

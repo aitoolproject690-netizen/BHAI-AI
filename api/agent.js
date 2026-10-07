@@ -527,6 +527,10 @@ export default async function handler(req,res){
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
  const normalizedCasual=normalizeIntent(latestUserMessage);
  const serverCasual=isCasualIntent(latestUserMessage);
+ const deterministicMath=solveSimpleMath(latestUserMessage);
+ if(deterministicMath!==null){
+  return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true,activity:[]});
+ }
  if(serverCasual){
   const casualReplies={
    "kya chal raha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",

@@ -142,7 +142,11 @@ function repairKnownUnsafeClaims(text,task){
   const rawTask=String(task||"");
   const risk=getMedicalRiskSignals(rawTask);
 
-  // For simple runny-nose/cold questions, never trust free-form provider output.\n  // Return a deterministic, concise and conservative response instead.\n  if(isSimpleColdQuestion(rawTask)) return buildSimpleColdResponse();\n\n  // For genuine emergency signals, replace the provider response entirely.
+  // For simple runny-nose/cold questions, never trust free-form provider output.
+  // Return a deterministic, concise and conservative response instead.
+  if(isSimpleColdQuestion(rawTask)) return buildSimpleColdResponse();
+
+  // For genuine emergency signals, replace the provider response entirely.
   // This prevents medication advice, invented procedures, hallucinations, or
   // overlong explanations from surviving a final answer.
   if(risk.emergencyWords) return buildEmergencyResponse(rawTask);

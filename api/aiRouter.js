@@ -215,7 +215,7 @@ async function callHuggingFace({apiKey,model,system,messages}) {
   const input=[...(system?[{role:"system",content:String(system)}]:[]),...normalizeMessages(messages).map(m=>({role:m.role,content:m.text}))];
   const r=await fetch("https://router.huggingface.co/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},body:JSON.stringify({model,messages:input,stream:false}),signal:timeout(30000)});
   const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(d?.error?.message||"Hugging Face Inference Providers request failed");
+  if(!r.ok){const message=String(d?.error?.message||d?.error||"Hugging Face Inference Providers request failed");throw Object.assign(new Error(message),{status:r.status});}
   const text=d?.choices?.[0]?.message?.content;
   if(typeof text!=="string"||!text.trim())throw new Error("Hugging Face returned no text.");
   return {text:text.trim(),provider:"huggingface",model};
@@ -247,7 +247,7 @@ function isFallbackError(error) {
   const s=String(error?.message||error);
   const status=Number(error?.status||0);
   if([401,403,408,409,429,500,502,503,504].includes(status)) return true;
-  return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporar(?:y|ily) (?:unavailable|failure|overload)|currently experiencing high demand|high demand|service unavailable|overload|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open/i.test(s);
+  return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporar(?:y|ily) (?:unavailable|failure|overload)|currently experiencing high demand|high demand|service unavailable|overload|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open|inference providers request failed|request failed/i.test(s);
 }
 
 export async function generateWithRouter({

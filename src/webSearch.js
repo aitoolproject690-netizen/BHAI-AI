@@ -309,8 +309,9 @@ export function filterResearchSources(task,results=[]){
     _topic:researchTopicPenalty(task,result),
     _authority:sourceAuthorityScore(result)
   }));
-  const relevant=items.filter(x=>x._topic>-10);
-  const pool=relevant.length?relevant:items.filter(x=>x._authority>=5);
+  const topicSpecific=/\b(petrol|gasoline|fiber|fibre)\b/i.test(String(task||""));
+  const relevant=items.filter(x=>x._topic>=0);
+  const pool=topicSpecific ? relevant : (relevant.length?relevant:items.filter(x=>x._authority>=5));
   return pool
     .sort((a,b)=>(b._topic+b._authority)-(a._topic+a._authority))
     .map(({_topic,_authority,...result})=>result);

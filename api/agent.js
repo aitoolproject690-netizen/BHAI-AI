@@ -487,6 +487,8 @@ export default async function handler(req,res){
    if(isWebResearchIntent(task)||isKnowledgeResearchIntent(task)){
     try{
      const results=await webSearch(task);
+     const researchResults=filterResearchSources(task,results);
+     if(!researchResults.length) throw new Error("No topic-relevant research evidence returned.");
      const evidence=researchResults.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
      const researchSystem=system+"\n\nEVIDENCE-BACKED RESEARCH MODE: Answer the question using the supplied evidence. Distinguish established facts from uncertainty. Do not fill gaps by guessing.";
      const researched=await generateVerifiedAnswer({
@@ -499,7 +501,7 @@ export default async function handler(req,res){
      });
      const text=String(researched?.text||"").trim();
      if(text && !isObviouslyGarbledResponse(text,task) && researched?.quality?.verdict!=="FAIL" && researched?.verified===true){
-      const sources=results.length?"\n\n### Sources\n"+results.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\\[\\]]/g,"")+"]("+String(x.url||"")+")").join("\n"):"";
+      const sources=researchResults.length?"\n\n### Sources\n"+researchResults.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\\[\\]]/g,"")+"]("+String(x.url||"")+")").join("\n"):"";
       return json(res,200,{ok:true,text:text+sources,provider:researched.provider||null,backend_provider:researched.backend_provider||null,model:researched.model||null,verified:true,quality:researched.quality||null});
      }
      return json(res,503,{ok:false,error:"Evidence-backed research answer failed quality verification, so BHAI X blocked it instead of falling back to the weak local model.",research:true,verified:false,quality:researched?.quality||null,activity:[{tool:"answer-quality-gate",state:"blocked",details:"Research draft was malformed, unverified, or failed independent review."}]});

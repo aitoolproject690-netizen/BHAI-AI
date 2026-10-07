@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {isMedicalIntent,getMedicalRiskSignals,getMedicalSafetyPrompt,applyMedicalSafetyFooter,repairKnownUnsafeClaims,sanitizeMedicalResponse} from "../src/medicalSafety.js";
+import {isMedicalIntent,getMedicalRiskSignals,getMedicalSafetyPrompt,applyMedicalSafetyFooter,repairKnownUnsafeClaims,sanitizeMedicalResponse,isSimpleColdQuestion} from "../src/medicalSafety.js";
 
 test("detects Hindi/Hinglish medical requests",()=>{
   assert.equal(isMedicalIntent("Papa ki dhadkan tez hai"),true);
@@ -153,4 +153,9 @@ test("severe BP gets deterministic urgent guidance without medication dosing",()
   assert.match(fixed,/कम से कम 1 मिनट बाद/);
   assert.match(fixed,/112/);
   assert.doesNotMatch(fixed,/aspirin|300\s*mg/i);
+});
+
+test("simple cold detector recognizes runny-nose request without throwing",()=>{
+  assert.equal(isSimpleColdQuestion("Mujhe shardi ho rahi hai naak se pani aa rha hai kya karna hai"),true);
+  assert.equal(isSimpleColdQuestion("Mujhe sardi hai aur saans lene mein bahut dikkat hai"),false);
 });

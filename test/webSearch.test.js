@@ -45,7 +45,7 @@ test("webSearch falls back when the first search host fails",async()=>{
 
 test("research query expansion targets petrol chemical composition instead of prices",()=>{
   const q=__test.buildSearchQueries("Petrol (गैसोलीन) में असल में क्या-क्या होता है?");
-  assert.match(q[0],/gasoline petrol chemical composition/i);
+  assert.match(q[0],/gasoline chemical composition/i);
 });
 
 test("research relevance scoring penalizes petrol price and station results",()=>{

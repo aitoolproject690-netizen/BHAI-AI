@@ -94,3 +94,42 @@ test("webSearch uses Gemini Google Search grounding when public search is unavai
     else process.env.GEMINI_API_KEY=originalKey;
   }
 });
+
+
+test("webSearch uses keyless Wikipedia fallback for stable factual research",async()=>{
+  const originalFetch=globalThis.fetch;
+  const originalKey=process.env.GEMINI_API_KEY;
+  const calls=[];
+  delete process.env.GEMINI_API_KEY;
+  globalThis.fetch=async(url)=>{
+    const u=String(url); calls.push(u);
+    if(u.includes("duckduckgo")||u.includes("bing.com/search")||u.includes("google.com/search")){
+      throw new Error("provider unavailable");
+    }
+    if(u.includes("en.wikipedia.org/w/api.php")){
+      return new Response(JSON.stringify({
+        query:{pages:{
+          "123":{pageid:123,index:1,title:"Gasoline",fullurl:"https://en.wikipedia.org/wiki/Gasoline",extract:"Gasoline is a transparent petroleum-derived fuel and a complex mixture of organic compounds, chiefly hydrocarbons."},
+          "456":{pageid:456,index:2,title:"Octane rating",fullurl:"https://en.wikipedia.org/wiki/Octane_rating",extract:"Octane rating measures fuel's resistance to knocking in spark-ignition engines."}
+        }}
+      }),{status:200,headers:{"Content-Type":"application/json"}});
+    }
+    throw new Error("unexpected provider");
+  };
+  try{
+    const rows=await webSearch("Petrol (गैसोलीन) में असल में क्या-क्या होता है?");
+    assert.equal(rows.length,2);
+    assert.equal(rows[0].title,"Gasoline");
+    assert.match(rows[0].snippet,/complex mixture of organic compounds/i);
+    assert.ok(calls.some(url=>String(url).includes("en.wikipedia.org/w/api.php")));
+  }finally{
+    globalThis.fetch=originalFetch;
+    if(originalKey===undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY=originalKey;
+  }
+});
+
+test("Wikipedia fallback is not used for freshness-sensitive research",()=>{
+  assert.equal(__test.isFreshQuery("What is the latest petrol price today?"),true);
+  assert.equal(__test.isFreshQuery("Petrol gasoline chemical composition"),false);
+});

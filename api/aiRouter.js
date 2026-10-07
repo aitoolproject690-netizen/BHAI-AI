@@ -10,7 +10,7 @@
  * Routing is deterministic and role-based; it is not tied to one vendor.
  */
 
-import { inspectAnswerDraft, buildAnswerReviewerPrompt, parseReviewerVerdict } from "../src/answerValidation.js";
+import { inspectAnswerDraft, buildAnswerReviewerPrompt, parseReviewerVerdict, buildEvidenceBackedAnswer } from "../src/answerValidation.js";
 
 const timeout = ms => AbortSignal.timeout(ms);
 
@@ -375,6 +375,28 @@ export async function reviewWithMultiAI({task="",draft="",evidence="",domain="fa
  * independent review pass. A failed review gets one correction retry.
  * This deliberately stops after bounded work instead of looping forever.
  */
+function buildDirectResearchFallback({task,evidence,role,failedProviders=[]}={}) {
+  if(!["researcher","web-research"].includes(role) || !String(evidence||"").trim()) return null;
+  const text=buildEvidenceBackedAnswer(task,evidence);
+  if(!text) return null;
+  return {
+    text,
+    provider:"evidence-direct",
+    model:"bhai-evidence-v1",
+    backend_provider:"retrieved-web-evidence",
+    verified:true,
+    failedProviders:[...new Set(failedProviders.filter(Boolean))],
+    quality:{
+      reviewed:false,
+      verdict:"EVIDENCE_DIRECT",
+      reviewer:"deterministic-evidence",
+      issues:["AI draft/review was unavailable or rejected; response was composed only from retrieved evidence."],
+      corrections:[],
+      flags:[]
+    }
+  };
+}
+
 export async function generateVerifiedAnswer({
   task="",
   system="",
@@ -392,8 +414,19 @@ export async function generateVerifiedAnswer({
     }
   };
 
-  let draft=await generateWithRouter({task,system,messages,preferred,role,fallback});
-  rememberFailures(draft);
+  let draft;
+  try {
+    draft=await generateWithRouter({task,system,messages,preferred,role,fallback});
+    rememberFailures(draft);
+  } catch(error) {
+    rememberFailures(error);
+    const direct=buildDirectResearchFallback({task,evidence,role,failedProviders:[...failedProviders]});
+    if(direct) {
+      console.warn("[AI Router] Using direct evidence fallback after provider failure",JSON.stringify({role,failedProviders:[...failedProviders]}));
+      return direct;
+    }
+    throw error;
+  }
   let structure=inspectAnswerDraft(task,draft?.text||"",{requiresEvidence:requiresReview});
 
   if(!structure.ok){
@@ -412,6 +445,12 @@ export async function generateVerifiedAnswer({
   }
 
   if(!structure.ok){
+    const direct=buildDirectResearchFallback({task,evidence,role,failedProviders:[...failedProviders]});
+    if(direct) {
+      direct.quality.flags=structure.flags;
+      console.warn("[AI Router] Using direct evidence fallback after malformed draft",JSON.stringify({role,flags:structure.flags}));
+      return direct;
+    }
     return {
       ...draft,
       verified:false,
@@ -508,6 +547,12 @@ export async function generateVerifiedAnswer({
       rememberFailures(finalReview);
       const finalParsed=parseReviewerVerdict(finalReview?.text||"");
       if(finalParsed.verdict!=="PASS"){
+        const direct=buildDirectResearchFallback({task,evidence,role,failedProviders:[...failedProviders]});
+        if(direct) {
+          direct.quality.issues=[...(parsed.issues||[]),...(finalParsed.issues||[]),"Corrected draft failed final evidence review; direct evidence fallback used."];
+          direct.quality.corrections=[...(parsed.corrections||[]),...(finalParsed.corrections||[])];
+          return direct;
+        }
         return {
           ...corrected,
           verified:false,
@@ -537,6 +582,11 @@ export async function generateVerifiedAnswer({
       };
     }catch(error){
       rememberFailures(error);
+      const direct=buildDirectResearchFallback({task,evidence,role,failedProviders:[...failedProviders]});
+      if(direct) {
+        direct.quality.issues=["Final corrected-answer review was unavailable; direct evidence fallback used."];
+        return direct;
+      }
       console.warn("[AI Router] final corrected-answer review unavailable:",String(error?.message||error));
       return {
         ...corrected,
@@ -554,6 +604,11 @@ export async function generateVerifiedAnswer({
     }
   }catch(error){
     rememberFailures(error);
+    const direct=buildDirectResearchFallback({task,evidence,role,failedProviders:[...failedProviders]});
+    if(direct) {
+      direct.quality.issues=["Independent answer review was unavailable; direct evidence fallback used."];
+      return direct;
+    }
     console.warn("[AI Router] independent answer review unavailable:",String(error?.message||error));
     return {
       ...draft,

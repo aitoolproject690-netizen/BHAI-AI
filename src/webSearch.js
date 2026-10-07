@@ -287,6 +287,42 @@ async function searchGeminiGrounding(q) {
   return unique;
 }
 
+function sourceAuthorityScore(result){
+  const url=String(result?.url||"");
+  let host="";
+  try{ host=new URL(url).hostname.toLowerCase(); }catch{}
+  if(!host) return 0;
+  if(/(?:^|\.)eia\.gov$/.test(host) || /(?:^|\.)epa\.gov$/.test(host)) return 7;
+  if(/(?:^|\.)(?:niddk|ods|nih|cdc|fda)\.gov$/.test(host)) return 7;
+  if(/(?:^|\.)gov$/.test(host) || /(?:^|\.)gov\./.test(host)) return 5;
+  if(/(?:^|\.)(?:who|oecd|iea)\.int$/.test(host)) return 6;
+  if(/(?:^|\.)wikipedia\.org$/.test(host)) return 3;
+  return 0;
+}
+
+function mergeSearchResults(attempts,query){
+  const byUrl=new Map();
+  for(const attempt of attempts.filter(Boolean)){
+    for(const result of attempt.results||[]){
+      const url=String(result?.url||"").trim();
+      if(!url) continue;
+      const score=relevanceScore(result,query)+sourceAuthorityScore(result);
+      const existing=byUrl.get(url);
+      if(!existing || score>(existing._score||-Infinity)){
+        byUrl.set(url,{...result,_score:score});
+      }
+    }
+  }
+  return [...byUrl.values()]
+    .sort((a,b)=>(b._score||0)-(a._score||0))
+    .slice(0,10)
+    .map(({_score,...result})=>result);
+}
+
+function hasAuthoritativeSource(results){
+  return (results||[]).some(result=>sourceAuthorityScore(result)>=5);
+}
+
 export async function webSearch(query="") {
   const q=String(query||"").trim();
   if(!q) throw new Error("Search query is empty.");
@@ -302,17 +338,20 @@ export async function webSearch(query="") {
     }
   }));
 
-  const winner=attempts.find(Boolean);
-  if(winner?.results?.length) return winner.results;
+  let merged=mergeSearchResults(attempts,q);
 
-  if(!isFreshQuery(q)) {
+  // Stable factual queries get a keyless Wikipedia enrichment when public search
+  // returned weak/short evidence or no authoritative source.
+  if(!isFreshQuery(q) && (!hasAuthoritativeSource(merged) || merged.length<2)) {
     try {
       const wikipedia=await searchWikipedia(q);
-      return wikipedia;
+      merged=mergeSearchResults([{provider:"public",results:merged},{provider:"wikipedia",results:wikipedia}],q);
     } catch(error) {
       errors.push("wikipedia: "+String(error?.message||error).slice(0,300));
     }
   }
+
+  if(merged.length) return merged;
 
   try {
     const grounded=await searchGeminiGrounding(q);
@@ -324,4 +363,4 @@ export async function webSearch(query="") {
   throw new Error("All web search providers failed: "+errors.join(" | "));
 }
 
-export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore,searchGeminiGrounding,searchWikipedia,isFreshQuery};
+export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore,searchGeminiGrounding,searchWikipedia,isFreshQuery,sourceAuthorityScore,mergeSearchResults};

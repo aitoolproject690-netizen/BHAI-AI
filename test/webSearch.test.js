@@ -133,3 +133,17 @@ test("Wikipedia fallback is not used for freshness-sensitive research",()=>{
   assert.equal(__test.isFreshQuery("What is the latest petrol price today?"),true);
   assert.equal(__test.isFreshQuery("Petrol gasoline chemical composition"),false);
 });
+
+
+test("webSearch aggregates providers and rewards authoritative sources",()=>{
+  const rows=__test.mergeSearchResults([
+    {provider:"duckduckgo",results:[
+      {title:"Generic petrol page",url:"https://example.com/petrol",snippet:"Gasoline is a refined petroleum fuel made of hydrocarbons."},
+      {title:"EIA gasoline",url:"https://www.eia.gov/energyexplained/gasoline/",snippet:"Gasoline is a mixture of hydrocarbons."}
+    ]},
+    {provider:"bing",results:[
+      {title:"EIA duplicate",url:"https://www.eia.gov/energyexplained/gasoline/",snippet:"Gasoline is a mixture of hydrocarbons used as motor fuel."}
+    ]}
+  ],"Petrol gasoline chemical composition hydrocarbons");
+  assert.equal(rows[0].url,"https://www.eia.gov/energyexplained/gasoline/");
+});

@@ -8,6 +8,9 @@ test("solves simple arithmetic exactly",()=>{
   assert.equal(solveSimpleMath("7 × 8 = ?"),"56");
   assert.equal(solveSimpleMath("48 ÷ 6 = ?"),"8");
   assert.equal(solveSimpleMath("what is (10-4)/2?"),"3");
+  assert.equal(solveSimpleMath("2+2 kitna hota hai"),"4");
+  assert.equal(solveSimpleMath("Chal ab ye bata 2+2 kitna hota hai"),"4");
+  assert.equal(solveSimpleMath("Chutiye 2+2 ka matalab bhi nahi pata"),"4");
 });
 
 test("does not hijack normal text",()=>{

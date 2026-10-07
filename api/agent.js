@@ -580,14 +580,7 @@ export default async function handler(req,res){
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
  const normalizedCasual=normalizeIntent(latestUserMessage);
  const serverCasual=isCasualIntent(latestUserMessage);
- if(isMedicalChatIntent(latestUserMessage)){
-   try{
-    const medical=await generateWithRouter({task:latestUserMessage,system:system+"\n\n"+getMedicalSafetyPrompt(latestUserMessage),messages:routedMessages,role:"medical",fallback:true});
-    const safe=applyMedicalSafetyFooter(medical.text,latestUserMessage);
-    if(!isObviouslyGarbledResponse(safe,latestUserMessage)) return json(res,200,{ok:true,text:safe,provider:medical.provider,backend_provider:medical.backend_provider||null,model:medical.model||null,verified:true,activity:[]});
-   }catch(e){console.warn("[Medical] agent lane failed:",String(e?.message||e));}
-  }
-  const deterministicMath=solveSimpleMath(latestUserMessage);
+   const deterministicMath=solveSimpleMath(latestUserMessage);
  if(deterministicMath!==null){
   return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true,activity:[]});
  }
@@ -777,6 +770,28 @@ async function getModelsFast(){
   modelCache.models=list;
   return list;
 }
+if(isMedicalChatIntent(latestUserMessage)){
+ try{
+  const deterministicMedical=applyMedicalSafetyFooter("",latestUserMessage);
+  if(deterministicMedical){
+   return json(res,200,{ok:true,text:deterministicMedical,provider:"deterministic",backend_provider:"medical-safety",model:"bhai-medical-safety-v1",verified:true,activity:[]});
+  }
+  const medical=await generateWithRouter({
+   task:latestUserMessage,
+   system:system+"\n\n"+getMedicalSafetyPrompt(latestUserMessage),
+   messages:routedMessages,
+   role:"medical",
+   fallback:true
+  });
+  const safe=applyMedicalSafetyFooter(medical.text,latestUserMessage);
+  if(!isObviouslyGarbledResponse(safe,latestUserMessage)){
+   return json(res,200,{ok:true,text:safe,provider:medical.provider||null,backend_provider:medical.backend_provider||null,model:medical.model||null,verified:true,activity:[]});
+  }
+ }catch(e){
+  console.warn("[Medical] agent lane failed:",String(e?.message||e));
+ }
+}
+
 const latestText=String(latestUserMessage||"").trim();
 const currentResearchRequest=isWebResearchIntent(latestText);
 if(currentResearchRequest){
@@ -784,7 +799,7 @@ if(currentResearchRequest){
   const results=await webSearch(latestText);
   const researchResults=filterResearchSources(latestText,results);
   if(!researchResults.length) throw new Error("Web search returned no usable results.");
-  const evidence=results.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
+  const evidence=researchResults.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
   const researchSystem=system+"\n\nCURRENT WEB RESEARCH MODE: Use the supplied search results as the factual source. Do not invent current facts. Clearly separate confirmed facts from uncertainty. Answer in the user's language/style. If the search results are insufficient, say so rather than guessing.";
   const researched=await generateVerifiedAnswer({
     task:latestText,

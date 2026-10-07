@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import {getAIProviderStatus,getConfiguredAIProviders,routeAI} from "../api/aiRouter.js";
+import {getAIProviderStatus,getConfiguredAIProviders,routeAI,generateVerifiedAnswer} from "../api/aiRouter.js";
 
 test("multi-AI provider status never exposes API keys",()=>{
   const status=getAIProviderStatus();
@@ -246,6 +246,84 @@ test("BHAI-CORE circuit-open state falls through to another configured provider"
     const second=await generateWithRouter({task:"hello again",preferred:"core",role:"chat"});
     assert.equal(second.provider,"openai");
     assert.equal(second.text,"openai-fallback-ok");
+    assert.equal(calls,3);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});
+
+
+test("verified answer engine passes a research draft through an independent reviewer",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.GEMINI_API_KEY="test-gemini";
+  process.env.GEMINI_ROUTER_MODEL="test-gemini-model";
+  process.env.OPENAI_API_KEY="test-openai";
+  process.env.OPENAI_MODEL="test-openai-model";
+  delete process.env.BHAI_CORE_URL;
+  delete process.env.BHAI_CORE_API_KEY;
+  try{
+    let calls=0;
+    global.fetch=async(url)=>{
+      calls++;
+      if(String(url).includes("generativelanguage.googleapis.com")){
+        return new Response(JSON.stringify({
+          candidates:[{content:{parts:[{text:"Petrol is a complex mixture of hydrocarbons, with additives used to provide desired performance and cleanliness."}]}}]
+        }),{status:200,headers:{"content-type":"application/json"}});
+      }
+      return new Response(JSON.stringify({
+        output_text:'{"verdict":"PASS","issues":[],"corrections":[]}'
+      }),{status:200,headers:{"content-type":"application/json"}});
+    };
+    const out=await generateVerifiedAnswer({
+      task:"What is petrol?",
+      role:"researcher",
+      evidence:"[1] Fuel is a mixture of hydrocarbons."
+    });
+    assert.equal(out.verified,true);
+    assert.equal(out.quality?.verdict,"PASS");
+    assert.equal(out.provider,"gemini");
+    assert.equal(out.quality?.reviewer,"openai");
+    assert.equal(calls,2);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});
+
+test("verified answer engine performs one bounded correction after reviewer failure",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.GEMINI_API_KEY="test-gemini";
+  process.env.GEMINI_ROUTER_MODEL="test-gemini-model";
+  process.env.OPENAI_API_KEY="test-openai";
+  process.env.OPENAI_MODEL="test-openai-model";
+  delete process.env.BHAI_CORE_URL;
+  delete process.env.BHAI_CORE_API_KEY;
+  try{
+    let calls=0;
+    global.fetch=async(url)=>{
+      calls++;
+      if(String(url).includes("generativelanguage.googleapis.com")){
+        return new Response(JSON.stringify({
+          candidates:[{content:{parts:[{text:calls===1?"Petrol contains tetrafluorooctane and always prevents engine wear.":"Petrol is primarily a mixture of hydrocarbons and can contain performance-related additives."}]}}]
+        }),{status:200,headers:{"content-type":"application/json"}});
+      }
+      return new Response(JSON.stringify({
+        output_text:'{"verdict":"FAIL","issues":["invented chemical claim"],"corrections":["Remove unsupported chemical names and absolute claims."]}'
+      }),{status:200,headers:{"content-type":"application/json"}});
+    };
+    const out=await generateVerifiedAnswer({
+      task:"What is petrol?",
+      role:"researcher",
+      evidence:"[1] Fuel is a mixture of hydrocarbons."
+    });
+    assert.equal(out.verified,true);
+    assert.equal(out.quality?.verdict,"CORRECTED");
+    assert.match(out.text,/mixture of hydrocarbons/i);
     assert.equal(calls,3);
   }finally{
     global.fetch=originalFetch;

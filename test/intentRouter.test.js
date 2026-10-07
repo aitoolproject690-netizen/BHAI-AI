@@ -68,6 +68,12 @@ test("local coding intent is isolated from engineering execution",()=>{
 });
 
 
+test("routes generic explanatory questions to evidence-backed research",()=>{
+ assert.equal(isKnowledgeResearchIntent("Why is the sky blue?"),true);
+ assert.equal(isKnowledgeResearchIntent("Fiber ki kami se kya-kya asar ho sakta hai?"),true);
+ assert.equal(isKnowledgeResearchIntent("What are you doing?"),false);
+});
+ 
 test("routes technical factual questions to evidence-backed research",()=>{
  assert.equal(isKnowledgeResearchIntent("Petrol mein kya hota hai?"),true);
  assert.equal(isKnowledgeResearchIntent("How does a car battery work?"),true);

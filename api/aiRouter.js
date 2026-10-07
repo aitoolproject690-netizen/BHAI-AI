@@ -241,6 +241,8 @@ async function callProvider(id,args) {
 
 function isFallbackError(error) {
   const s=String(error?.message||error);
+  const status=Number(error?.status||0);
+  if([401,403,408,409,429,500,502,503,504].includes(status)) return true;
   return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporarily unavailable|currently experiencing high demand|high demand|service unavailable|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open/i.test(s);
 }
 

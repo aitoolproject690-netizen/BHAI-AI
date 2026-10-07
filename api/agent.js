@@ -9,7 +9,7 @@ import { resolveGithubTarget, extractGithubRepoReference, classifyEngineeringErr
 import { generateWithRouter, generateVerifiedAnswer, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
 import { routeConversationContext } from "./contextRouter.js";
-import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
+import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpleColdQuestion } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";

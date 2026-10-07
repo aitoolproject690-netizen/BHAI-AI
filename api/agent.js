@@ -10,7 +10,7 @@ import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from 
 import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
-import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
 
@@ -718,6 +718,39 @@ async function getModelsFast(){
   return list;
 }
 const latestText=String(latestUserMessage||"").trim();
+const currentResearchRequest=isWebResearchIntent(latestText);
+if(currentResearchRequest){
+ try{
+  const results=await webSearch(latestText);
+  if(!results.length) throw new Error("Web search returned no usable results.");
+  const evidence=results.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
+  const researchSystem=system+"\n\nCURRENT WEB RESEARCH MODE: Use the supplied search results as the factual source. Do not invent current facts. Clearly separate confirmed facts from uncertainty. Answer in the user's language/style. If the search results are insufficient, say so rather than guessing.";
+  const researched=await generateWithRouter({
+    task:latestText,
+    system:researchSystem,
+    messages:[{role:"user",text:latestText+"\n\nWEB SEARCH RESULTS:\n"+evidence}],
+    role:"researcher",
+    fallback:true
+  });
+  if(isObviouslyGarbledResponse(researched?.text,latestText)){
+    throw new Error("Research provider returned malformed output.");
+  }
+  const sources="\n\n### Sources\n"+results.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\[\]]/g,"")+ "]("+String(x.url||"")+")").join("\n");
+  return json(res,200,{
+    ok:true,
+    text:safeResponseText(String(researched.text||"Unable to produce a verified research answer.")+sources),
+    provider:researched.provider||null,
+    backend_provider:researched.backend_provider||null,
+    model:researched.model||null,
+    verified:true,
+    activity:[{tool:"web_search",state:"done",details:"Current/web question answered from fresh search evidence."}]
+  });
+ }catch(e){
+  console.warn("[Research] fresh web lane failed:",String(e?.message||e));
+ }
+}
+
+
 // Deterministic local-coding isolation: short coding-help requests stay on the chat provider.
 const localCodingRequest=isLocalCodingIntent(latestText);
 if(localCodingRequest){

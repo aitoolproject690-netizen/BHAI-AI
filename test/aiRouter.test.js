@@ -201,3 +201,33 @@ test("BHAI-CORE sends its server-side API key and accepts the OpenAI-compatible 
     if(oldKey===undefined)delete process.env.BHAI_CORE_API_KEY; else process.env.BHAI_CORE_API_KEY=oldKey;
   }
 });
+
+test("BHAI-CORE circuit-open state falls through to another configured provider",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.BHAI_CORE_URL="https://core.test";
+  process.env.BHAI_CORE_API_KEY="test-core-key";
+  process.env.OPENAI_API_KEY="test-openai";
+  try{
+    let calls=0;
+    global.fetch=async(url)=>{
+      calls++;
+      if(String(url).includes("core.test")){
+        return new Response(JSON.stringify({error:{message:"temporary core failure"}}),{status:503,headers:{"content-type":"application/json"}});
+      }
+      return new Response(JSON.stringify({output_text:"openai-fallback-ok"}),{status:200,headers:{"content-type":"application/json"}});
+    };
+    const {generateWithRouter}=await import("../api/aiRouter.js?circuit-fallback="+Date.now());
+    const first=await generateWithRouter({task:"hello",preferred:"core",role:"chat"});
+    assert.equal(first.provider,"openai");
+    assert.equal(first.text,"openai-fallback-ok");
+    const second=await generateWithRouter({task:"hello again",preferred:"core",role:"chat"});
+    assert.equal(second.provider,"openai");
+    assert.equal(second.text,"openai-fallback-ok");
+    assert.equal(calls,3);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});

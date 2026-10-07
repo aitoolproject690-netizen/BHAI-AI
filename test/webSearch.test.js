@@ -161,3 +161,5 @@ test("webSearch aggregates providers and rewards authoritative sources",()=>{
   ],"Petrol gasoline chemical composition hydrocarbons");
   assert.equal(rows[0].url,"https://www.eia.gov/energyexplained/gasoline/");
 });
+
+// Research source regression coverage retained for CI.

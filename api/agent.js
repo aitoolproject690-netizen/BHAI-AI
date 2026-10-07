@@ -497,10 +497,11 @@ export default async function handler(req,res){
       fallback:true
      });
      const text=String(researched?.text||"").trim();
-     if(text && !isObviouslyGarbledResponse(text,task) && researched?.quality?.verdict!=="FAIL"){
+     if(text && !isObviouslyGarbledResponse(text,task) && researched?.quality?.verdict!=="FAIL" && researched?.verified===true){
       const sources=results.length?"\n\n### Sources\n"+results.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\\[\\]]/g,"")+"]("+String(x.url||"")+")").join("\n"):"";
-      return json(res,200,{ok:true,text:text+sources,provider:researched.provider||null,backend_provider:researched.backend_provider||null,model:researched.model||null,verified:Boolean(researched.verified),quality:researched.quality||null});
+      return json(res,200,{ok:true,text:text+sources,provider:researched.provider||null,backend_provider:researched.backend_provider||null,model:researched.model||null,verified:true,quality:researched.quality||null});
      }
+     return json(res,503,{ok:false,error:"Evidence-backed research answer failed quality verification, so BHAI X blocked it instead of falling back to the weak local model.",research:true,verified:false,quality:researched?.quality||null,activity:[{tool:"answer-quality-gate",state:"blocked",details:"Research draft was malformed, unverified, or failed independent review."}]});
     }catch(e){
      console.warn("[Research] evidence-backed lane failed:",String(e?.message||e));
      return json(res,503,{ok:false,error:"Fresh evidence/research was unavailable, so BHAI X blocked the unverified answer instead of falling back to the weak local model.",research:true,verified:false,activity:[{tool:"web-research",state:"failed",details:String(e?.message||e).slice(0,300)}]});
@@ -781,15 +782,17 @@ if(currentResearchRequest){
   if(!results.length) throw new Error("Web search returned no usable results.");
   const evidence=results.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
   const researchSystem=system+"\n\nCURRENT WEB RESEARCH MODE: Use the supplied search results as the factual source. Do not invent current facts. Clearly separate confirmed facts from uncertainty. Answer in the user's language/style. If the search results are insufficient, say so rather than guessing.";
-  const researched=await generateWithRouter({
+  const researched=await generateVerifiedAnswer({
     task:latestText,
     system:researchSystem,
     messages:[{role:"user",text:latestText+"\n\nWEB SEARCH RESULTS:\n"+evidence}],
     role:"researcher",
+    evidence,
     fallback:true
   });
-  if(isObviouslyGarbledResponse(researched?.text,latestText)){
-    throw new Error("Research provider returned malformed output.");
+  const researchedText=String(researched?.text||"").trim();
+  if(!researchedText || isObviouslyGarbledResponse(researchedText,latestText) || researched?.quality?.verdict==="FAIL" || researched?.verified!==true){
+    return json(res,503,{ok:false,error:"Fresh web answer failed quality verification, so BHAI X blocked it instead of falling back to BHAI-CORE/SmolLM2.",research:true,verified:false,quality:researched?.quality||null,activity:[{tool:"answer-quality-gate",state:"blocked",details:"Current-information answer was malformed, unverified, or failed independent review."}]});
   }
   const sources="\n\n### Sources\n"+results.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\[\]]/g,"")+ "]("+String(x.url||"")+")").join("\n");
   return json(res,200,{

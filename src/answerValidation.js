@@ -37,7 +37,7 @@ export function buildEvidenceBackedAnswer(task="",evidence="",{maxSentences=4,ma
       const st=evidenceTokens(sentence);
       let score=0;
       for(const token of questionTokens) if(st.has(token)) score++;
-      const petrolComposition=/\b(petrol|gasoline)\b/i.test(task) && /(composition|chemical|contain|consist|संघटन|रासायनिक|क्या|होता)/i.test(task);
+      const petrolComposition=/\b(petrol|gasoline)\b/i.test(task) && /(composition|chemical|contain|consist|संघटन|रासायनिक|क्या|होता|kya|hota)/i.test(task);
       const fiberHealth=/\b(fiber|fibre)\b/i.test(task) && /(deficien|lack|effect|benefit|क्या|कमी|असर)/i.test(task);
       if(petrolComposition && /price|station|discount|fuel price|petrol pump|gas station/i.test(sentence)) continue;
       if(fiberHealth && /restaurant|recipe|price|menu/i.test(sentence)) continue;

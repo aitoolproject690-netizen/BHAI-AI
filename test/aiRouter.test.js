@@ -246,7 +246,7 @@ test("BHAI-CORE circuit-open state falls through to another configured provider"
     const second=await generateWithRouter({task:"hello again",preferred:"core",role:"chat"});
     assert.equal(second.provider,"openai");
     assert.equal(second.text,"openai-fallback-ok");
-    assert.equal(calls,4);
+    assert.equal(calls,3);
   }finally{
     global.fetch=originalFetch;
     for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}

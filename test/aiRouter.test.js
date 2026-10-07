@@ -246,7 +246,7 @@ test("BHAI-CORE circuit-open state falls through to another configured provider"
     const second=await generateWithRouter({task:"hello again",preferred:"core",role:"chat"});
     assert.equal(second.provider,"openai");
     assert.equal(second.text,"openai-fallback-ok");
-    assert.equal(calls,3);
+    assert.equal(calls,4);
   }finally{
     global.fetch=originalFetch;
     for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
@@ -387,9 +387,10 @@ test("verified answer engine performs one bounded correction after reviewer fail
           candidates:[{content:{parts:[{text:calls===1?"Petrol contains tetrafluorooctane and always prevents engine wear.":"Petrol is primarily a mixture of hydrocarbons and can contain performance-related additives."}]}}]
         }),{status:200,headers:{"content-type":"application/json"}});
       }
-      return new Response(JSON.stringify({
-        output_text:'{"verdict":"FAIL","issues":["invented chemical claim"],"corrections":["Remove unsupported chemical names and absolute claims."]}'
-      }),{status:200,headers:{"content-type":"application/json"}});
+      const verdict=calls===2
+        ? '{"verdict":"FAIL","issues":["invented chemical claim"],"corrections":["Remove unsupported chemical names and absolute claims."]}'
+        : '{"verdict":"PASS","issues":[],"corrections":[]}';
+      return new Response(JSON.stringify({output_text:verdict}),{status:200,headers:{"content-type":"application/json"}});
     };
     const out=await generateVerifiedAnswer({
       task:"What is petrol?",

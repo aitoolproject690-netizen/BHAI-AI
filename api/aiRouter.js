@@ -165,6 +165,13 @@ async function callCore({apiKey,model,system,messages}) {
   }
 }
 
+function providerError(message,status,provider) {
+  return Object.assign(new Error(String(message || "Provider request failed")), {
+    status: Number(status || 0),
+    provider
+  });
+}
+
 async function callGemini({apiKey,model,system,messages}) {
   const contents = normalizeMessages(messages).map(m => ({
     role: m.role === "assistant" ? "model" : "user",
@@ -194,7 +201,7 @@ async function callGemini({apiKey,model,system,messages}) {
         if(compatible&&compatible!==model)return callGemini({apiKey,model:compatible,system,messages});
       }catch{}
     }
-    throw new Error(msg);
+    throw providerError(msg,r.status,"gemini");
   }
   const text=(d?.candidates?.[0]?.content?.parts||[]).filter(p=>typeof p.text==="string").map(p=>p.text).join("\n").trim();
   if(!text)throw new Error("Gemini returned no text.");
@@ -205,7 +212,7 @@ async function callOpenAI({apiKey,model,system,messages}) {
   const input=normalizeMessages(messages).map(m=>({role:m.role,content:[{type:"input_text",text:m.text}]}));
   const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},body:JSON.stringify({model,instructions:String(system||""),input}),signal:timeout(30000)});
   const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(d?.error?.message||"OpenAI API request failed");
+  if(!r.ok)throw providerError(d?.error?.message||"OpenAI API request failed",r.status,"openai");
   const text=typeof d.output_text==="string"?d.output_text.trim():(d.output||[]).flatMap(x=>x.content||[]).filter(x=>typeof x.text==="string").map(x=>x.text).join("\n").trim();
   if(!text)throw new Error("OpenAI returned no text.");
   return {text,provider:"openai",model};
@@ -215,7 +222,7 @@ async function callHuggingFace({apiKey,model,system,messages}) {
   const input=[...(system?[{role:"system",content:String(system)}]:[]),...normalizeMessages(messages).map(m=>({role:m.role,content:m.text}))];
   const r=await fetch("https://router.huggingface.co/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},body:JSON.stringify({model,messages:input,stream:false}),signal:timeout(30000)});
   const d=await r.json().catch(()=>({}));
-  if(!r.ok){const message=String(d?.error?.message||d?.error||"Hugging Face Inference Providers request failed");throw Object.assign(new Error(message),{status:r.status});}
+  if(!r.ok){const message=String(d?.error?.message||d?.error||"Hugging Face Inference Providers request failed");throw providerError(message,r.status,"huggingface");}
   const text=d?.choices?.[0]?.message?.content;
   if(typeof text!=="string"||!text.trim())throw new Error("Hugging Face returned no text.");
   return {text:text.trim(),provider:"huggingface",model};
@@ -225,7 +232,7 @@ async function callAnthropic({apiKey,model,system,messages}) {
   const input=normalizeMessages(messages).map(m=>({role:m.role==="assistant"?"assistant":"user",content:m.text}));
   const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},body:JSON.stringify({model,max_tokens:4096,system:String(system||""),messages:input}),signal:timeout(30000)});
   const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(d?.error?.message||"Anthropic API request failed");
+  if(!r.ok)throw providerError(d?.error?.message||"Anthropic API request failed",r.status,"anthropic");
   const text=(d?.content||[]).filter(x=>x.type==="text"&&typeof x.text==="string").map(x=>x.text).join("\n").trim();
   if(!text)throw new Error("Anthropic returned no text.");
   return {text,provider:"anthropic",model};
@@ -246,8 +253,13 @@ async function callProvider(id,args) {
 function isFallbackError(error) {
   const s=String(error?.message||error);
   const status=Number(error?.status||0);
-  if([401,403,408,409,429,500,502,503,504].includes(status)) return true;
-  return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporar(?:y|ily) (?:unavailable|failure|overload)|currently experiencing high demand|high demand|service unavailable|overload|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open|inference providers request failed|no remaining credits|remaining credits|insufficient credits|credits?\b|account balance|request failed/i.test(s);
+
+  // Any HTTP provider failure is eligible for the next configured provider.
+  // This prevents one vendor's quota, billing, auth, model, or gateway rules
+  // from becoming a BHAI-X-wide outage.
+  if(status>=400&&status<=599) return true;
+
+  return /401|403|408|409|422|429|500|502|503|504|quota|rate.?limit|resource exhausted|no remaining credits|remaining credits|insufficient credits|credits?\b|account balance|billing|payment required|subscription|invalid (?:api )?key|unauthori[sz]ed|forbidden|model (?:not found|unavailable|unsupported|decommissioned)|not found|unsupported model|timeout|timed out|temporar(?:y|ily) (?:unavailable|failure|overload)|currently experiencing high demand|high demand|service unavailable|overload|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open|inference providers request failed|request failed/i.test(s);
 }
 
 export async function generateWithRouter({
@@ -263,10 +275,32 @@ export async function generateWithRouter({
   const first=routeAI({task,preferred,role,exclude});
   const available=getConfiguredAIProviders().filter(x=>!exclude.includes(x)&&x!==first);
   const candidates=[first,...available.filter(x=>x!=="core"),...(available.includes("core")?["core"]:[])];
+  const failedProviders=[];
+  const attemptedProviders=[];
   let last;
+
   for(const id of candidates){
-    try{return await callProvider(id,{system,messages,model});}
-    catch(e){last=e;if(!fallback||!isFallbackError(e))throw e;}
+    attemptedProviders.push(id);
+    try{
+      const result=await callProvider(id,{system,messages,model});
+      return {
+        ...result,
+        attemptedProviders:[...attemptedProviders],
+        failedProviders:[...failedProviders]
+      };
+    }catch(e){
+      last=e;
+      if(!failedProviders.includes(id)) failedProviders.push(id);
+      e.failedProviders=[...failedProviders];
+      e.attemptedProviders=[...attemptedProviders];
+      e.provider=e.provider||id;
+      if(!fallback||!isFallbackError(e))throw e;
+    }
+  }
+
+  if(last){
+    last.failedProviders=[...failedProviders];
+    last.attemptedProviders=[...attemptedProviders];
   }
   throw last||new Error("All configured AI providers failed.");
 }
@@ -314,7 +348,15 @@ export async function generateVerifiedAnswer({
   fallback=true
 }={}) {
   const requiresReview=["researcher","web-research","medical","reviewed"].includes(role);
+  const failedProviders=new Set();
+  const rememberFailures=value=>{
+    for(const id of (value?.failedProviders||[])){
+      if(id) failedProviders.add(id);
+    }
+  };
+
   let draft=await generateWithRouter({task,system,messages,preferred,role,fallback});
+  rememberFailures(draft);
   let structure=inspectAnswerDraft(task,draft?.text||"",{requiresEvidence:requiresReview});
 
   if(!structure.ok){
@@ -324,9 +366,10 @@ export async function generateVerifiedAnswer({
         system:String(system||"")+"\n\nIMPORTANT: The previous draft was rejected as malformed or too short. Answer the user's question directly in complete sentences. Never output a fragment.",
         messages,
         role,
-        exclude:draft?.provider?[draft.provider]:[],
+        exclude:[...new Set([draft?.provider,...failedProviders].filter(Boolean))],
         fallback:true
       });
+      rememberFailures(draft);
       structure=inspectAnswerDraft(task,draft?.text||"",{requiresEvidence:requiresReview});
     }catch{}
   }
@@ -335,6 +378,7 @@ export async function generateVerifiedAnswer({
     return {
       ...draft,
       verified:false,
+      failedProviders:[...failedProviders],
       quality:{reviewed:false,verdict:"FAIL",issues:structure.flags}
     };
   }
@@ -362,6 +406,7 @@ export async function generateVerifiedAnswer({
       return {
         ...draft,
         verified:true,
+        failedProviders:[...failedProviders],
         quality:{
           reviewed:true,
           verdict:"PASS",
@@ -424,6 +469,7 @@ export async function generateVerifiedAnswer({
         return {
           ...corrected,
           verified:false,
+          failedProviders:[...failedProviders],
           quality:{
             reviewed:true,
             verdict:"FAIL",
@@ -437,6 +483,7 @@ export async function generateVerifiedAnswer({
       return {
         ...corrected,
         verified:true,
+        failedProviders:[...failedProviders],
         quality:{
           reviewed:true,
           verdict:"CORRECTED",
@@ -451,6 +498,7 @@ export async function generateVerifiedAnswer({
       return {
         ...corrected,
         verified:false,
+        failedProviders:[...failedProviders],
         quality:{
           reviewed:false,
           verdict:"UNVERIFIED",

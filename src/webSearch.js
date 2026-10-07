@@ -292,13 +292,13 @@ function researchTopicPenalty(task,result){
   const text=(String(result?.title||"")+" "+String(result?.snippet||"")).toLowerCase();
   let penalty=0;
   if(/\b(petrol|gasoline)\b/.test(q)){
-    if(/\b(jet fuel|aviation fuel|diesel|kerosene|asphalt|heating oil|lpg|petroleum naphtha)\b/.test(text)) penalty-=30;
+    if(/\b(jet fuel|aviation fuel|diesel|kerosene|asphalt|heating oil|lpg|petroleum naphtha|hydrocarbon gas liquids)\b/.test(text)) penalty-=30;
     if(/price|station|discount|petrol pump|gas station/.test(text)) penalty-=20;
-    if(/\b(petrol|gasoline|hydrocarbon|fuel|octane|ethanol|additive|composition|blend|refin)/.test(text)) penalty+=8;
+    if(/\b(petrol|gasoline)\b/.test(text)) penalty+=8; else penalty-=12;
   }
   if(/\b(fiber|fibre)\b/.test(q)){
     if(/restaurant|recipe|menu|price/.test(text)) penalty-=25;
-    if(/\b(fiber|fibre|constipation|nutrition|diet|health|whole grain|vegetable|fruit)\b/.test(text)) penalty+=8;
+    if(/\b(fiber|fibre)\b/.test(text)) penalty+=8; else penalty-=10;
   }
   return penalty;
 }

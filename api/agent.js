@@ -10,7 +10,7 @@ import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from 
 import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
-import {normalizeIntent,isCasualIntent,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
 
@@ -454,6 +454,10 @@ export default async function handler(req,res){
     "You are BHAI X, a friendly practical AI chat assistant. Never claim external tools were used in this chat endpoint. Answer directly and naturally. When the user writes Hindi or Hinglish, reply in the same style.",
     medicalMode ? getMedicalSafetyPrompt(task) : ""
    ].filter(Boolean).join("\n");
+   const casualReply=getCasualReply(task);
+   if(casualReply){
+    return json(res,200,{ok:true,text:casualReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true});
+   }
    const deterministicMath=solveSimpleMath(task);
    if(deterministicMath!==null){
     return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true});
@@ -477,7 +481,7 @@ export default async function handler(req,res){
       fallback:true
      });
     }else{
-     return json(res,502,{error:"Local AI returned malformed output; response was blocked instead of showing corrupted text."});
+     return json(res,502,{error:"Local AI returned a low-quality or malformed answer; it was blocked instead of showing nonsense."});
     }
    }
    if(isObviouslyGarbledResponse(routed?.text,task)){

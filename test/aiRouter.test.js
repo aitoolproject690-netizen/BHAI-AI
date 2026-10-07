@@ -120,6 +120,40 @@ test("AI router falls back when the primary provider reports high demand",async(
 });
 
 
+test("AI router falls through when Hugging Face provider returns an HTTP failure",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.HF_TOKEN="test-hf";
+  process.env.BHAI_CORE_URL="https://core.test";
+  process.env.BHAI_CORE_API_KEY="test-core";
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  try{
+    const calls=[];
+    global.fetch=async(url)=>{
+      calls.push(String(url));
+      if(String(url).includes("router.huggingface.co")){
+        return new Response(JSON.stringify({error:{message:"Inference provider unavailable"}}),{status:503,headers:{"content-type":"application/json"}});
+      }
+      if(String(url).includes("core.test")){
+        return new Response(JSON.stringify({model:"bhai-local",choices:[{message:{content:"core-fallback-ok"}}]}),{status:200,headers:{"content-type":"application/json"}});
+      }
+      throw new Error("Unexpected provider request: "+String(url));
+    };
+    const {generateWithRouter}=await import("../api/aiRouter.js?hf-fallback="+Date.now());
+    const out=await generateWithRouter({task:"Explain gasoline composition",role:"researcher",preferred:"huggingface"});
+    assert.equal(out.provider,"core");
+    assert.equal(out.text,"core-fallback-ok");
+    assert.equal(calls.length,2);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});
+
 test("BHAI-CORE is a first-class router provider without exposing its API key",()=>{
   const original={url:process.env.BHAI_CORE_URL,key:process.env.BHAI_CORE_API_KEY};
   process.env.BHAI_CORE_URL="https://core.test";

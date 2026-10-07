@@ -271,13 +271,13 @@ export async function generateWithRouter({
   throw last||new Error("All configured AI providers failed.");
 }
 
-export async function reviewWithMultiAI({task="",draft="",evidence="",system="You are a strict reviewer. Find concrete errors and suggest precise corrections.",preferred="",exclude=[]}={}) {
+export async function reviewWithMultiAI({task="",draft="",evidence="",domain="factual",system="You are a strict reviewer. Find concrete errors and suggest precise corrections.",preferred="",exclude=[]}={}) {
   const reviewer=routeAI({task,preferred,role:"reviewer",exclude});
   const prompt=buildAnswerReviewerPrompt({
     task,
     draft,
     evidence,
-    domain:/medical|health|symptom|medicine|nutrition/i.test(String(task))?"medical":"factual"
+    domain
   });
   return generateWithRouter({
     task,
@@ -378,7 +378,7 @@ export async function generateVerifiedAnswer({
       messages:[{role:"user",text:correctionPrompt}],
       preferred:draft?.provider||"",
       role,
-      exclude:review?.provider?[review.provider]:[],
+      exclude:review?.provider && review.provider!==draft?.provider ? [review.provider] : [],
       fallback:true
     });
     const finalStructure=inspectAnswerDraft(task,corrected?.text||"",{requiresEvidence:true});

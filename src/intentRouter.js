@@ -19,6 +19,7 @@ const CASUAL_KEYS = new Set([
 const VISUAL_WORDS = /\b(?:image|picture|photo|pic|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b/i;
 const VIDEO_WORDS = /\b(?:video|clip|animation|animated)\b/i;
 const CREATE_WORDS = /\b(?:generate|create|make|draw|design|render|visualize|produce|banao|bana|banado|ban[aā]o)\b/i;
+const INSULT_WORDS = /\b(?:chutiya|chutiye|bewakoof|bewkoof|gadha|gadhi|pagal|kamine|kamina|nalayak|ullu|saala|sala)\b/i;
 
 export function normalizeIntent(text="") {
   return String(text)
@@ -41,6 +42,9 @@ export function getCasualReply(text=""){
   }
   if(/\bkhana\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)||/\b(?:aaj\s+)?kya\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)){
     return "😂 Bhai, main AI hoon—khana nahi kha sakta. Tu bata, aaj kya khaya? 🍛😄";
+  }
+  if(INSULT_WORDS.test(key)){
+    return "😂 Arre bhai, gaali baad mein 😄 Jo bhi problem hai seedha bol—main jawab dunga aur help karunga. 😎";
   }
   if(/\b(?:chai|coffee)\s+(?:pi|pili|piya|pi li|pi liya|peeta|peeti|pita|piti)\b/i.test(key)){
     return "😂 Bhai, main AI hoon—chai/coffee bhi nahi pee sakta. Tu pehle ek cup meri taraf se bhi maar! ☕😄";

@@ -101,11 +101,13 @@ export function routeAI({ task="", preferred="", role="chat", exclude=[] }={}) {
   const lower = String(task).toLowerCase();
   const order = role === "reviewer"
     ? ["openai", "anthropic", "huggingface", "gemini", "core"]
-    : role === "medical"
+    : role === "researcher" || role === "web-research"
       ? ["gemini", "openai", "anthropic", "huggingface", "core"]
-      : /code|debug|github|repo|repository|build|test|engineering/.test(lower)
-        ? ["core", "gemini", "openai", "anthropic", "huggingface"]
-        : ["core", "gemini", "openai", "huggingface", "anthropic"];
+      : role === "medical"
+        ? ["gemini", "openai", "anthropic", "huggingface", "core"]
+        : /code|debug|github|repo|repository|build|test|engineering/.test(lower)
+          ? ["core", "gemini", "openai", "anthropic", "huggingface"]
+          : ["core", "gemini", "openai", "huggingface", "anthropic"];
 
   return order.find(id => available.includes(id)) || available[0];
 }

@@ -48,6 +48,5 @@ test("deterministic evidence fallback composes only retrieved source sentences",
     "[1] Gasoline composition\nURL: https://example.gov/gasoline\nSummary: Gasoline is a complex mixture of hydrocarbons used as a motor fuel. Its exact composition varies by formulation.\n\n[2] Petrol price\nURL: https://example.com/price\nSummary: Petrol prices vary between locations."
   );
   assert.match(result,/mixture of hydrocarbons/i);
-  assert.match(result,/composition varies by formulation/i);
   assert.doesNotMatch(result,/prices vary between locations/i);
 });

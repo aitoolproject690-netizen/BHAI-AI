@@ -16,6 +16,9 @@ const timeout = ms => AbortSignal.timeout(ms);
 
 const CORE_TIMEOUT_MS = 35000;
 const CORE_COOLDOWN_MS = 2000;
+const PROVIDER_TRANSIENT_COOLDOWN_MS = 15000;
+const PROVIDER_ACCOUNT_COOLDOWN_MS = 10 * 60 * 1000;
+const providerCooldownUntil = new Map();
 let coreCircuitOpenUntil = 0;
 
 const PROVIDERS = {
@@ -250,6 +253,36 @@ async function callProvider(id,args) {
   throw new Error("Unsupported AI provider: "+id);
 }
 
+function providerCooldownMs(error) {
+  const s=String(error?.message||error).toLowerCase();
+  const status=Number(error?.status||0);
+
+  if(
+    [401,402,403,404].includes(status) ||
+    /no remaining credits|insufficient credits|account balance|billing|payment required|subscription|invalid (?:api )?key|unauthori[sz]ed|forbidden|model (?:not found|unavailable|unsupported|decommissioned)/i.test(s)
+  ){
+    return PROVIDER_ACCOUNT_COOLDOWN_MS;
+  }
+
+  if(
+    [408,409,425,429,500,502,503,504].includes(status) ||
+    /timeout|timed out|temporarily unavailable|service unavailable|overload|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open/i.test(s)
+  ){
+    return PROVIDER_TRANSIENT_COOLDOWN_MS;
+  }
+
+  return 5000;
+}
+
+function isProviderCoolingDown(id){
+  const until=Number(providerCooldownUntil.get(id)||0);
+  if(until<=Date.now()){
+    providerCooldownUntil.delete(id);
+    return false;
+  }
+  return true;
+}
+
 function isFallbackError(error) {
   const s=String(error?.message||error);
   const status=Number(error?.status||0);
@@ -259,7 +292,7 @@ function isFallbackError(error) {
   // from becoming a BHAI-X-wide outage.
   if(status>=400&&status<=599) return true;
 
-  return /401|403|408|409|422|429|500|502|503|504|quota|rate.?limit|resource exhausted|no remaining credits|remaining credits|insufficient credits|credits?\b|account balance|billing|payment required|subscription|invalid (?:api )?key|unauthori[sz]ed|forbidden|model (?:not found|unavailable|unsupported|decommissioned)|not found|unsupported model|timeout|timed out|temporar(?:y|ily) (?:unavailable|failure|overload)|currently experiencing high demand|high demand|service unavailable|overload|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open|inference providers request failed|request failed/i.test(s);
+  return /401|402|403|404|408|409|422|429|500|502|503|504|quota|rate.?limit|resource exhausted|no remaining credits|remaining credits|insufficient credits|credits?\b|account balance|billing|payment required|subscription|invalid (?:api )?key|unauthori[sz]ed|forbidden|model (?:not found|unavailable|unsupported|decommissioned)|not found|unsupported model|no text|empty response|invalid response|malformed response|timeout|timed out|temporar(?:y|ily) (?:unavailable|failure|overload)|currently experiencing high demand|high demand|service unavailable|overload|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open|inference providers request failed|request failed/i.test(s);
 }
 
 export async function generateWithRouter({
@@ -274,7 +307,9 @@ export async function generateWithRouter({
 }={}) {
   const first=routeAI({task,preferred,role,exclude});
   const available=getConfiguredAIProviders().filter(x=>!exclude.includes(x)&&x!==first);
-  const candidates=[first,...available.filter(x=>x!=="core"),...(available.includes("core")?["core"]:[])];
+  const ordered=[first,...available.filter(x=>x!=="core"),...(available.includes("core")?["core"]:[])];
+  const ready=ordered.filter(id=>!isProviderCoolingDown(id));
+  const candidates=ready.length?ready:ordered;
   const failedProviders=[];
   const attemptedProviders=[];
   let last;
@@ -283,6 +318,7 @@ export async function generateWithRouter({
     attemptedProviders.push(id);
     try{
       const result=await callProvider(id,{system,messages,model});
+      providerCooldownUntil.delete(id);
       return {
         ...result,
         attemptedProviders:[...attemptedProviders],
@@ -291,6 +327,7 @@ export async function generateWithRouter({
     }catch(e){
       last=e;
       if(!failedProviders.includes(id)) failedProviders.push(id);
+      providerCooldownUntil.set(id,Date.now()+providerCooldownMs(e));
       e.failedProviders=[...failedProviders];
       e.attemptedProviders=[...attemptedProviders];
       e.provider=e.provider||id;

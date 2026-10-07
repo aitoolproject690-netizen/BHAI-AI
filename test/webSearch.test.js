@@ -1,0 +1,43 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { __test, webSearch } from "../src/webSearch.js";
+
+test("DuckDuckGo parser extracts normalized results",()=>{
+  const html='<a rel="nofollow" class="result__a" href="https://example.com/petrol">Petrol basics</a><div class="result__snippet">Gasoline is a refined petroleum fuel.</div>';
+  assert.deepEqual(__test.parseDuckDuckGo(html),[
+    {title:"Petrol basics",url:"https://example.com/petrol",snippet:"Gasoline is a refined petroleum fuel."}
+  ]);
+});
+
+test("Bing parser extracts result cards",()=>{
+  const html='<li class="b_algo"><h2><a href="https://example.com/a">Fuel answer</a></h2><div class="b_caption"><p>Useful evidence.</p></div></li>';
+  assert.deepEqual(__test.parseBing(html),[
+    {title:"Fuel answer",url:"https://example.com/a",snippet:"Useful evidence."}
+  ]);
+});
+
+test("Google parser skips Google-owned links",()=>{
+  const html='<a href="/url?q=https://example.com/sky&sa=U"><h3>Why is the sky blue?</h3></a><a href="https://www.google.com/preferences"><h3>Preferences</h3></a>';
+  const rows=__test.parseGoogle(html);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].url,"https://example.com/sky");
+  assert.equal(rows[0].title,"Why is the sky blue?");
+});
+
+test("webSearch falls back when the first search host fails",async()=>{
+  const original=globalThis.fetch;
+  const calls=[];
+  globalThis.fetch=async(url)=>{
+    const u=String(url); calls.push(u);
+    if(u.includes("duckduckgo")) throw new Error("fetch failed");
+    if(u.includes("bing.com/search")){
+      return new Response('<li class="b_algo"><h2><a href="https://example.com/petrol">Petrol evidence</a></h2><div class="b_caption"><p>Gasoline is a refined petroleum product.</p></div></li>',{status:200});
+    }
+    throw new Error("unexpected provider");
+  };
+  try{
+    const rows=await webSearch("Petrol (gasoline) me kya hota hai?");
+    assert.equal(rows[0].url,"https://example.com/petrol");
+    assert.equal(calls.length,2);
+  }finally{ globalThis.fetch=original; }
+});

@@ -35,6 +35,24 @@ test("safety prompt has explicit BP, pulse, medicine and monitoring rules",()=>{
   assert.match(p,/112/i);
 });
 
+test("simple cold questions use deterministic safe guidance instead of provider prose",()=>{
+  const bad=[
+    "Immediate check — red flag?",
+    "Khana garam pani ke bowl mein sir dubo kar 90 C steam lo.",
+    "Poizmed-efrense tablet low dose mein lo.",
+    "Mucus ko paani mein ghulata hai.",
+    "Symptoms ek hafte se zyada tik rahe hain to doctor ko milo."
+  ].join("\n");
+
+  const fixed=sanitizeMedicalResponse(bad,"Mujhe sardi ho gai hai naak se pani nikal raha hai");
+  assert.match(fixed,/common cold जैसी viral respiratory infection/i);
+  assert.match(fixed,/saline nasal spray\/drops/i);
+  assert.match(fixed,/cool-mist humidifier/i);
+  assert.doesNotMatch(fixed,/90\s*°?C|sir dubo|Poizmed|efrense|tablet low dose|Mucus ko paani mein ghulata|ek hafte se zyada/i);
+  assert.doesNotMatch(fixed,/\|.*\|/);
+  assert.ok(fixed.length < 1800);
+});
+
 test("sanitizer repairs the known unsafe production claims",()=>{
   const bad=[
     "Tez dhadkan >120-130 bpm ho to ambulance 112 bulayein.",

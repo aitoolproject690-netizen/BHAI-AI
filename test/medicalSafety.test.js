@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {isMedicalIntent,getMedicalRiskSignals,getMedicalSafetyPrompt,applyMedicalSafetyFooter,repairKnownUnsafeClaims,sanitizeMedicalResponse} from "../src/medicalSafety.js";
+import {isMedicalIntent,getMedicalRiskSignals,getMedicalSafetyPrompt,applyMedicalSafetyFooter,repairKnownUnsafeClaims,sanitizeMedicalResponse,isSimpleColdQuestion} from "../src/medicalSafety.js";
 
 test("detects Hindi/Hinglish medical requests",()=>{
   assert.equal(isMedicalIntent("Papa ki dhadkan tez hai"),true);

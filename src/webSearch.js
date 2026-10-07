@@ -305,18 +305,20 @@ export async function webSearch(query="") {
   const winner=attempts.find(Boolean);
   if(winner?.results?.length) return winner.results;
 
+  if(!isFreshQuery(q)) {
+    try {
+      const wikipedia=await searchWikipedia(q);
+      return wikipedia;
+    } catch(error) {
+      errors.push("wikipedia: "+String(error?.message||error).slice(0,300));
+    }
+  }
+
   try {
     const grounded=await searchGeminiGrounding(q);
     return grounded;
   } catch(error) {
     errors.push("gemini-google-search: "+String(error?.message||error).slice(0,300));
-  }
-
-  try {
-    const wikipedia=await searchWikipedia(q);
-    return wikipedia;
-  } catch(error) {
-    errors.push("wikipedia: "+String(error?.message||error).slice(0,300));
   }
 
   throw new Error("All web search providers failed: "+errors.join(" | "));

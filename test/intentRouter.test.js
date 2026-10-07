@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isMedicalChatIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent} from "../src/intentRouter.js";
 
 test("normalizes bhai prefix and suffix",()=>{
  assert.equal(normalizeIntent("Bhai kya haal hai?"),"kya haal hai");
@@ -65,4 +65,13 @@ test("local coding intent is isolated from engineering execution",()=>{
  const text="Bhai is Python code me bug hai, fix karke working code do: def divide(a, b): return a / b — zero se divide hone par error nahi aana chahiye.";
  assert.equal(isLocalCodingIntent(text),true);
  assert.equal(isLocalCodingIntent("Bhai GitHub repository me ye Python bug fix karo"),false);
+});
+
+
+test("routes technical factual questions to evidence-backed research",()=>{
+ assert.equal(isKnowledgeResearchIntent("Petrol mein kya hota hai?"),true);
+ assert.equal(isKnowledgeResearchIntent("How does a car battery work?"),true);
+ assert.equal(isKnowledgeResearchIntent("What is machine learning?"),true);
+ assert.equal(isKnowledgeResearchIntent("Hello bhai"),false);
+ assert.equal(isKnowledgeResearchIntent("2+2 kitna hota hai?"),false);
 });

@@ -43,6 +43,20 @@ test("webSearch falls back when the first search host fails",async()=>{
   }finally{ globalThis.fetch=original; }
 });
 
+test("research source filter excludes unrelated fuel sources",()=>{
+  const rows=__test.filterResearchSources("Petrol (gasoline) me kya hota hai?",[
+    {title:"Gasoline",url:"https://en.wikipedia.org/wiki/Gasoline",snippet:"Gasoline is a mixture of hydrocarbons."},
+    {title:"Jet fuel",url:"https://en.wikipedia.org/wiki/Jet_fuel",snippet:"Jet fuel is a mixture of hydrocarbons."},
+    {title:"Aviation fuel",url:"https://en.wikipedia.org/wiki/Aviation_fuel",snippet:"Aviation fuel is used in aircraft."},
+    {title:"EIA gasoline octane",url:"https://www.eia.gov/energyexplained/gasoline/octane-in-depth.php",snippet:"Gasoline octane rating and gasoline."},
+    {title:"Hydrocarbon gas liquids",url:"https://www.eia.gov/energyexplained/hydrocarbon-gas-liquids/uses.php",snippet:"Hydrocarbon gas liquids have many uses."}
+  ]);
+  assert.ok(rows.some(x=>x.title==="Gasoline"));
+  assert.ok(rows.some(x=>x.title==="EIA gasoline octane"));
+  assert.ok(!rows.some(x=>/jet fuel|aviation fuel/i.test(x.title+" "+x.snippet)));
+  assert.ok(!rows.some(x=>/hydrocarbon gas liquids/i.test(x.title)));
+});
+
 test("research query expansion targets petrol chemical composition instead of prices",()=>{
   const q=__test.buildSearchQueries("Petrol (गैसोलीन) में असल में क्या-क्या होता है?");
   assert.match(q[0],/gasoline chemical composition/i);

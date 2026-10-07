@@ -13,7 +13,7 @@ import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from 
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
-import { webSearch } from "../src/webSearch.js";
+import { webSearch, filterResearchSources } from "../src/webSearch.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -461,7 +461,8 @@ export default async function handler(req,res){
     }
     try{
      const results=await webSearch(task);
-     const evidence=results.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
+     const researchResults=filterResearchSources(task,results);
+     const evidence=researchResults.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
      const medical=await generateVerifiedAnswer({
       task,
       system:system+"\n\nMEDICAL EVIDENCE MODE: Use evidence where it supports the answer. Do not diagnose. Keep practical safety-netting.",
@@ -472,7 +473,7 @@ export default async function handler(req,res){
      });
      const safe=applyMedicalSafetyFooter(String(medical?.text||""),task);
      if(safe && !isObviouslyGarbledResponse(safe,task)){
-      const sources=results.length?"\n\n### Sources\n"+results.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\\[\\]]/g,"")+"]("+String(x.url||"")+")").join("\n"):"";
+      const sources=researchResults.length?"\n\n### Sources\n"+researchResults.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\\[\\]]/g,"")+"]("+String(x.url||"")+")").join("\n"):"";
       return json(res,200,{ok:true,text:safe+sources,provider:medical.provider||null,backend_provider:medical.backend_provider||null,model:medical.model||null,verified:Boolean(medical.verified),quality:medical.quality||null});
      }
     }catch(e){
@@ -486,7 +487,7 @@ export default async function handler(req,res){
    if(isWebResearchIntent(task)||isKnowledgeResearchIntent(task)){
     try{
      const results=await webSearch(task);
-     const evidence=results.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
+     const evidence=researchResults.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
      const researchSystem=system+"\n\nEVIDENCE-BACKED RESEARCH MODE: Answer the question using the supplied evidence. Distinguish established facts from uncertainty. Do not fill gaps by guessing.";
      const researched=await generateVerifiedAnswer({
       task,
@@ -779,7 +780,8 @@ const currentResearchRequest=isWebResearchIntent(latestText);
 if(currentResearchRequest){
  try{
   const results=await webSearch(latestText);
-  if(!results.length) throw new Error("Web search returned no usable results.");
+  const researchResults=filterResearchSources(latestText,results);
+  if(!researchResults.length) throw new Error("Web search returned no usable results.");
   const evidence=results.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
   const researchSystem=system+"\n\nCURRENT WEB RESEARCH MODE: Use the supplied search results as the factual source. Do not invent current facts. Clearly separate confirmed facts from uncertainty. Answer in the user's language/style. If the search results are insufficient, say so rather than guessing.";
   const researched=await generateVerifiedAnswer({
@@ -794,7 +796,7 @@ if(currentResearchRequest){
   if(!researchedText || isObviouslyGarbledResponse(researchedText,latestText) || researched?.quality?.verdict==="FAIL" || researched?.verified!==true){
     return json(res,503,{ok:false,error:"Fresh web answer failed quality verification, so BHAI X blocked it instead of falling back to BHAI-CORE/SmolLM2.",research:true,verified:false,quality:researched?.quality||null,activity:[{tool:"answer-quality-gate",state:"blocked",details:"Current-information answer was malformed, unverified, or failed independent review."}]});
   }
-  const sources="\n\n### Sources\n"+results.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\[\]]/g,"")+ "]("+String(x.url||"")+")").join("\n");
+  const sources="\n\n### Sources\n"+researchResults.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\[\]]/g,"")+ "]("+String(x.url||"")+")").join("\n");
   return json(res,200,{
     ok:true,
     text:safeResponseText(String(researched.text||"Unable to produce a verified research answer.")+sources),

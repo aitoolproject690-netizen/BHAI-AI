@@ -13,21 +13,9 @@ import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from 
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
+import { webSearch } from "../src/webSearch.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
-
-async function webSearch(q){
- const r=await fetch("https://html.duckduckgo.com/html/?q="+encodeURIComponent(q),{headers:{"User-Agent":"Mozilla/5.0 BHAI-AI/1.0"}});
- const html=await r.text(); if(!r.ok) throw new Error("Web search failed");
- const out=[]; const re=/<a rel="nofollow" class="result__a" href="([^"]+)">([\s\S]*?)<\/a>/g; let m;
- while((m=re.exec(html))&&out.length<8){
-  const title=m[2].replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&#x27;/g,"'").trim();
-  const url=m[1].replace(/&amp;/g,"&"); const tail=html.slice(m.index,m.index+5000);
-  const sm=tail.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/);
-  const snippet=(sm?sm[1]:"").replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&#x27;/g,"'").trim();
-  if(title&&url) out.push({title,url,snippet});
- } return out;
-}
 
 async function generateImage(prompt,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
@@ -515,6 +503,7 @@ export default async function handler(req,res){
      }
     }catch(e){
      console.warn("[Research] evidence-backed lane failed:",String(e?.message||e));
+     return json(res,503,{ok:false,error:"Fresh evidence/research was unavailable, so BHAI X blocked the unverified answer instead of falling back to the weak local model.",research:true,verified:false,activity:[{tool:"web-research",state:"failed",details:String(e?.message||e).slice(0,300)}]});
     }
    }
 
@@ -814,6 +803,7 @@ if(currentResearchRequest){
   });
  }catch(e){
   console.warn("[Research] fresh web lane failed:",String(e?.message||e));
+  return json(res,503,{ok:false,error:"Fresh web research was unavailable, so BHAI X blocked the unverified answer instead of falling back to BHAI-CORE/SmolLM2.",research:true,verified:false,activity:[{tool:"web-research",state:"failed",details:String(e?.message||e).slice(0,300)}]});
  }
 }
 

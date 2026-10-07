@@ -102,6 +102,19 @@ function evaluate(expression) {
   return result;
 }
 
+function extractArithmeticCandidate(text) {
+  const source=String(text||"");
+  const candidates=source.match(/[0-9][0-9+\-*/().\s×✕✖÷∕]{1,98}[0-9)]/g)||[];
+  const hasMathCue=/(?:kitna|kitne|hota|what|calculate|solve|find|nikalo|jawab|result|matlab|matalab|meaning|plus|minus|subtract|difference|answer)/i.test(source)||/[=?]/.test(source);
+  for(const candidate of candidates){
+    const value=candidate.trim();
+    if(!value||value.length>100) continue;
+    if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(value)) continue;
+    if(value===source.trim()||hasMathCue||/[+*/×✕✖÷∕]/.test(value)) return value;
+  }
+  return null;
+}
+
 export function solveSimpleMath(text = "") {
   let raw = String(text).trim();
   if (!raw) return null;
@@ -116,6 +129,12 @@ export function solveSimpleMath(text = "") {
   raw = raw.replace(/^(?:kya|kitna|kitne|nikalo)\s+(?:hoga|hoga\?|hai|hain)\s*/i, "").trim();
 
   raw = raw.replace(/[×✕✖]/g, "*").replace(/[÷∕]/g, "/");
+
+  if (raw && !/^[0-9+*/().\s-]+$/.test(raw)) {
+    const candidate = extractArithmeticCandidate(raw);
+    if (!candidate) return null;
+    raw = candidate;
+  }
 
   if (!raw || raw.length > 100) return null;
   if (!/^[0-9+*/().\s-]+$/.test(raw)) return null;

@@ -15,6 +15,12 @@ test("casual chat catches common Hinglish forms",()=>{
 
 
 
+test("abusive casual input gets a calm deterministic reply",()=>{
+ const text="Chutiye";
+ assert.equal(isCasualIntent(text),true);
+ assert.match(getCasualReply(text),/gaali.*baad mein/i);
+});
+
 test("casual chat catches natural meal questions and returns a deterministic reply",()=>{
  const text="Bhai khana khaya tune? Aaj kya khaya?";
  assert.equal(isCasualIntent(text),true);

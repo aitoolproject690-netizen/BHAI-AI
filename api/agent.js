@@ -454,13 +454,13 @@ export default async function handler(req,res){
     "You are BHAI X, a friendly practical AI chat assistant. Never claim external tools were used in this chat endpoint. Answer directly and naturally. When the user writes Hindi or Hinglish, reply in the same style.",
     medicalMode ? getMedicalSafetyPrompt(task) : ""
    ].filter(Boolean).join("\n");
-   const casualReply=getCasualReply(task);
-   if(casualReply){
-    return json(res,200,{ok:true,text:casualReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true});
-   }
    const deterministicMath=solveSimpleMath(task);
    if(deterministicMath!==null){
     return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true});
+   }
+   const casualReply=getCasualReply(task);
+   if(casualReply){
+    return json(res,200,{ok:true,text:casualReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true});
    }
    let routed=await generateWithRouter({
     task,
@@ -991,7 +991,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
    }
    if(lastError)throw lastError;
   }
-  const routed=await generateWithRouter({
+  let routed=await generateWithRouter({
    task:latestText,
    system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
    messages:chatMessages,
@@ -999,6 +999,38 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
    role:"engineering",
    fallback:true
   });
+
+  // BHAI-CORE is the first local lane, but malformed/nonsense output must never reach the user.
+  if(isObviouslyGarbledResponse(routed?.text,latestText)){
+   const alternateIds=getConfiguredAIProviders()
+    .filter(id=>id!==routed?.provider)
+    .sort((a,b)=>(a==="core"?1:0)-(b==="core"?1:0));
+   let recovered=null;
+   for(const provider of alternateIds){
+    try{
+     const candidate=await generateWithRouter({
+      task:latestText,
+      system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
+      messages:chatMessages,
+      preferred:provider,
+      role:"engineering",
+      exclude:[routed?.provider||"core"],
+      fallback:true
+     });
+     if(!isObviouslyGarbledResponse(candidate?.text,latestText)){
+      recovered=candidate;
+      break;
+     }
+     routed=candidate;
+    }catch(e){}
+   }
+   if(recovered) routed=recovered;
+  }
+
+  if(isObviouslyGarbledResponse(routed?.text,latestText)){
+   throw new Error("AI response failed quality validation; malformed output was blocked.");
+  }
+
   return {candidates:[{content:{role:"model",parts:[{text:routed.text}]}}],provider:routed.provider,model:routed.model};
  };
  const seenCalls=new Map(),readPaths=new Set(),failedCalls=new Set(),generatedImages=[];

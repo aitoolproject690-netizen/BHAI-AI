@@ -7,6 +7,10 @@ test("accepts normal short answers",()=>{
   assert.equal(isObviouslyGarbledResponse("New Delhi","What is the capital of India?"),false);
 });
 
+test("rejects a standalone language fragment from a broken answer",()=>{
+  assert.equal(isObviouslyGarbledResponse("from","Chutiye 2+2 ka matlab bata"),true);
+});
+
 test("rejects known malformed tiny-model fragments",()=>{
   assert.equal(isObviouslyGarbledResponse("essors","2+2=?"),true);
   assert.equal(isObviouslyGarbledResponse("я","2+2=?"),true);

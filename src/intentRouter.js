@@ -77,6 +77,12 @@ export function detectMediaIntent(text="") {
   return {type:null,imageToVideo:false};
 }
 
+export function isWebResearchIntent(text="") {
+  const raw=String(text||"").trim();
+  if(!raw) return false;
+  return /(?:\b(?:search|lookup|look up|find online|search online|research|web search|internet|online)\b|\b(?:latest|newest|current|today|todays|this week|this month|recent|recently|right now|abhi|aaj|is waqt|filhaal|filhal)\b|\b(?:news|price|rate|weather|forecast|availability|opening hours|schedule|who is the current|what is the current|how much is|where can i find)\b)/i.test(raw);
+}
+
 export function isGeneralChatIntent(text="") {
   const raw=String(text);
   if(isCasualIntent(raw)||detectMediaIntent(raw).type) return false;

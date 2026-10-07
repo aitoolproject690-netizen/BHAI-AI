@@ -9,6 +9,28 @@
 const MEDICAL_WORDS = /\b(?:health|healthy|medical|medicine|medicines|medication|tablet|tablets|capsule|syrup|dose|dosage|drug|dawai|dava|dawa|goli|doctor|hospital|clinic|symptom|symptoms|pain|headache|migraine|fatigue|tired|thakan|weakness|kamzori|fever|cough|cold|vomit|vomiting|diarrhea|dast|bleeding|blood|bp|blood pressure|pulse|heart|heartbeat|palpitations?|dhadkan|dhak.?dhak|saans|breath|breathing|chest|seene|dizziness|dizzy|chakkar|faint|behosh|sweat|pasina|diabetes|sugar|thyroid|infection|injury|wound|pregnan|pregnancy|baby|infant|report|ecg|xray|scan|test|lab|therapy|diagnos|allergy|reaction|rash|swelling|mental health|anxiety|depression)\b/i;
 
 const EMERGENCY_WORDS = /\b(?:chest pain|chest pressure|severe chest|seene? (?:mein|me) dard|seene? (?:mein|me) pressure|saans (?:lene|len) mein (?:bahut|zyada) dikkat|difficulty breathing|shortness of breath|breathing trouble|fainting|fainted|behosh|passing out|severe confusion|confusion|sudden weakness|one[- ]sided weakness|face droop|slurred speech|bolne mein dikkat|speech problem|vision loss|loss of vision|blue lips|unresponsive|seizure|fits|severe bleeding|vomiting blood|black stool|suicide|self harm|overdose|poisoning)\b/i;
+const SIMPLE_COLD_WORDS = /(?:\bcold\b|\bsardi\b|\bshardi\b|\brunny nose\b|\bnaak se pani\b|\bnaak bah\b|\bnaak beh\b|\bsneezing\b|\bchheenk(?:na|aa)?\b|\bblocked nose\b|\bnaak band\b|\bsore throat\b|\bgale mein kharash\b)/i;
+const COMPLEX_COLD_RE = /(?:\bbaby\b|\binfant\b|\bpregnan|\bchest\b|\bsaans\b|\bbreath|\bblood\b|\bbleeding\b|\bfaint|\bbehosh|\bseizure\b|\bdiabetes\b|\bbp\b|\bblood pressure\b|\bheart\b|\bpalpitation|\bsevere\b|\bserious\b)/i;
+
+function isSimpleColdQuestion(text=""){
+  const raw=String(text||"");
+  return SIMPLE_COLD_WORDS.test(raw) && !EMERGENCY_WORDS.test(raw) && !COMPLEX_COLD_RE.test(raw);
+}
+
+function buildSimpleColdResponse(){
+  return [
+    "🤧 **अगर अभी सिर्फ सर्दी/नाक से पानी आ रहा है** और कोई गंभीर warning symptom नहीं है, तो यह common cold जैसी viral respiratory infection हो सकती है; चैट से exact cause confirm नहीं किया जा सकता।",
+    "",
+    "**अभी क्या करें:**",
+    "• आराम करें और सामान्य मात्रा में fluids लेते रहें।",
+    "• saline nasal spray/drops इस्तेमाल कर सकते हैं।",
+    "• clean **cool-mist humidifier** मदद कर सकता है।",
+    "• बहुत गरम पानी/बर्तन से steam inhalation न करें—जलने का risk होता है।",
+    "• antibiotic या random cold medicine खुद से शुरू न करें; दवा चाहिए तो pharmacist/doctor से सही option पूछें।",
+    "",
+    "**डॉक्टर से संपर्क करें** अगर सांस लेने में दिक्कत, dehydration, तेज या बिगड़ते लक्षण हों, बुखार 4 दिन से ज्यादा रहे, लक्षण 10 दिन से ज्यादा बिना सुधार रहें, या ठीक होकर फिर बिगड़ें।"
+  ].join("\n");
+}
 
 function numberAfter(pattern,text){
   const m=String(text).match(pattern);
@@ -103,7 +125,7 @@ function repairKnownUnsafeClaims(text,task){
   const rawTask=String(task||"");
   const risk=getMedicalRiskSignals(rawTask);
 
-  // For genuine emergency signals, replace the provider response entirely.
+  // For simple runny-nose/cold questions, never trust free-form provider output.\n  // Return a deterministic, concise and conservative response instead.\n  if(isSimpleColdQuestion(rawTask)) return buildSimpleColdResponse();\n\n  // For genuine emergency signals, replace the provider response entirely.
   // This prevents medication advice, invented procedures, hallucinations, or
   // overlong explanations from surviving a final answer.
   if(risk.emergencyWords) return buildEmergencyResponse(rawTask);

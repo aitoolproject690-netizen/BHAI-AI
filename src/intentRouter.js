@@ -83,7 +83,10 @@ export function isMedicalChatIntent(text="") { return MEDICAL_WORDS.test(String(
 export function isKnowledgeResearchIntent(text="") {
   const raw=String(text||"").trim();
   if(!raw) return false;
-  const mathShape = /^\d/.test(raw) && [...raw].some(ch => "+-*/%".includes(ch)) && (raw.replace(/[0-9\s+\-*/%?.=]/g, "").length === 0 || /kitna\s+(?:hota|hoga)|what\s+is/i.test(raw));\n  if(mathShape) return false;
+  const hasOperator = [...raw].some(ch => "+-*/%".includes(ch));
+  const hasLetters = [...raw].some(ch => /[A-Za-z]/.test(ch));
+  const mathShape = /^\d/.test(raw) && hasOperator && (!hasLetters || /kitna\s+(?:hota|hoga)|what\s+is/i.test(raw));
+  if(mathShape) return false;
   const domain=/(?:petrol|gasoline|diesel|fuel|engine|car|battery|electric vehicle|chemistry|chemical|physics|biology|medicine|drug|nutrition|vitamin|computer|programming|javascript|python|network|internet|cyber|api|database|cloud|ai|artificial intelligence|machine learning|space|astronomy|geology|history|geography|economics|finance|tax|law|legal|constitution|science|scientific|technology|technical)/i.test(raw);
   const question=/(?:\?|\bwhat\b|\bwhat is\b|\bwhat are\b|\bhow does\b|\bhow do\b|\bwhy does\b|\bwhy do\b|\bexplain\b|\bmeaning\b|\bkaise\b|\bkyu\b|\bkyon\b|\bkya hota\b|\bkya hai\b|\bmein kya\b|\bme kya\b|\bmatlab\b)/i.test(raw);
   return domain && question;

@@ -90,6 +90,30 @@ function parseGoogle(html) {
   return out;
 }
 
+
+function buildSearchQueries(query) {
+  const q=String(query||"").trim();
+  const lower=q.toLowerCase();
+  const queries=[q];
+  if(/\b(petrol|gasoline|gas)\b/.test(lower) && /(what|contain|composition|chemical|consist|होता|होती|होते|क्या|संघटन|रासायनिक)/i.test(lower)) {
+    queries.unshift("gasoline petrol chemical composition hydrocarbons additives ethanol octane refinery");
+  } else if(/\b(fiber|fibre)\b/.test(lower) && /(deficien|lack|effect|benefit|क्या|कमी|असर)/i.test(lower)) {
+    queries.unshift("dietary fiber deficiency effects constipation nutrition evidence");
+  }
+  return [...new Set(queries)];
+}
+
+function relevanceScore(result, query) {
+  const text=(String(result?.title||"")+" "+String(result?.snippet||"")).toLowerCase();
+  const q=String(query||"").toLowerCase();
+  const terms=q.split(/[^a-z0-9]+/).filter(x=>x.length>=4);
+  const hits=terms.filter(t=>text.includes(t)).length;
+  let score=hits;
+  if(/chemical composition|hydrocarbons|gasoline|petrol/.test(q) && /price|station|discount|fuel price/.test(text)) score-=5;
+  if(/fiber deficiency|dietary fiber/.test(q) && /restaurant|recipe|price/.test(text)) score-=5;
+  return score;
+}
+
 async function fetchSearch(url,userAgent) {
   const r=await fetch(url,{
     headers:{
@@ -117,10 +141,19 @@ export async function webSearch(query="") {
   const errors=[];
   for(const provider of providers) {
     try {
-      const html=await fetchSearch(provider.build(q),"BHAI-X/1.0");
-      const results=provider.parse(html).filter(x=>x.url&&x.title);
+      const candidates=[];
+      for(const searchQuery of buildSearchQueries(q)) {
+        const html=await fetchSearch(provider.build(searchQuery),"BHAI-X/1.0");
+        candidates.push(...provider.parse(html).filter(x=>x.url&&x.title).map(x=>({...x,_score:relevanceScore(x,searchQuery)})));
+        if(candidates.length>=8) break;
+      }
+      const results=candidates
+        .sort((a,b)=>(b._score||0)-(a._score||0))
+        .filter(x=>(x._score||0)>0)
+        .slice(0,8)
+        .map(({_score,...x})=>x);
       if(results.length) return results;
-      errors.push(provider.id+": no usable results");
+      errors.push(provider.id+": no relevant results");
     } catch(error) {
       errors.push(provider.id+": "+String(error?.message||error).slice(0,180));
     }
@@ -128,4 +161,4 @@ export async function webSearch(query="") {
   throw new Error("All web search providers failed: "+errors.join(" | "));
 }
 
-export const __test={parseDuckDuckGo,parseBing,parseGoogle};
+export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore};

@@ -14,7 +14,24 @@ const COMPLEX_COLD_RE = /(?:\bbaby\b|\binfant\b|\bpregnan|\bchest\b|\bsaans\b|\b
 
 function isSimpleColdQuestion(text=""){
   const raw=String(text||"");
-  return SIMPLE_COLD_WORDS.test(raw) && !EMERGENCY_WORDS.test(raw) && !COMPLEX_COLD_RE.test(raw);
+  const lower=raw.toLowerCase();
+  const hasColdSymptom=[
+    "cold",
+    "sardi",
+    "shardi",
+    "runny nose",
+    "naak se pani",
+    "naak bah",
+    "naak beh",
+    "sneezing",
+    "chheenk",
+    "blocked nose",
+    "naak band",
+    "sore throat",
+    "gale mein kharash"
+  ].some(term=>lower.includes(term));
+  const hasComplexSignal=COMPLEX_COLD_RE.test(raw);
+  return hasColdSymptom && !EMERGENCY_WORDS.test(raw) && !hasComplexSignal;
 }
 
 function buildSimpleColdResponse(){
@@ -125,7 +142,11 @@ function repairKnownUnsafeClaims(text,task){
   const rawTask=String(task||"");
   const risk=getMedicalRiskSignals(rawTask);
 
-  // For simple runny-nose/cold questions, never trust free-form provider output.\n  // Return a deterministic, concise and conservative response instead.\n  if(isSimpleColdQuestion(rawTask)) return buildSimpleColdResponse();\n\n  // For genuine emergency signals, replace the provider response entirely.
+  // For simple runny-nose/cold questions, never trust free-form provider output.
+  // Return a deterministic, concise and conservative response instead.
+  if(isSimpleColdQuestion(rawTask)) return buildSimpleColdResponse();
+
+  // For genuine emergency signals, replace the provider response entirely.
   // This prevents medication advice, invented procedures, hallucinations, or
   // overlong explanations from surviving a final answer.
   if(risk.emergencyWords) return buildEmergencyResponse(rawTask);

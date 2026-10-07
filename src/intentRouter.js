@@ -83,13 +83,21 @@ export function isMedicalChatIntent(text="") { return MEDICAL_WORDS.test(String(
 export function isKnowledgeResearchIntent(text="") {
   const raw=String(text||"").trim();
   if(!raw) return false;
+  const normalized=normalizeIntent(raw);
+  if(isCasualIntent(raw)) return false;
   const hasOperator = [...raw].some(ch => "+-*/%".includes(ch));
   const hasLetters = [...raw].some(ch => /[A-Za-z]/.test(ch));
   const mathShape = /^\d/.test(raw) && hasOperator && (!hasLetters || /kitna\s+(?:hota|hoga)|what\s+is/i.test(raw));
   if(mathShape) return false;
-  const domain=/(?:petrol|gasoline|diesel|fuel|engine|car|battery|electric vehicle|chemistry|chemical|physics|biology|medicine|drug|nutrition|vitamin|computer|programming|javascript|python|network|internet|cyber|api|database|cloud|ai|artificial intelligence|machine learning|space|astronomy|geology|history|geography|economics|finance|tax|law|legal|constitution|science|scientific|technology|technical)/i.test(raw);
-  const question=/(?:\?|\bwhat\b|\bwhat is\b|\bwhat are\b|\bhow does\b|\bhow do\b|\bwhy does\b|\bwhy do\b|\bexplain\b|\bmeaning\b|\bkaise\b|\bkyu\b|\bkyon\b|\bkya hota\b|\bkya hai\b|\bmein kya\b|\bme kya\b|\bmatlab\b)/i.test(raw);
-  return domain && question;
+
+  const domain=/(?:petrol|gasoline|diesel|fuel|engine|car|battery|electric vehicle|chemistry|chemical|physics|biology|medicine|drug|nutrition|vitamin|fiber|fibre|computer|programming|javascript|python|network|internet|cyber|api|database|cloud|ai|artificial intelligence|machine learning|space|astronomy|geology|history|geography|economics|finance|tax|law|legal|constitution|science|scientific|technology|technical)/i.test(raw);
+  const question=/(?:\?|\bwhat\b|\bwhat is\b|\bwhat are\b|\bhow does\b|\bhow do\b|\bwhy does\b|\bwhy do\b|\bexplain\b|\bmeaning\b|\bdefine\b|\bkaise\b|\bkyu\b|\bkyon\b|\bkya hota\b|\bkya hai\b|\bkya kya\b|\bmein kya\b|\bme kya\b|\bmatlab\b|\bkaise kaam\b)/i.test(raw);
+  const conversational=/(?:^|\s)(?:who are you|what are you|what can you do|what are you doing|how are you doing|can you help me|tell me about yourself)(?:$|\s)/i.test(normalized);
+  if(conversational) return false;
+
+  // A knowledge answer is safer when stable facts also go through evidence/strong-provider routing.
+  // Domain words make this explicit; otherwise a clear explanatory question is enough.
+  return question && (domain || /^(?:why|how|what|who|when|where|which|explain|define)\b/i.test(normalized) || /(?:\bkya\b|\bkaise\b|\bkyu\b|\bkyon\b).{0,80}\?/i.test(raw));
 }
 
 export function isWebResearchIntent(text="") {

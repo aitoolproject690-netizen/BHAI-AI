@@ -36,7 +36,9 @@ export function normalizeIntent(text="") {
 export function getCasualReply(text=""){
   const key=normalizeIntent(text);
   if(!key)return null;
-  if(/\bkya\s+kar\s+(?:raha|rahi)\s+hai\b/i.test(key)||/\bkya\s+kar\s+rahe\s+ho\b/i.test(key)){\n    return "Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tu bata, kya scene hai?";\n  }\n  if(/\bkhana\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)||/\b(?:aaj\s+)?kya\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)){
+  if(/\bkya\s+kar\s+(?:raha|rahi)\s+hai\b/i.test(key)||/\bkya\s+kar\s+rahe\s+ho\b/i.test(key)){
+    return "Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tu bata, kya scene hai?";
+  }\n  if(/\bkhana\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)||/\b(?:aaj\s+)?kya\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)){
     return "😂 Bhai, main AI hoon—khana nahi kha sakta. Tu bata, aaj kya khaya? 🍛😄";
   }
   if(/\b(?:chai|coffee)\s+(?:pi|pili|piya|pi li|pi liya|peeta|peeti|pita|piti)\b/i.test(key)){

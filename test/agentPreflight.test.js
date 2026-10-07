@@ -19,7 +19,7 @@ test("agent medical lane is declared only after its dependencies are initialized
   assert.ok(medicalBlocks[0]>systemDecl,"agent medical lane must run after system initialization");
   assert.ok(medicalBlocks[0]>routedDecl,"agent medical lane must run after routedMessages initialization");
   assert.ok(routedUse<0||routedUse>routedDecl,"routedMessages is used before declaration");
-  assert.match(agentSource,/medicalSafety\.js.*isSimpleColdQuestion/);
+  const medicalImport=agentSource.match(/import \\{[^}]*isSimpleColdQuestion[^}]*\\} from "[.][.]\/src\/medicalSafety[.]js";/);\n  assert.ok(medicalImport,"isSimpleColdQuestion must be imported from src/medicalSafety.js");
 });
 
 test("current web research uses topic-filtered evidence rather than raw results",()=>{

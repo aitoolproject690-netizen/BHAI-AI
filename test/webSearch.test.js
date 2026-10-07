@@ -31,20 +31,21 @@ test("webSearch falls back when the first search host fails",async()=>{
     const u=String(url); calls.push(u);
     if(u.includes("duckduckgo")) throw new Error("fetch failed");
     if(u.includes("bing.com/search")){
-      return new Response('<li class="b_algo"><h2><a href="https://example.com/petrol">Petrol evidence</a></h2><div class="b_caption"><p>Gasoline is a refined petroleum product.</p></div></li>',{status:200});
+      return new Response('<li class="b_algo"><h2><a href="https://example.com/petrol">Petrol evidence</a></h2><div class="b_caption"><p>Gasoline is a refined petroleum product made of hydrocarbons and may contain additives.</p></div></li>',{status:200});
     }
     throw new Error("unexpected provider");
   };
   try{
     const rows=await webSearch("Petrol (gasoline) me kya hota hai?");
     assert.equal(rows[0].url,"https://example.com/petrol");
-    assert.equal(calls.length,2);
+    assert.ok(calls.length>=2);
+    assert.ok(calls.some(url=>String(url).includes("bing.com/search")));
   }finally{ globalThis.fetch=original; }
 });
 
 test("research query expansion targets petrol chemical composition instead of prices",()=>{
   const q=__test.buildSearchQueries("Petrol (गैसोलीन) में असल में क्या-क्या होता है?");
-  assert.match(q[0],/gasoline petrol chemical composition/i);
+  assert.match(q[0],/gasoline chemical composition/i);
 });
 
 test("research relevance scoring penalizes petrol price and station results",()=>{

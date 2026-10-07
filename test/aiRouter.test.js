@@ -387,9 +387,10 @@ test("verified answer engine performs one bounded correction after reviewer fail
           candidates:[{content:{parts:[{text:calls===1?"Petrol contains tetrafluorooctane and always prevents engine wear.":"Petrol is primarily a mixture of hydrocarbons and can contain performance-related additives."}]}}]
         }),{status:200,headers:{"content-type":"application/json"}});
       }
-      return new Response(JSON.stringify({
-        output_text:'{"verdict":"FAIL","issues":["invented chemical claim"],"corrections":["Remove unsupported chemical names and absolute claims."]}'
-      }),{status:200,headers:{"content-type":"application/json"}});
+      const verdict=calls===2
+        ? '{"verdict":"FAIL","issues":["invented chemical claim"],"corrections":["Remove unsupported chemical names and absolute claims."]}'
+        : '{"verdict":"PASS","issues":[],"corrections":[]}';
+      return new Response(JSON.stringify({output_text:verdict}),{status:200,headers:{"content-type":"application/json"}});
     };
     const out=await generateVerifiedAnswer({
       task:"What is petrol?",
@@ -399,7 +400,7 @@ test("verified answer engine performs one bounded correction after reviewer fail
     assert.equal(out.verified,true);
     assert.equal(out.quality?.verdict,"CORRECTED");
     assert.match(out.text,/mixture of hydrocarbons/i);
-    assert.equal(calls,3);
+    assert.ok(calls>=4);
   }finally{
     global.fetch=originalFetch;
     for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}

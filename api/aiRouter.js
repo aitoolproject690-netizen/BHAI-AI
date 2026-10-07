@@ -407,18 +407,60 @@ export async function generateVerifiedAnswer({
       };
     }
 
-    return {
-      ...corrected,
-      verified:true,
-      quality:{
-        reviewed:true,
-        verdict:"CORRECTED",
-        reviewer:review?.provider||null,
-        issues:parsed.issues||[],
-        corrections:parsed.corrections||[],
-        flags:finalStructure.flags
+    // A correction is not automatically trusted: independently review the
+    // rewritten answer once more against the same evidence before marking it
+    // verified. This prevents a reviewer FAIL from being converted into an
+    // unverified-but-presented answer by a lucky rewrite.
+    try{
+      const finalReview=await reviewWithMultiAI({
+        task,
+        draft:corrected.text,
+        evidence,
+        domain:role==="medical"?"medical":"factual",
+        exclude:corrected?.provider?[corrected.provider]:[]
+      });
+      const finalParsed=parseReviewerVerdict(finalReview?.text||"");
+      if(finalParsed.verdict!=="PASS"){
+        return {
+          ...corrected,
+          verified:false,
+          quality:{
+            reviewed:true,
+            verdict:"FAIL",
+            reviewer:finalReview?.provider||review?.provider||null,
+            issues:[...(parsed.issues||[]),...(finalParsed.issues||[]),"Corrected draft failed final evidence review."],
+            corrections:[...(parsed.corrections||[]),...(finalParsed.corrections||[])],
+            flags:finalStructure.flags
+          }
+        };
       }
-    };
+      return {
+        ...corrected,
+        verified:true,
+        quality:{
+          reviewed:true,
+          verdict:"CORRECTED",
+          reviewer:finalReview?.provider||review?.provider||null,
+          issues:parsed.issues||[],
+          corrections:parsed.corrections||[],
+          flags:finalStructure.flags
+        }
+      };
+    }catch(error){
+      console.warn("[AI Router] final corrected-answer review unavailable:",String(error?.message||error));
+      return {
+        ...corrected,
+        verified:false,
+        quality:{
+          reviewed:false,
+          verdict:"UNVERIFIED",
+          reviewer:null,
+          issues:["Final corrected-answer review was unavailable."],
+          corrections:parsed.corrections||[],
+          flags:finalStructure.flags
+        }
+      };
+    }
   }catch(error){
     console.warn("[AI Router] independent answer review unavailable:",String(error?.message||error));
     return {

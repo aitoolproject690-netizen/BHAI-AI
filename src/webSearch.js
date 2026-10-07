@@ -96,9 +96,17 @@ function buildSearchQueries(query) {
   const lower=q.toLowerCase();
   const queries=[q];
   if(/\b(petrol|gasoline|gas)\b/.test(lower) && /(what|contain|composition|chemical|consist|होता|होती|होते|क्या|संघटन|रासायनिक)/i.test(lower)) {
-    queries.unshift("gasoline petrol chemical composition hydrocarbons additives ethanol octane refinery");
+    queries.unshift(
+      "gasoline chemical composition hydrocarbons paraffins naphthenes aromatics olefins additives ethanol",
+      "gasoline composition hydrocarbons additives octane ethanol site:eia.gov",
+      "gasoline fuel composition hydrocarbons additives ethanol site:epa.gov"
+    );
   } else if(/\b(fiber|fibre)\b/.test(lower) && /(deficien|lack|effect|benefit|क्या|कमी|असर)/i.test(lower)) {
-    queries.unshift("dietary fiber deficiency effects constipation nutrition evidence");
+    queries.unshift(
+      "dietary fiber deficiency effects constipation nutrition evidence",
+      "dietary fiber health effects constipation site:niddk.nih.gov",
+      "dietary fiber nutrition fact sheet site:ods.od.nih.gov"
+    );
   }
   return [...new Set(queries)];
 }
@@ -109,8 +117,20 @@ function relevanceScore(result, query) {
   const terms=q.split(/[^a-z0-9]+/).filter(x=>x.length>=4);
   const hits=terms.filter(t=>text.includes(t)).length;
   let score=hits;
-  if(/chemical composition|hydrocarbons|gasoline|petrol/.test(q) && /price|station|discount|fuel price/.test(text)) score-=5;
-  if(/fiber deficiency|dietary fiber/.test(q) && /restaurant|recipe|price/.test(text)) score-=5;
+  const petrolTopic=/\b(petrol|gasoline)\b/.test(q) && /(composition|chemical|contain|consist|संघटन|रासायनिक|क्या|होता)/i.test(q);
+  const fiberTopic=/\b(fiber|fibre)\b/.test(q) && /(deficien|lack|effect|benefit|क्या|कमी|असर)/i.test(q);
+  if(petrolTopic){
+    if(/price|station|discount|fuel price|petrol pump|gas station/.test(text)) score-=8;
+    const chemistryHits=["hydrocarbon","paraffin","alkane","naphthene","cycloalkane","aromatic","olefin","additive","ethanol","octane","composition"].filter(t=>text.includes(t)).length;
+    score += Math.min(chemistryHits,4);
+    if(chemistryHits===0) score-=6;
+  }
+  if(fiberTopic){
+    if(/restaurant|recipe|price|menu/.test(text)) score-=8;
+    const nutritionHits=["fiber","fibre","constipation","nutrition","diet","health"].filter(t=>text.includes(t)).length;
+    score += Math.min(nutritionHits,3);
+    if(nutritionHits===0) score-=5;
+  }
   return score;
 }
 
@@ -144,8 +164,7 @@ export async function webSearch(query="") {
       const candidates=[];
       for(const searchQuery of buildSearchQueries(q)) {
         const html=await fetchSearch(provider.build(searchQuery),"BHAI-X/1.0");
-        candidates.push(...provider.parse(html).filter(x=>x.url&&x.title).map(x=>({...x,_score:relevanceScore(x,searchQuery)})));
-        if(candidates.length>=8) break;
+        candidates.push(...provider.parse(html).filter(x=>x.url&&x.title).map(x=>({...x,_score:relevanceScore(x,q)})));
       }
       const results=candidates
         .sort((a,b)=>(b._score||0)-(a._score||0))

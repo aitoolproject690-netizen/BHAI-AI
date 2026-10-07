@@ -32,9 +32,22 @@ export function normalizeIntent(text="") {
     .trim();
 }
 
+export function getCasualReply(text=""){
+  const key=normalizeIntent(text);
+  if(!key)return null;
+  if(/\bkhana\s+(?:kha|khaya|khayi|khaye)\b/i.test(key)||/\b(?:aaj\s+)?kya\s+(?:kha|khaya|khayi|khaye)\b/i.test(key)){
+    return "😂 Bhai, main AI hoon—khana nahi kha sakta. Tu bata, aaj kya khaya? 🍛😄";
+  }
+  if(/\b(?:chai|coffee)\s+(?:pi|pili|piya|pi li|pi liya)\b/i.test(key)){
+    return "😂 Bhai, main AI hoon—chai/coffee bhi nahi pee sakta. Tu pehle ek cup meri taraf se bhi maar! ☕😄";
+  }
+  return null;
+}
+
 export function isCasualIntent(text="") {
   const key=normalizeIntent(text);
   if(CASUAL_KEYS.has(key)) return true;
+  if(getCasualReply(text)) return true;
   return /^(?:khana\s+(?:kha|khaya)\s+liya(?:\s+hai)?|kha\s+liya|chai\s+(?:pi|pili)\s+liya|so\s+gaye|so\s+rahe\s+ho|kahan\s+ho|kya\s+kar\s+rahe\s+ho|busy\s+ho|free\s+ho)$/i.test(key);
 }
 

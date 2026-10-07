@@ -11,6 +11,54 @@ const ABSOLUTE_CLAIM=/\b(?:always|never|definitely|guaranteed|100%|directly caus
 const NUMERIC_DETAIL=/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|kg|ml|l|litre|litres|liter|liters|bpm|mmhg|°c|c|%|km\/h|kwh|v|a)\b/i;
 const STRONG_CAUSAL=/\b(?:causes?|leads? to|results? in|prevents?|cures?|treats?)\b/i;
 
+const EVIDENCE_TOKEN=/[a-z]{3,}|[\u0900-\u097f]{2,}/giu;
+const EVIDENCE_STOPWORDS=new Set(["what","when","where","which","who","why","how","does","do","is","are","the","and","for","from","with","this","that","into","about","have","has","had","will","would","could","should","can","may","might","में","का","की","के","क्या","असल","होता","होती","होते","और","एक","से","पर","यह","वह","है","हैं","किस","कैसे","क्यों"]);
+
+function evidenceTokens(value){
+  return new Set(String(value||"").toLowerCase().match(EVIDENCE_TOKEN)||[]);
+}
+
+function evidenceSentences(value){
+  return String(value||"")
+    .replace(/https?:\/\/\S+/gi," ")
+    .replace(/\[[^\]]*\]\([^)]*\)/g," ")
+    .split(/(?<=[.!?।])\s+|\n+/)
+    .map(x=>x.replace(/\s+/g," ").trim())
+    .filter(x=>x.length>=24);
+}
+
+export function buildEvidenceBackedAnswer(task="",evidence="",{maxSentences=4,maxChars=1400}={}){
+  const sourcePattern=/\[(\d+)\]\s+([^\n]+)\nURL:\s*(https?:\/\/[^\s]+)\nSummary:\s*([\s\S]*?)(?=\n\n\[\d+\]\s+|$)/g;
+  const questionTokens=[...evidenceTokens(task)].filter(x=>!EVIDENCE_STOPWORDS.has(x));
+  const candidates=[];
+  let match;
+  while((match=sourcePattern.exec(String(evidence||"")))){
+    for(const sentence of evidenceSentences(match[4])){
+      const st=evidenceTokens(sentence);
+      let score=0;
+      for(const token of questionTokens) if(st.has(token)) score++;
+      if(/\b(petrol|gasoline)\b/i.test(task) && /\b(petrol|gasoline|hydrocarbon|fuel)\b/i.test(sentence)) score+=2;
+      if(/\b(fiber|fibre)\b/i.test(task) && /\b(fiber|fibre|constipation|nutrition|diet|health)\b/i.test(sentence)) score+=2;
+      candidates.push({sentence,score});
+    }
+  }
+  candidates.sort((a,b)=>b.score-a.score||a.sentence.length-b.sentence.length);
+  const chosen=[];
+  const seen=new Set();
+  let total=0;
+  for(const item of candidates){
+    const normalized=item.sentence.toLowerCase().replace(/[^a-z0-9\u0900-\u097f]+/giu," ").trim();
+    if(!normalized||seen.has(normalized)) continue;
+    const next=chosen.length?total+item.sentence.length+2:item.sentence.length;
+    if(chosen.length>=maxSentences||next>maxChars) continue;
+    seen.add(normalized);
+    chosen.push(item.sentence);
+    total=next;
+  }
+  if(!chosen.length) return null;
+  return "Evidence-backed summary:\n\n"+chosen.map(x=>"- "+x).join("\n");
+}
+
 export function inspectAnswerDraft(task="",draft="",{requiresEvidence=false}={}){
   const value=String(draft??"").trim();
   const flags=[];

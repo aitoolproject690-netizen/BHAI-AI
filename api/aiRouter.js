@@ -247,7 +247,7 @@ function isFallbackError(error) {
   const s=String(error?.message||error);
   const status=Number(error?.status||0);
   if([401,403,408,409,429,500,502,503,504].includes(status)) return true;
-  return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporarily unavailable|currently experiencing high demand|high demand|service unavailable|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open/i.test(s);
+  return /401|403|408|409|429|500|502|503|504|quota|rate.?limit|timeout|timed out|temporar(?:y|ily) (?:unavailable|failure|overload)|currently experiencing high demand|high demand|service unavailable|overload|overloaded|capacity|too many requests|try again later|fetch failed|network error|network request|connection (?:refused|reset|closed)|socket|dns|name resolution|circuit open/i.test(s);
 }
 
 export async function generateWithRouter({
@@ -272,7 +272,14 @@ export async function generateWithRouter({
 }
 
 export async function reviewWithMultiAI({task="",draft="",evidence="",domain="factual",system="You are a strict reviewer. Find concrete errors and suggest precise corrections.",preferred="",exclude=[]}={}) {
-  const reviewer=routeAI({task,preferred,role:"reviewer",exclude});
+  const allConfigured=getConfiguredAIProviders();
+  const independent=allConfigured.filter(id=>!exclude.includes(id));
+  // Prefer an independent provider. When only the draft provider is available,
+  // reuse that provider as a second-pass adversarial reviewer rather than
+  // blocking every valid research answer.
+  const reviewer=independent.length
+    ? routeAI({task,preferred,role:"reviewer",exclude})
+    : (exclude[0] && allConfigured.includes(exclude[0]) ? exclude[0] : routeAI({task,preferred,role:"reviewer"}));
   const prompt=buildAnswerReviewerPrompt({
     task,
     draft,
@@ -285,8 +292,10 @@ export async function reviewWithMultiAI({task="",draft="",evidence="",domain="fa
     messages:[{role:"user",text:prompt}],
     preferred:reviewer,
     role:"reviewer",
-    exclude,
-    fallback:false
+    // Reviewer outages should fail over to another configured reviewer before
+    // the answer engine declares the result unverified.
+    exclude:independent.length ? exclude : [],
+    fallback:true
   });
 }
 

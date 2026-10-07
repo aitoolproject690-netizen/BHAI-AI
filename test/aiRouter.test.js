@@ -294,6 +294,81 @@ test("verified answer engine passes a research draft through an independent revi
   }
 });
 
+test("reviewer falls back to another configured provider after reviewer outage",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.GEMINI_API_KEY="test-gemini";
+  process.env.OPENAI_API_KEY="test-openai";
+  process.env.ANTHROPIC_API_KEY="test-anthropic";
+  delete process.env.BHAI_CORE_URL;
+  delete process.env.BHAI_CORE_API_KEY;
+  try{
+    let calls=[];
+    global.fetch=async(url)=>{
+      const u=String(url);
+      calls.push(u);
+      if(u.includes("generativelanguage.googleapis.com")){
+        return new Response(JSON.stringify({candidates:[{content:{parts:[{text:"Petrol is a mixture of hydrocarbons."}]}}]}),{status:200});
+      }
+      if(u.includes("api.openai.com")){
+        return new Response(JSON.stringify({error:{message:"temporary reviewer overload"}}),{status:503});
+      }
+      if(u.includes("api.anthropic.com")){
+        return new Response(JSON.stringify({content:[{type:"text",text:'{"verdict":"PASS","issues":[],"corrections":[]}'}]}),{status:200});
+      }
+      throw new Error("Unexpected provider: "+u);
+    };
+    const {generateVerifiedAnswer}=await import("../api/aiRouter.js?review-fallback="+Date.now());
+    const out=await generateVerifiedAnswer({
+      task:"What is petrol?",
+      role:"researcher",
+      evidence:"[1] Fuel is a mixture of hydrocarbons."
+    });
+    assert.equal(out.verified,true);
+    assert.equal(out.quality?.verdict,"PASS");
+    assert.equal(out.quality?.reviewer,"anthropic");
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});
+
+test("single-provider research can use a same-provider second-pass reviewer",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.GEMINI_API_KEY="test-gemini";
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.HF_TOKEN;
+  delete process.env.BHAI_CORE_URL;
+  delete process.env.BHAI_CORE_API_KEY;
+  try{
+    let calls=0;
+    global.fetch=async(url)=>{
+      calls++;
+      assert.match(String(url),/generativelanguage.googleapis.com/);
+      return new Response(JSON.stringify({
+        candidates:[{content:{parts:[{text:calls===1?"Petrol is a mixture of hydrocarbons.":'{"verdict":"PASS","issues":[],"corrections":[]}'}]}}]
+      }),{status:200});
+    };
+    const {generateVerifiedAnswer}=await import("../api/aiRouter.js?single-review="+Date.now());
+    const out=await generateVerifiedAnswer({
+      task:"What is petrol?",
+      role:"researcher",
+      evidence:"[1] Fuel is a mixture of hydrocarbons."
+    });
+    assert.equal(out.verified,true);
+    assert.equal(out.quality?.verdict,"PASS");
+    assert.equal(out.quality?.reviewer,"gemini");
+    assert.equal(calls,2);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});
+
 test("verified answer engine performs one bounded correction after reviewer failure",async()=>{
   const old={...process.env};
   const originalFetch=global.fetch;

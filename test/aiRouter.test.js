@@ -166,6 +166,7 @@ test("HF credit exhaustion falls through to Core and the failed provider stays e
   delete process.env.ANTHROPIC_API_KEY;
   try{
     const calls=[];
+    let coreCalls=0;
     global.fetch=async(url)=>{
       const u=String(url);
       calls.push(u);
@@ -175,7 +176,8 @@ test("HF credit exhaustion falls through to Core and the failed provider stays e
         }),{status:402,headers:{"content-type":"application/json"}});
       }
       if(u.includes("core.test")){
-        const isReviewer=calls.length>1;
+        coreCalls++;
+        const isReviewer=coreCalls>1;
         return new Response(JSON.stringify({
           model:"bhai-local",
           choices:[{message:{content:isReviewer

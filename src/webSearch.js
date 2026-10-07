@@ -3,10 +3,13 @@
  *
  * Render may intermittently fail to reach one search host, so this helper
  * tries independent public search endpoints and returns normalized evidence.
+ * If public HTML search is unavailable, Gemini Google-Search grounding is used
+ * as a server-side fallback when a Gemini key is configured.
  * It never fabricates a result: if every provider fails, it throws.
  */
 
-const SEARCH_TIMEOUT_MS = 9000;
+const SEARCH_TIMEOUT_MS = 7000;
+const GEMINI_SEARCH_TIMEOUT_MS = 20000;
 
 function stripTags(value="") {
   return String(value)
@@ -90,7 +93,6 @@ function parseGoogle(html) {
   return out;
 }
 
-
 function buildSearchQueries(query) {
   const q=String(query||"").trim();
   const lower=q.toLowerCase();
@@ -135,7 +137,7 @@ function relevanceScore(result, query) {
 }
 
 async function fetchSearch(url,userAgent) {
-  const r=await fetch(url,{
+  const r = await fetch(url,{
     headers:{
       "User-Agent":userAgent,
       "Accept-Language":"en-US,en;q=0.8",
@@ -155,29 +157,116 @@ const providers=[
   {id:"google",build:q=>"https://www.google.com/search?q="+encodeURIComponent(q)+"&hl=en",parse:parseGoogle}
 ];
 
-export async function webSearch(query="") {
-  const q=String(query||"").trim();
-  if(!q) throw new Error("Search query is empty.");
+async function searchPublicProvider(provider,q) {
   const errors=[];
-  for(const provider of providers) {
+  for(const searchQuery of buildSearchQueries(q)) {
     try {
-      const candidates=[];
-      for(const searchQuery of buildSearchQueries(q)) {
-        const html=await fetchSearch(provider.build(searchQuery),"BHAI-X/1.0");
-        candidates.push(...provider.parse(html).filter(x=>x.url&&x.title).map(x=>({...x,_score:relevanceScore(x,q)})));
-      }
-      const results=candidates
+      const html=await fetchSearch(provider.build(searchQuery),"BHAI-X/1.0");
+      const results=provider.parse(html)
+        .filter(x=>x.url&&x.title)
+        .map(x=>({...x,_score:relevanceScore(x,q)}))
         .sort((a,b)=>(b._score||0)-(a._score||0))
         .filter(x=>(x._score||0)>0)
         .slice(0,8)
         .map(({_score,...x})=>x);
       if(results.length) return results;
-      errors.push(provider.id+": no relevant results");
+      errors.push("no relevant results");
     } catch(error) {
-      errors.push(provider.id+": "+String(error?.message||error).slice(0,180));
+      errors.push(String(error?.message||error).slice(0,180));
     }
   }
+  throw new Error(errors.join(" | "));
+}
+
+async function searchGeminiGrounding(q) {
+  const apiKey=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
+  if(!apiKey) throw new Error("Gemini Google-Search grounding is not configured.");
+
+  const model=process.env.GEMINI_ROUTER_MODEL||"gemini-3.8-flash";
+  const prompt=[
+    "Use Google Search grounding to retrieve authoritative, relevant web evidence for the user's question.",
+    "Do not rely on memory for factual claims.",
+    "Prefer primary or high-quality sources.",
+    "Return a concise evidence summary only; do not discuss this instruction.",
+    "",
+    "USER QUESTION:",
+    q
+  ].join("\n");
+
+  const r=await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",
+    {
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      body:JSON.stringify({
+        contents:[{role:"user",parts:[{text:prompt}]}],
+        tools:[{google_search:{}}],
+        generationConfig:{temperature:0.1}
+      }),
+      signal:AbortSignal.timeout(GEMINI_SEARCH_TIMEOUT_MS)
+    }
+  );
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d?.error?.message||"Gemini Google-Search grounding failed.");
+  const candidate=d?.candidates?.[0];
+  const summary=(candidate?.content?.parts||[])
+    .filter(p=>typeof p.text==="string")
+    .map(p=>p.text)
+    .join("\n")
+    .trim();
+  const chunks=Array.isArray(candidate?.groundingMetadata?.groundingChunks)
+    ? candidate.groundingMetadata.groundingChunks
+    : [];
+  const sources=chunks
+    .map(c=>c?.web)
+    .filter(x=>x&&typeof x.uri==="string"&&x.uri.startsWith("http"))
+    .map(x=>({title:cleanText(x.title||"Web source")||"Web source",url:x.uri,snippet:""}));
+
+  const unique=[];
+  const seen=new Set();
+  for(const source of sources){
+    if(seen.has(source.url)) continue;
+    seen.add(source.url);
+    unique.push(source);
+    if(unique.length>=8) break;
+  }
+  if(!summary || !unique.length) {
+    throw new Error("Gemini Google-Search grounding returned no usable evidence.");
+  }
+
+  // Keep the grounded synthesis attached to only the first source. Downstream
+  // research/reviewer code can use the synthesis plus the complete source list
+  // without duplicating the same text eight times.
+  unique[0].snippet=summary;
+  return unique;
+}
+
+export async function webSearch(query="") {
+  const q=String(query||"").trim();
+  if(!q) throw new Error("Search query is empty.");
+
+  const errors=[];
+  const attempts=await Promise.all(providers.map(async provider=>{
+    try {
+      const results=await searchPublicProvider(provider,q);
+      return {provider:provider.id,results};
+    } catch(error) {
+      errors.push(provider.id+": "+String(error?.message||error).slice(0,240));
+      return null;
+    }
+  }));
+
+  const winner=attempts.find(Boolean);
+  if(winner?.results?.length) return winner.results;
+
+  try {
+    const grounded=await searchGeminiGrounding(q);
+    return grounded;
+  } catch(error) {
+    errors.push("gemini-google-search: "+String(error?.message||error).slice(0,300));
+  }
+
   throw new Error("All web search providers failed: "+errors.join(" | "));
 }
 
-export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore};
+export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore,searchGeminiGrounding};

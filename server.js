@@ -88,7 +88,7 @@ http.createServer((req,res)=>{
   }
   if(req.method==="OPTIONS"){res.statusCode=204;return res.end();}
   const u=new URL(req.url||"/","http://localhost");
-  if(routes[u.pathname]){
+  // Unknown /api routes must never fall through to the SPA shell.\n  // A backend typo should be an explicit 404, not a misleading HTML 200.\n  if(u.pathname.startsWith("/api/")) return sendError(res,404,"API route not found.");\n  if(routes[u.pathname]){
     const fn=routes[u.pathname];
     // BHAI-X is a private owner-only app. Authentication is intentionally bypassed only for login/account bootstrap and Render health checks.
     if(u.pathname!=="/api/accounts"&&u.pathname!=="/api/health")return runApi(async(req,res)=>{if(!await requireSession(req,res))return;return fn(req,res);},req,res);

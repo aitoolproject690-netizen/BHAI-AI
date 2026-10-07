@@ -50,3 +50,25 @@ test("deterministic evidence fallback composes only retrieved source sentences",
   assert.match(result,/mixture of hydrocarbons/i);
   assert.doesNotMatch(result,/prices vary between locations/i);
 });
+
+
+test("rejects jet fuel evidence for petrol composition",()=>{
+  const result=buildEvidenceBackedAnswer(
+    "Petrol (gasoline) me kya kya hota hai?",
+    "[1] Gasoline
+URL: https://en.wikipedia.org/wiki/Gasoline
+Summary: Gasoline is a complex mixture of hydrocarbons used as a motor fuel.
+
+[2] Jet fuel
+URL: https://en.wikipedia.org/wiki/Jet_fuel
+Summary: Jet fuel is a mixture of a variety of hydrocarbons.
+
+[3] Refinery
+URL: https://en.wikipedia.org/wiki/Oil_refinery
+Summary: An oil refinery transforms crude oil into gasoline, diesel fuel, asphalt, kerosene and other products."
+  );
+  assert.match(result,/complex mixture of hydrocarbons/i);
+  assert.doesNotMatch(result,/Jet fuel/i);
+  assert.doesNotMatch(result,/diesel fuel/i);
+  assert.doesNotMatch(result,/asphalt/i);
+});

@@ -208,6 +208,10 @@ test("BHAI-CORE circuit-open state falls through to another configured provider"
   process.env.BHAI_CORE_URL="https://core.test";
   process.env.BHAI_CORE_API_KEY="test-core-key";
   process.env.OPENAI_API_KEY="test-openai";
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.HF_TOKEN;
   try{
     let calls=0;
     global.fetch=async(url)=>{
@@ -215,7 +219,10 @@ test("BHAI-CORE circuit-open state falls through to another configured provider"
       if(String(url).includes("core.test")){
         return new Response(JSON.stringify({error:{message:"temporary core failure"}}),{status:503,headers:{"content-type":"application/json"}});
       }
-      return new Response(JSON.stringify({output_text:"openai-fallback-ok"}),{status:200,headers:{"content-type":"application/json"}});
+      if(String(url).includes("api.openai.com")){
+        return new Response(JSON.stringify({output_text:"openai-fallback-ok"}),{status:200,headers:{"content-type":"application/json"}});
+      }
+      throw new Error("Unexpected provider request in isolated fallback test: "+String(url));
     };
     const {generateWithRouter}=await import("../api/aiRouter.js?circuit-fallback="+Date.now());
     const first=await generateWithRouter({task:"hello",preferred:"core",role:"chat"});

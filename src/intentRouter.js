@@ -20,6 +20,7 @@ const VISUAL_WORDS = /\b(?:image|picture|photo|pic|poster|illustration|artwork|t
 const VIDEO_WORDS = /\b(?:video|clip|animation|animated)\b/i;
 const CREATE_WORDS = /\b(?:generate|create|make|draw|design|render|visualize|produce|banao|bana|banado|ban[aā]o)\b/i;
 const INSULT_WORDS = /\b(?:chutiya|chutiye|bewakoof|bewkoof|gadha|gadhi|pagal|kamine|kamina|nalayak|ullu|saala|sala)\b/i;
+const MEDICAL_WORDS = /\b(?:sardi|shardi|cold|runny nose|naak se pani|naak bah|khansi|cough|bukhar|fever|dard|pain|headache|medicine|dawai|dava|doctor|hospital|symptom|tabiyat|health|sehat|pregnan|baby|baccha|infant|vomit|diarrhea|dast|blood|bleeding|saans|breathing|chest|seene|allergy|rash|swelling|infection|thakan|weakness|chakkar|dizziness|bp|blood pressure|sugar|diabetes)\b/i;
 
 export function normalizeIntent(text="") {
   return String(text)
@@ -40,7 +41,7 @@ export function getCasualReply(text=""){
   if(/\bkya\s+kar\s+(?:raha|rahi)\s+hai\b/i.test(key)||/\bkya\s+kar\s+rahe\s+ho\b/i.test(key)){
     return "Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tu bata, kya scene hai?";
   }
-  if(/\bkhana\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)||/\b(?:aaj\s+)?kya\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)){
+  if(/\bkhana\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)||/\b(?:aaj\s+)?kya\s+(?:kha|khaya|khayi|khaye|khata|khati)\b/i.test(key)||/\b(?:kha|khaya|khayi|khaye)\s+(?:tune|tumne|aapne|tu|tum)\b/i.test(key)){
     return "😂 Bhai, main AI hoon—khana nahi kha sakta. Tu bata, aaj kya khaya? 🍛😄";
   }
   if(INSULT_WORDS.test(key)){
@@ -76,6 +77,8 @@ export function detectMediaIntent(text="") {
     return {type:"image",imageToVideo:false};
   return {type:null,imageToVideo:false};
 }
+
+export function isMedicalChatIntent(text="") { return MEDICAL_WORDS.test(String(text||"")); }
 
 export function isWebResearchIntent(text="") {
   const raw=String(text||"").trim();

@@ -805,6 +805,7 @@ if(currentResearchRequest){
   console.warn("[Research] fresh web lane failed:",String(e?.message||e));
   return json(res,503,{ok:false,error:"Fresh web research was unavailable, so BHAI X blocked the unverified answer instead of falling back to BHAI-CORE/SmolLM2.",research:true,verified:false,activity:[{tool:"web-research",state:"failed",details:String(e?.message||e).slice(0,300)}]});
  }
+}
 
 
 // Deterministic local-coding isolation: short coding-help requests stay on the chat provider.

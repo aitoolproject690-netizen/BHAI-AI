@@ -10,6 +10,52 @@
 
 const SEARCH_TIMEOUT_MS = 7000;
 const GEMINI_SEARCH_TIMEOUT_MS = 20000;
+const WIKIPEDIA_SEARCH_TIMEOUT_MS = 9000;
+
+function isFreshQuery(query) {
+  return /\b(latest|today|tonight|tomorrow|yesterday|current|now|news|price|weather|forecast|live|trending)\b|अभी|आज|कल|ताज़ा|नवीनतम|मौसम|कीमत|समाचार/i.test(String(query||""));
+}
+
+async function searchWikipedia(query) {
+  if (isFreshQuery(query)) {
+    throw new Error("Wikipedia fallback is disabled for freshness-sensitive queries.");
+  }
+
+  const errors=[];
+  for (const searchQuery of buildSearchQueries(query)) {
+    try {
+      const url="https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch="
+        +encodeURIComponent(searchQuery)
+        +"&gsrlimit=5&prop=extracts|info&exintro=1&explaintext=1&inprop=url&format=json&origin=*";
+      const r=await fetch(url,{
+        headers:{
+          "User-Agent":"BHAI-X/1.0 (research fallback)",
+          "Accept":"application/json"
+        },
+        signal:AbortSignal.timeout(WIKIPEDIA_SEARCH_TIMEOUT_MS)
+      });
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error("HTTP "+r.status);
+
+      const pages=Object.values(data?.query?.pages||{})
+        .filter(page=>page&&page.title&&page.extract)
+        .sort((a,b)=>(a.index??9999)-(b.index??9999));
+
+      const results=pages.slice(0,5).map(page=>({
+        title:cleanText(page.title),
+        url:String(page.fullurl||("https://en.wikipedia.org/wiki/"+encodeURIComponent(String(page.title).replace(/ /g,"_")))),
+        snippet:cleanText(page.extract)
+      })).filter(x=>x.title&&x.url&&x.snippet);
+
+      if(results.length) return results;
+      errors.push("no usable Wikipedia results");
+    } catch(error) {
+      errors.push(String(error?.message||error).slice(0,180));
+    }
+  }
+  throw new Error(errors.join(" | ")||"Wikipedia fallback failed.");
+}
+
 
 function stripTags(value="") {
   return String(value)
@@ -259,6 +305,15 @@ export async function webSearch(query="") {
   const winner=attempts.find(Boolean);
   if(winner?.results?.length) return winner.results;
 
+  if(!isFreshQuery(q)) {
+    try {
+      const wikipedia=await searchWikipedia(q);
+      return wikipedia;
+    } catch(error) {
+      errors.push("wikipedia: "+String(error?.message||error).slice(0,300));
+    }
+  }
+
   try {
     const grounded=await searchGeminiGrounding(q);
     return grounded;
@@ -269,4 +324,4 @@ export async function webSearch(query="") {
   throw new Error("All web search providers failed: "+errors.join(" | "));
 }
 
-export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore,searchGeminiGrounding};
+export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore,searchGeminiGrounding,searchWikipedia,isFreshQuery};

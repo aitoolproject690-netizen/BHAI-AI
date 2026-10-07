@@ -41,3 +41,16 @@ test("webSearch falls back when the first search host fails",async()=>{
     assert.equal(calls.length,2);
   }finally{ globalThis.fetch=original; }
 });
+
+test("research query expansion targets petrol chemical composition instead of prices",()=>{
+  const q=buildSearchQueries("Petrol (गैसोलीन) में असल में क्या-क्या होता है?");
+  assert.match(q[0],/gasoline petrol chemical composition/i);
+});
+
+test("research relevance scoring penalizes petrol price and station results",()=>{
+  const score=relevanceScore({title:"Latest Petrol Price Comparison",snippet:"Petrol station prices and discounts"},"gasoline petrol chemical composition hydrocarbons");
+  assert.ok(score<=0);
+  const good=relevanceScore({title:"Gasoline composition and hydrocarbons",snippet:"Gasoline is a mixture of hydrocarbons used as motor fuel"},"gasoline petrol chemical composition hydrocarbons");
+  assert.ok(good>score);
+});
+

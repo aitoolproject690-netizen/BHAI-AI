@@ -45,13 +45,7 @@ test("reviewer prompt keeps evidence separate from the draft",()=>{
 test("deterministic evidence fallback composes only retrieved source sentences",()=>{
   const result=buildEvidenceBackedAnswer(
     "Petrol (gasoline) me kya hota hai?",
-    "[1] Gasoline composition
-URL: https://example.gov/gasoline
-Summary: Gasoline is a complex mixture of hydrocarbons used as a motor fuel. Its exact composition varies by formulation.
-
-[2] Petrol price
-URL: https://example.com/price
-Summary: Petrol prices vary between locations."
+    "[1] Gasoline composition\nURL: https://example.gov/gasoline\nSummary: Gasoline is a complex mixture of hydrocarbons used as a motor fuel. Its exact composition varies by formulation.\n\n[2] Petrol price\nURL: https://example.com/price\nSummary: Petrol prices vary between locations."
   );
   assert.match(result,/mixture of hydrocarbons/i);
   assert.match(result,/composition varies by formulation/i);

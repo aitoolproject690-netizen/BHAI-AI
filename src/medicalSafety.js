@@ -213,4 +213,4 @@ export function applyMedicalSafetyFooter(text="",task=""){
   return sanitizeMedicalResponse(text,task);
 }
 
-export { repairKnownUnsafeClaims,buildEmergencyResponse,buildSevereBPResponse };
+export { repairKnownUnsafeClaims,buildEmergencyResponse,buildSevereBPResponse,isSimpleColdQuestion,buildSimpleColdResponse };

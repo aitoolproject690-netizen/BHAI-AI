@@ -12,8 +12,8 @@
 
 const timeout = ms => AbortSignal.timeout(ms);
 
-const CORE_TIMEOUT_MS = 20000;
-const CORE_COOLDOWN_MS = 10000;
+const CORE_TIMEOUT_MS = 35000;
+const CORE_COOLDOWN_MS = 2000;
 let coreCircuitOpenUntil = 0;
 
 const PROVIDERS = {

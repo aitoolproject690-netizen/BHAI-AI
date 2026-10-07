@@ -344,6 +344,7 @@ export async function generateVerifiedAnswer({
       task,
       draft:draft.text,
       evidence,
+      domain:role==="medical"?"medical":"factual",
       exclude:reviewerExclude
     });
     const parsed=parseReviewerVerdict(review?.text||"");

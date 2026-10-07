@@ -10,7 +10,7 @@ import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from 
 import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
-import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isMedicalChatIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
 
@@ -454,6 +454,13 @@ export default async function handler(req,res){
     "You are BHAI X, a friendly practical AI chat assistant. Never claim external tools were used in this chat endpoint. Answer directly and naturally. When the user writes Hindi or Hinglish, reply in the same style.",
     medicalMode ? getMedicalSafetyPrompt(task) : ""
    ].filter(Boolean).join("\n");
+   if(isMedicalChatIntent(task)){
+    try{
+     const medical=await generateWithRouter({task,system:system+"\n\n"+getMedicalSafetyPrompt(task),messages:chatMessages,role:"medical",fallback:true});
+     const safe=applyMedicalSafetyFooter(medical.text,task);
+     if(!isObviouslyGarbledResponse(safe,task)) return json(res,200,{ok:true,text:safe,provider:medical.provider,backend_provider:medical.backend_provider||null,model:medical.model||null,verified:true});
+    }catch(e){console.warn("[Medical] chat lane failed:",String(e?.message||e));}
+   }
    const deterministicMath=solveSimpleMath(task);
    if(deterministicMath!==null){
     return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true});
@@ -549,7 +556,14 @@ export default async function handler(req,res){
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
  const normalizedCasual=normalizeIntent(latestUserMessage);
  const serverCasual=isCasualIntent(latestUserMessage);
- const deterministicMath=solveSimpleMath(latestUserMessage);
+ if(isMedicalChatIntent(latestUserMessage)){
+   try{
+    const medical=await generateWithRouter({task:latestUserMessage,system:system+"\n\n"+getMedicalSafetyPrompt(latestUserMessage),messages:routedMessages,role:"medical",fallback:true});
+    const safe=applyMedicalSafetyFooter(medical.text,latestUserMessage);
+    if(!isObviouslyGarbledResponse(safe,latestUserMessage)) return json(res,200,{ok:true,text:safe,provider:medical.provider,backend_provider:medical.backend_provider||null,model:medical.model||null,verified:true,activity:[]});
+   }catch(e){console.warn("[Medical] agent lane failed:",String(e?.message||e));}
+  }
+  const deterministicMath=solveSimpleMath(latestUserMessage);
  if(deterministicMath!==null){
   return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true,activity:[]});
  }

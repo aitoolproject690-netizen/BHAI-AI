@@ -241,6 +241,50 @@ test("all HTTP provider failures are fallback-worthy even when the message has n
 });
 
 
+test("provider cooldown skips an exhausted provider on the next request",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.HF_TOKEN="test-hf";
+  process.env.BHAI_CORE_URL="https://core.test";
+  process.env.BHAI_CORE_API_KEY="test-core";
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  try{
+    const calls=[];
+    global.fetch=async(url)=>{
+      const u=String(url);
+      calls.push(u);
+      if(u.includes("router.huggingface.co")){
+        return new Response(JSON.stringify({error:{message:"You have no remaining credits."}}),{status:402});
+      }
+      if(u.includes("core.test")){
+        return new Response(JSON.stringify({
+          model:"bhai-local",
+          choices:[{message:{content:"core-ok"}}]
+        }),{status:200});
+      }
+      throw new Error("Unexpected provider request: "+u);
+    };
+
+    const {generateWithRouter}=await import("../api/aiRouter.js?cooldown="+Date.now());
+    const first=await generateWithRouter({task:"petrol",role:"researcher",preferred:"huggingface"});
+    const firstCount=calls.length;
+    const second=await generateWithRouter({task:"fiber",role:"researcher",preferred:"huggingface"});
+
+    assert.equal(first.provider,"core");
+    assert.equal(second.provider,"core");
+    assert.equal(calls.slice(0,firstCount).filter(u=>u.includes("router.huggingface.co")).length,1);
+    assert.equal(calls.slice(firstCount).filter(u=>u.includes("router.huggingface.co")).length,0);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});
+
+
 test("BHAI-CORE is a first-class router provider without exposing its API key",()=>{
   const original={url:process.env.BHAI_CORE_URL,key:process.env.BHAI_CORE_API_KEY};
   process.env.BHAI_CORE_URL="https://core.test";

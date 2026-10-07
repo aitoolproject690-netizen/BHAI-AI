@@ -31,7 +31,7 @@ test("webSearch falls back when the first search host fails",async()=>{
     const u=String(url); calls.push(u);
     if(u.includes("duckduckgo")) throw new Error("fetch failed");
     if(u.includes("bing.com/search")){
-      return new Response('<li class="b_algo"><h2><a href="https://example.com/petrol">Petrol evidence</a></h2><div class="b_caption"><p>Gasoline is a refined petroleum product.</p></div></li>',{status:200});
+      return new Response('<li class="b_algo"><h2><a href="https://example.com/petrol">Petrol evidence</a></h2><div class="b_caption"><p>Gasoline is a refined petroleum product made of hydrocarbons and may contain additives.</p></div></li>',{status:200});
     }
     throw new Error("unexpected provider");
   };

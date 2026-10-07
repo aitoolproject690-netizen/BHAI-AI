@@ -55,3 +55,42 @@ test("research relevance scoring penalizes petrol price and station results",()=
   assert.ok(good>score);
 });
 
+
+
+test("webSearch uses Gemini Google Search grounding when public search is unavailable",async()=>{
+  const originalFetch=globalThis.fetch;
+  const originalKey=process.env.GEMINI_API_KEY;
+  const calls=[];
+  process.env.GEMINI_API_KEY="test-key";
+  globalThis.fetch=async(url)=>{
+    const u=String(url); calls.push(u);
+    if(u.includes("generativelanguage.googleapis.com")){
+      return new Response(JSON.stringify({
+        candidates:[{
+          content:{parts:[{text:"Grounded evidence summary: gasoline is a complex mixture of hydrocarbons and additives, with composition varying by formulation."}]},
+          groundingMetadata:{
+            groundingChunks:[
+              {web:{uri:"https://www.eia.gov/energyexplained/gasoline/",title:"U.S. Energy Information Administration — Gasoline"}},
+              {web:{uri:"https://www.epa.gov/gasoline-standards",title:"U.S. EPA — Gasoline Standards"}}
+            ]
+          }
+        }]
+      }),{status:200,headers:{"Content-Type":"application/json"}});
+    }
+    if(u.includes("duckduckgo")||u.includes("bing.com/search")||u.includes("google.com/search")){
+      return new Response("<html><body>no useful search results</body></html>",{status:200});
+    }
+    throw new Error("unexpected provider");
+  };
+  try{
+    const rows=await webSearch("Petrol (गैसोलीन) में असल में क्या-क्या होता है?");
+    assert.equal(rows.length,2);
+    assert.equal(rows[0].url,"https://www.eia.gov/energyexplained/gasoline/");
+    assert.match(rows[0].snippet,/Grounded evidence summary/i);
+    assert.ok(calls.some(url=>String(url).includes("generativelanguage.googleapis.com")));
+  }finally{
+    globalThis.fetch=originalFetch;
+    if(originalKey===undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY=originalKey;
+  }
+});

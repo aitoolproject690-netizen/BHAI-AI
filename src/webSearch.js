@@ -13,7 +13,7 @@ const GEMINI_SEARCH_TIMEOUT_MS = 20000;
 const WIKIPEDIA_SEARCH_TIMEOUT_MS = 9000;
 
 function isFreshQuery(query) {
-  return /\\b(latest|today|tonight|tomorrow|yesterday|current|now|news|price|weather|forecast|live|trending)\\b|अभी|आज|कल|ताज़ा|नवीनतम|मौसम|कीमत|समाचार/i.test(String(query||""));
+  return /\b(latest|today|tonight|tomorrow|yesterday|current|now|news|price|weather|forecast|live|trending)\b|अभी|आज|कल|ताज़ा|नवीनतम|मौसम|कीमत|समाचार/i.test(String(query||""));
 }
 
 async function searchWikipedia(query) {

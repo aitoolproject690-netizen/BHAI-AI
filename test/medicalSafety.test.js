@@ -154,3 +154,8 @@ test("severe BP gets deterministic urgent guidance without medication dosing",()
   assert.match(fixed,/112/);
   assert.doesNotMatch(fixed,/aspirin|300\s*mg/i);
 });
+
+test("simple cold detector recognizes runny-nose request without throwing",()=>{
+  assert.equal(isSimpleColdQuestion("Mujhe shardi ho rahi hai naak se pani aa rha hai kya karna hai"),true);
+  assert.equal(isSimpleColdQuestion("Mujhe sardi hai aur saans lene mein bahut dikkat hai"),false);
+});

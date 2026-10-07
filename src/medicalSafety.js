@@ -14,7 +14,24 @@ const COMPLEX_COLD_RE = /(?:\bbaby\b|\binfant\b|\bpregnan|\bchest\b|\bsaans\b|\b
 
 function isSimpleColdQuestion(text=""){
   const raw=String(text||"");
-  return SIMPLE_COLD_WORDS.test(raw) && !EMERGENCY_WORDS.test(raw) && !COMPLEX_COLD_RE.test(raw);
+  const lower=raw.toLowerCase();
+  const hasColdSymptom=[
+    "cold",
+    "sardi",
+    "shardi",
+    "runny nose",
+    "naak se pani",
+    "naak bah",
+    "naak beh",
+    "sneezing",
+    "chheenk",
+    "blocked nose",
+    "naak band",
+    "sore throat",
+    "gale mein kharash"
+  ].some(term=>lower.includes(term));
+  const hasComplexSignal=COMPLEX_COLD_RE.test(raw);
+  return hasColdSymptom && !EMERGENCY_WORDS.test(raw) && !hasComplexSignal;
 }
 
 function buildSimpleColdResponse(){

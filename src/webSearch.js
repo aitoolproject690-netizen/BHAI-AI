@@ -10,8 +10,8 @@ const SEARCH_TIMEOUT_MS = 9000;
 
 function stripTags(value="") {
   return String(value)
-    .replace(/<script[\\s\\S]*?<\\/script>/gi," ")
-    .replace(/<style[\\s\\S]*?<\\/style>/gi," ")
+    .replace(/<script[\s\S]*?<\/script>/gi," ")
+    .replace(/<style[\s\S]*?<\/style>/gi," ")
     .replace(/<[^>]+>/g," ");
 }
 
@@ -23,14 +23,14 @@ function decodeHtml(value="") {
     .replace(/&#x27;|&#39;/gi,"'")
     .replace(/&lt;/gi,"<")
     .replace(/&gt;/gi,">")
-    .replace(/&#(\\d+);/g,(_,n)=>String.fromCodePoint(Number(n)))
+    .replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCodePoint(parseInt(n,16)))
-    .replace(/\\s+/g," ")
+    .replace(/\s+/g," ")
     .trim();
 }
 
 function cleanText(value="") {
-  return decodeHtml(stripTags(value)).replace(/^[\\s–—-]+|[\\s–—-]+$/g,"").trim();
+  return decodeHtml(stripTags(value)).replace(/^[\s–—-]+|[\s–—-]+$/g,"").trim();
 }
 
 function absoluteUrl(href,baseUrl) {
@@ -39,13 +39,13 @@ function absoluteUrl(href,baseUrl) {
 
 function parseDuckDuckGo(html) {
   const out=[];
-  const re=/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>/gi;
+  const re=/<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let m;
   while((m=re.exec(html))&&out.length<8) {
     const title=cleanText(m[2]);
     const url=absoluteUrl(m[1],"https://html.duckduckgo.com");
     const block=html.slice(m.index,Math.min(html.length,m.index+7000));
-    const sm=block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\\s\\S]*?)<\\/[^>]+>/i);
+    const sm=block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i);
     const snippet=cleanText(sm?.[1]||"");
     if(title&&url) out.push({title,url,snippet});
   }
@@ -54,14 +54,14 @@ function parseDuckDuckGo(html) {
 
 function parseBing(html) {
   const out=[];
-  const blocks=html.match(/<li[^>]*class=["'][^"']*b_algo[^"']*["'][^>]*>[\\s\\S]*?<\\/li>/gi)||[];
+  const blocks=html.match(/<li[^>]*class=["'][^"']*b_algo[^"']*["'][^>]*>[\s\S]*?<\/li>/gi)||[];
   for(const block of blocks) {
     if(out.length>=8) break;
-    const m=block.match(/<h2[^>]*>\\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/a>\\s*<\\/h2>/i);
+    const m=block.match(/<h2[^>]*>\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/h2>/i);
     if(!m) continue;
     const title=cleanText(m[2]);
     const url=absoluteUrl(m[1],"https://www.bing.com");
-    const sm=block.match(/class=["'][^"']*b_caption[^"']*["'][^>]*>[\\s\\S]*?<p[^>]*>([\\s\\S]*?)<\\/p>/i);
+    const sm=block.match(/class=["'][^"']*b_caption[^"']*["'][^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i);
     const snippet=cleanText(sm?.[1]||"");
     if(title&&url) out.push({title,url,snippet});
   }
@@ -71,7 +71,7 @@ function parseBing(html) {
 function parseGoogle(html) {
   const out=[];
   const seen=new Set();
-  const re=/<a[^>]+href=["']([^"']+)["'][^>]*>[\\s\\S]*?<h3[^>]*>([\\s\\S]*?)<\\/h3>[\\s\\S]*?<\\/a>/gi;
+  const re=/<a[^>]+href=["']([^"']+)["'][^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>[\s\S]*?<\/a>/gi;
   let m;
   while((m=re.exec(html))&&out.length<8) {
     let raw=m[1];
@@ -79,19 +79,26 @@ function parseGoogle(html) {
       try { raw=new URL(raw,"https://www.google.com").searchParams.get("q")||raw; } catch {}
     }
     const url=absoluteUrl(raw,"https://www.google.com");
-    if(!url || /^(?:https?:\\/\\/)?(?:www\\.)?google\\./i.test(url)) continue;
+    if(!url || /^(?:https?:\/\/)?(?:www\.)?google\./i.test(url)) continue;
     const title=cleanText(m[2]);
     if(!title || seen.has(url)) continue;
     seen.add(url);
     const block=html.slice(m.index,Math.min(html.length,m.index+7000));
-    const snippet=cleanText(block.match(/<div[^>]*>([^<]{40,500})<\\/div>/i)?.[1]||"");
+    const snippet=cleanText(block.match(/<div[^>]*>([^<]{40,500})<\/div>/i)?.[1]||"");
     out.push({title,url,snippet});
   }
   return out;
 }
 
 async function fetchSearch(url,userAgent) {
-  const r=await fetch(url,{headers:{"User-Agent":userAgent,"Accept-Language":"en-US,en;q=0.8","Accept":"text/html,application/xhtml+xml"} ,signal:AbortSignal.timeout(SEARCH_TIMEOUT_MS)});
+  const r=await fetch(url,{
+    headers:{
+      "User-Agent":userAgent,
+      "Accept-Language":"en-US,en;q=0.8",
+      "Accept":"text/html,application/xhtml+xml"
+    },
+    signal:AbortSignal.timeout(SEARCH_TIMEOUT_MS)
+  });
   if(!r.ok) throw new Error("HTTP "+r.status);
   const html=await r.text();
   if(!html.trim()) throw new Error("empty response");
@@ -99,21 +106,9 @@ async function fetchSearch(url,userAgent) {
 }
 
 const providers=[
-  {
-    id:"duckduckgo",
-    build:q=>"https://html.duckduckgo.com/html/?q="+encodeURIComponent(q),
-    parse:parseDuckDuckGo
-  },
-  {
-    id:"bing",
-    build:q=>"https://www.bing.com/search?q="+encodeURIComponent(q)+"&setlang=en-US",
-    parse:parseBing
-  },
-  {
-    id:"google",
-    build:q=>"https://www.google.com/search?q="+encodeURIComponent(q)+"&hl=en",
-    parse:parseGoogle
-  }
+  {id:"duckduckgo",build:q=>"https://html.duckduckgo.com/html/?q="+encodeURIComponent(q),parse:parseDuckDuckGo},
+  {id:"bing",build:q=>"https://www.bing.com/search?q="+encodeURIComponent(q)+"&setlang=en-US",parse:parseBing},
+  {id:"google",build:q=>"https://www.google.com/search?q="+encodeURIComponent(q)+"&hl=en",parse:parseGoogle}
 ];
 
 export async function webSearch(query="") {

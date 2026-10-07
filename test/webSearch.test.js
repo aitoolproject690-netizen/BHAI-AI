@@ -38,7 +38,8 @@ test("webSearch falls back when the first search host fails",async()=>{
   try{
     const rows=await webSearch("Petrol (gasoline) me kya hota hai?");
     assert.equal(rows[0].url,"https://example.com/petrol");
-    assert.equal(calls.length,2);
+    assert.ok(calls.length>=2);
+    assert.ok(calls.some(url=>url.includes("chemical%20composition")||url.includes("chemical+composition")));
   }finally{ globalThis.fetch=original; }
 });
 

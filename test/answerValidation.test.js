@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {buildAnswerReviewerPrompt,inspectAnswerDraft,parseReviewerVerdict} from "../src/answerValidation.js";
+import {buildAnswerReviewerPrompt,inspectAnswerDraft,parseReviewerVerdict,buildEvidenceBackedAnswer} from "../src/answerValidation.js";
 
 test("answer inspection marks factual drafts for independent review",()=>{
   const result=inspectAnswerDraft(
@@ -39,4 +39,21 @@ test("reviewer prompt keeps evidence separate from the draft",()=>{
   assert.match(prompt,/PROPOSED ANSWER/);
   assert.match(prompt,/EVIDENCE/);
   assert.match(prompt,/Return ONLY a JSON object/);
+});
+
+
+test("deterministic evidence fallback composes only retrieved source sentences",()=>{
+  const result=buildEvidenceBackedAnswer(
+    "Petrol (gasoline) me kya hota hai?",
+    "[1] Gasoline composition
+URL: https://example.gov/gasoline
+Summary: Gasoline is a complex mixture of hydrocarbons used as a motor fuel. Its exact composition varies by formulation.
+
+[2] Petrol price
+URL: https://example.com/price
+Summary: Petrol prices vary between locations."
+  );
+  assert.match(result,/mixture of hydrocarbons/i);
+  assert.match(result,/composition varies by formulation/i);
+  assert.doesNotMatch(result,/prices vary between locations/i);
 });

@@ -154,6 +154,93 @@ test("AI router falls through when Hugging Face provider returns an HTTP failure
   }
 });
 
+test("HF credit exhaustion falls through to Core and the failed provider stays excluded during review",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.HF_TOKEN="test-hf";
+  process.env.BHAI_CORE_URL="https://core.test";
+  process.env.BHAI_CORE_API_KEY="test-core";
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  try{
+    const calls=[];
+    global.fetch=async(url)=>{
+      const u=String(url);
+      calls.push(u);
+      if(u.includes("router.huggingface.co")){
+        return new Response(JSON.stringify({
+          error:{message:"You have no remaining credits. Purchase pre-paid credits to continue using Inference Providers."}
+        }),{status:402,headers:{"content-type":"application/json"}});
+      }
+      if(u.includes("core.test")){
+        const isReviewer=calls.length>1;
+        return new Response(JSON.stringify({
+          model:"bhai-local",
+          choices:[{message:{content:isReviewer
+            ? '{"verdict":"PASS","issues":[],"corrections":[]}'
+            : "Petrol is primarily a mixture of hydrocarbons with small amounts of additives."
+          }}]
+        }),{status:200,headers:{"content-type":"application/json"}});
+      }
+      throw new Error("Unexpected provider request: "+u);
+    };
+
+    const {generateVerifiedAnswer}=await import("../api/aiRouter.js?credit-sticky="+Date.now());
+    const out=await generateVerifiedAnswer({
+      task:"What is petrol?",
+      role:"researcher",
+      evidence:"[1] Petrol (gasoline) is a mixture of hydrocarbons."
+    });
+
+    assert.equal(out.verified,true);
+    assert.equal(out.provider,"core");
+    assert.deepEqual(out.failedProviders,["huggingface"]);
+    assert.equal(out.quality?.reviewer,"core");
+    assert.equal(calls.filter(u=>u.includes("router.huggingface.co")).length,1);
+    assert.equal(calls.filter(u=>u.includes("core.test")).length,2);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});
+
+
+test("all HTTP provider failures are fallback-worthy even when the message has no known keyword",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.GEMINI_API_KEY="test-gemini";
+  process.env.OPENAI_API_KEY="test-openai";
+  try{
+    const calls=[];
+    global.fetch=async(url)=>{
+      const u=String(url);
+      calls.push(u);
+      if(u.includes("generativelanguage.googleapis.com")){
+        return new Response(JSON.stringify({error:{message:"vendor-specific failure code"}}),{status:418});
+      }
+      if(u.includes("api.openai.com")){
+        return new Response(JSON.stringify({output_text:"fallback-after-418"}),{status:200});
+      }
+      throw new Error("Unexpected provider request: "+u);
+    };
+    const {generateWithRouter}=await import("../api/aiRouter.js?http-status-fallback="+Date.now());
+    const out=await generateWithRouter({task:"hello",preferred:"gemini",role:"chat"});
+    assert.equal(out.provider,"openai");
+    assert.equal(out.text,"fallback-after-418");
+    assert.deepEqual(out.failedProviders,["gemini"]);
+    assert.deepEqual(out.attemptedProviders,["gemini","openai"]);
+    assert.equal(calls.length,2);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});
+
+
 test("BHAI-CORE is a first-class router provider without exposing its API key",()=>{
   const original={url:process.env.BHAI_CORE_URL,key:process.env.BHAI_CORE_API_KEY};
   process.env.BHAI_CORE_URL="https://core.test";

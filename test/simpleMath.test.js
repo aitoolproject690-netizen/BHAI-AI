@@ -5,6 +5,8 @@ import {solveSimpleMath} from "../src/simpleMath.js";
 test("solves simple arithmetic exactly",()=>{
   assert.equal(solveSimpleMath("2+2=?"),"4");
   assert.equal(solveSimpleMath("Bhai 12 * 3 = ?"),"36");
+  assert.equal(solveSimpleMath("7 × 8 = ?"),"56");
+  assert.equal(solveSimpleMath("48 ÷ 6 = ?"),"8");
   assert.equal(solveSimpleMath("what is (10-4)/2?"),"3");
 });
 

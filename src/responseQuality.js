@@ -7,6 +7,7 @@ const KNOWN_GARBLED=/^(?:essors|rylic|are|я|р|л|ж|д|ц|щ|ы)(?:\s+|$)/iu;
 const EXPLANATORY_TASK=/\b(?:batao|samjhao|explain|describe|kaise|kyu|kyon|why|how|ek\s+sentence|in\s+(?:one|a)\s+sentence)\b/i;
 const WORD_ONLY=/^[\p{L}\p{N}_-]{1,48}$/u;
 const REPEATED_PUNCT=/[A-Za-z\p{L}\p{N}]{3,}[\/\\|_~]{3,}/u;
+const STANDALONE_FRAGMENT=/^(?:from|the|and|or|of|to|a|an|is|are|was|were|be|been|being)$/i;
 
 function isLikelyOneTokenNonAnswer(value,task){
   if(!WORD_ONLY.test(value)) return false;
@@ -25,6 +26,7 @@ export function isObviouslyGarbledResponse(text="",task=""){
   if(hasCyrillic&&!taskHasCyrillic&&!/[\u0900-\u097F]/u.test(taskText)) return true;
   if(KNOWN_GARBLED.test(value)) return true;
   if(REPEATED_PUNCT.test(value)) return true;
+  if(STANDALONE_FRAGMENT.test(value)&&String(taskText).trim().split(/\s+/).filter(Boolean).length>=2) return true;
   if(isLikelyOneTokenNonAnswer(value,taskText)) return true;
   return false;
 }

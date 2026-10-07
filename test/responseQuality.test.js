@@ -16,3 +16,17 @@ test("rejects known malformed tiny-model fragments",()=>{
 test("allows Cyrillic when the user is using Cyrillic",()=>{
   assert.equal(isObviouslyGarbledResponse("Привет","Привет"),false);
 });
+
+test("rejects a one-token non-answer to an explanatory question",()=>{
+  assert.equal(isObviouslyGarbledResponse("pathlib","Ek sentence me batao: Baarish ke baad mitti ki khushboo ko kya kehte hain?"),true);
+});
+
+test("rejects broken punctuation tails from tiny-model output",()=>{
+  assert.equal(isObviouslyGarbledResponse("encourag///","Bhai ek normal jawab do"),true);
+});
+
+test("keeps valid concise factual answers",()=>{
+  assert.equal(isObviouslyGarbledResponse("Delhi","What is the capital of India?"),false);
+  assert.equal(isObviouslyGarbledResponse("4","2+2=?"),false);
+});
+

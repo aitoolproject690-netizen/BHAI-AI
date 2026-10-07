@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {normalizeIntent,isCasualIntent,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
 
 test("normalizes bhai prefix and suffix",()=>{
  assert.equal(normalizeIntent("Bhai kya haal hai?"),"kya haal hai");
@@ -11,6 +11,14 @@ test("casual chat catches common Hinglish forms",()=>{
  for(const text of ["Bhai kya haal hai?","bhai kya haal?","kya kar rahe ho bhai","Hello bhai"]){
   assert.equal(isCasualIntent(text),true,text);
  }
+});
+
+
+
+test("casual chat catches natural meal questions and returns a deterministic reply",()=>{
+ const text="Bhai khana khaya tune? Aaj kya khaya?";
+ assert.equal(isCasualIntent(text),true);
+ assert.match(getCasualReply(text),/main AI hoon.*khana nahi kha sakta/i);
 });
 
 test("media intent distinguishes image and video",()=>{

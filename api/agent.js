@@ -6,7 +6,7 @@ import { ownerState, ownerReady } from "./owner.js";
 import { getDb } from "./db.js";
 import { getSession } from "./accounts.js";
 import { resolveGithubTarget, extractGithubRepoReference, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
-import { generateWithRouter, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
+import { generateWithRouter, generateVerifiedAnswer, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from "../src/medicalSafety.js";
@@ -451,42 +451,73 @@ export default async function handler(req,res){
   try{
    const medicalMode=isMedicalIntent(task);
    const system=[
-    "You are BHAI X, a friendly practical AI chat assistant. Never claim external tools were used in this chat endpoint. Answer directly and naturally. When the user writes Hindi or Hinglish, reply in the same style.",
+    "You are BHAI X, a friendly practical AI chat assistant. Answer directly and naturally. When the user writes Hindi or Hinglish, reply in the same style.",
+    "Never invent facts, ingredients, chemical names, measurements, statistics, sources, or medical instructions.",
+    "When evidence is supplied, treat it as the primary factual basis and do not add unsupported specifics.",
     medicalMode ? getMedicalSafetyPrompt(task) : ""
    ].filter(Boolean).join("\n");
-   if(isMedicalChatIntent(task)){
-    try{
-     const medical=await generateWithRouter({task,system:system+"\n\n"+getMedicalSafetyPrompt(task),messages:chatMessages,role:"medical",fallback:true});
-     const safe=applyMedicalSafetyFooter(medical.text,task);
-     if(!isObviouslyGarbledResponse(safe,task)) return json(res,200,{ok:true,text:safe,provider:medical.provider,backend_provider:medical.backend_provider||null,model:medical.model||null,verified:true});
-    }catch(e){console.warn("[Medical] chat lane failed:",String(e?.message||e));}
-   }
+
    const deterministicMath=solveSimpleMath(task);
    if(deterministicMath!==null){
     return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true});
    }
+
+   // High-risk medical triage and simple cold advice stay deterministic and
+   // never wait for a language model.
+   if(isMedicalChatIntent(task)){
+    const deterministicMedical=applyMedicalSafetyFooter("",task);
+    if(isSimpleColdQuestion(task)||/(?:chest pain|severe chest|difficulty breathing|shortness of breath|fainting|behosh|overdose|poisoning|suicide|self harm)/i.test(task) || /(?:\bbp\b|blood pressure)\s*(?:is|=|:)\s*\d{2,3}\s*(?:\/|over)\s*\d{2,3}/i.test(task)){
+     if(deterministicMedical){
+      return json(res,200,{ok:true,text:deterministicMedical,provider:"deterministic",backend_provider:"medical-safety",model:"bhai-medical-safety-v1",verified:true});
+     }
+    }
+    try{
+     const results=await webSearch(task);
+     const evidence=results.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
+     const medical=await generateVerifiedAnswer({
+      task,
+      system:system+"\n\nMEDICAL EVIDENCE MODE: Use evidence where it supports the answer. Do not diagnose. Keep practical safety-netting.",
+      messages:[{role:"user",text:task}],
+      role:"medical",
+      evidence,
+      fallback:true
+     });
+     const safe=applyMedicalSafetyFooter(String(medical?.text||""),task);
+     if(safe && !isObviouslyGarbledResponse(safe,task)){
+      const sources=results.length?"\n\n### Sources\n"+results.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\\[\\]]/g,"")+"]("+String(x.url||"")+")").join("\n"):"";
+      return json(res,200,{ok:true,text:safe+sources,provider:medical.provider||null,backend_provider:medical.backend_provider||null,model:medical.model||null,verified:Boolean(medical.verified),quality:medical.quality||null});
+     }
+    }catch(e){
+     console.warn("[Medical] evidence-backed lane failed:",String(e?.message||e));
+    }
+    if(deterministicMedical){
+     return json(res,200,{ok:true,text:deterministicMedical,provider:"deterministic",backend_provider:"medical-safety",model:"bhai-medical-safety-v1",verified:true});
+    }
+   }
+
    if(isWebResearchIntent(task)||isKnowledgeResearchIntent(task)){
     try{
      const results=await webSearch(task);
-     if(results.length){
-      const evidence=results.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
-      const researchSystem=system+"\n\nCURRENT WEB RESEARCH MODE: Use the supplied search results as the factual source. Do not invent current facts. Answer in the user's language/style.";
-      const researched=await generateWithRouter({
-       task,
-       system:researchSystem,
-       messages:[{role:"user",text:task+"\n\nWEB SEARCH RESULTS:\n"+evidence}],
-       role:"researcher",
-       fallback:true
-      });
-      if(!isObviouslyGarbledResponse(researched?.text,task)){
-       const sources="\n\n### Sources\n"+results.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\[\]]/g,"")+ "]("+String(x.url||"")+")").join("\n");
-       return json(res,200,{ok:true,text:medicalMode?applyMedicalSafetyFooter(String(researched.text||"")+sources,task):String(researched.text||"")+sources,provider:researched.provider||null,backend_provider:researched.backend_provider||null,model:researched.model||null,verified:true});
-      }
+     const evidence=results.slice(0,6).map((x,index)=>"["+String(index+1)+"] "+String(x.title||"Source")+"\nURL: "+String(x.url||"")+"\nSummary: "+String(x.snippet||"")).join("\n\n");
+     const researchSystem=system+"\n\nEVIDENCE-BACKED RESEARCH MODE: Answer the question using the supplied evidence. Distinguish established facts from uncertainty. Do not fill gaps by guessing.";
+     const researched=await generateVerifiedAnswer({
+      task,
+      system:researchSystem,
+      messages:[{role:"user",text:task+"\n\nWEB SEARCH RESULTS:\n"+evidence}],
+      role:"researcher",
+      evidence,
+      fallback:true
+     });
+     const text=String(researched?.text||"").trim();
+     if(text && !isObviouslyGarbledResponse(text,task) && researched?.quality?.verdict!=="FAIL"){
+      const sources=results.length?"\n\n### Sources\n"+results.slice(0,5).map(x=>"- ["+String(x.title||"Source").replace(/[\\[\\]]/g,"")+"]("+String(x.url||"")+")").join("\n"):"";
+      return json(res,200,{ok:true,text:text+sources,provider:researched.provider||null,backend_provider:researched.backend_provider||null,model:researched.model||null,verified:Boolean(researched.verified),quality:researched.quality||null});
      }
     }catch(e){
-     console.warn("[Research] /api/chat fresh web lane failed:",String(e?.message||e));
+     console.warn("[Research] evidence-backed lane failed:",String(e?.message||e));
     }
    }
+
    const casualReply=getCasualReply(task);
    if(casualReply){
     return json(res,200,{ok:true,text:casualReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true});

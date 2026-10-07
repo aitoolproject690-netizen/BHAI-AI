@@ -392,4 +392,4 @@ export async function webSearch(query="") {
   throw new Error("All web search providers failed: "+errors.join(" | "));
 }
 
-export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore,searchGeminiGrounding,searchWikipedia,isFreshQuery,sourceAuthorityScore,mergeSearchResults};
+export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore,searchGeminiGrounding,searchWikipedia,isFreshQuery,sourceAuthorityScore,mergeSearchResults,filterResearchSources};

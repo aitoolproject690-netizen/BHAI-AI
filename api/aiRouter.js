@@ -387,11 +387,12 @@ export async function generateVerifiedAnswer({
     return {
       ...draft,
       verified:false,
+      failedProviders:[...failedProviders],
       quality:{reviewed:false,verdict:"SKIPPED",issues:structure.flags}
     };
   }
 
-  const reviewerExclude=draft?.provider?[draft.provider]:[];
+  const reviewerExclude=[...new Set([draft?.provider,...failedProviders].filter(Boolean))];
   try{
     const review=await reviewWithMultiAI({
       task,
@@ -400,6 +401,7 @@ export async function generateVerifiedAnswer({
       domain:role==="medical"?"medical":"factual",
       exclude:reviewerExclude
     });
+    rememberFailures(review);
     const parsed=parseReviewerVerdict(review?.text||"");
 
     if(parsed.verdict==="PASS"){
@@ -433,14 +435,16 @@ export async function generateVerifiedAnswer({
       messages:[{role:"user",text:correctionPrompt}],
       preferred:draft?.provider||"",
       role,
-      exclude:review?.provider && review.provider!==draft?.provider ? [review.provider] : [],
+      exclude:[...failedProviders],
       fallback:true
     });
+    rememberFailures(corrected);
     const finalStructure=inspectAnswerDraft(task,corrected?.text||"",{requiresEvidence:true});
     if(!finalStructure.ok){
       return {
         ...corrected,
         verified:false,
+        failedProviders:[...failedProviders],
         quality:{
           reviewed:true,
           verdict:"FAIL",
@@ -462,8 +466,9 @@ export async function generateVerifiedAnswer({
         draft:corrected.text,
         evidence,
         domain:role==="medical"?"medical":"factual",
-        exclude:corrected?.provider?[corrected.provider]:[]
+        exclude:[...new Set([corrected?.provider,...failedProviders].filter(Boolean))]
       });
+      rememberFailures(finalReview);
       const finalParsed=parseReviewerVerdict(finalReview?.text||"");
       if(finalParsed.verdict!=="PASS"){
         return {
@@ -494,6 +499,7 @@ export async function generateVerifiedAnswer({
         }
       };
     }catch(error){
+      rememberFailures(error);
       console.warn("[AI Router] final corrected-answer review unavailable:",String(error?.message||error));
       return {
         ...corrected,
@@ -510,10 +516,12 @@ export async function generateVerifiedAnswer({
       };
     }
   }catch(error){
+    rememberFailures(error);
     console.warn("[AI Router] independent answer review unavailable:",String(error?.message||error));
     return {
       ...draft,
       verified:false,
+      failedProviders:[...failedProviders],
       quality:{
         reviewed:false,
         verdict:"UNVERIFIED",

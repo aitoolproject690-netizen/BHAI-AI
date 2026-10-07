@@ -10,6 +10,8 @@
  * Routing is deterministic and role-based; it is not tied to one vendor.
  */
 
+import { inspectAnswerDraft, buildAnswerReviewerPrompt, parseReviewerVerdict } from "../src/answerValidation.js";
+
 const timeout = ms => AbortSignal.timeout(ms);
 
 const CORE_TIMEOUT_MS = 35000;
@@ -269,8 +271,158 @@ export async function generateWithRouter({
   throw last||new Error("All configured AI providers failed.");
 }
 
-export async function reviewWithMultiAI({task="",draft="",system="You are a strict reviewer. Find concrete errors and suggest precise corrections.",preferred="",exclude=[]}={}) {
+export async function reviewWithMultiAI({task="",draft="",evidence="",system="You are a strict reviewer. Find concrete errors and suggest precise corrections.",preferred="",exclude=[]}={}) {
   const reviewer=routeAI({task,preferred,role:"reviewer",exclude});
-  const prompt="TASK:\n"+String(task).slice(0,12000)+"\n\nDRAFT:\n"+String(draft).slice(0,16000)+"\n\nReturn JSON-like plain text with: verdict, issues, corrections. Do not rewrite the whole answer.";
-  return generateWithRouter({task,system,messages:[{role:"user",text:prompt}],preferred:reviewer,role:"reviewer",exclude,fallback:false});
+  const prompt=buildAnswerReviewerPrompt({
+    task,
+    draft,
+    evidence,
+    domain:/medical|health|symptom|medicine|nutrition/i.test(String(task))?"medical":"factual"
+  });
+  return generateWithRouter({
+    task,
+    system,
+    messages:[{role:"user",text:prompt}],
+    preferred:reviewer,
+    role:"reviewer",
+    exclude,
+    fallback:false
+  });
 }
+
+/**
+ * Generate an answer and, for factual/research/medical work, run one
+ * independent review pass. A failed review gets one correction retry.
+ * This deliberately stops after bounded work instead of looping forever.
+ */
+export async function generateVerifiedAnswer({
+  task="",
+  system="",
+  messages=[],
+  preferred="",
+  role="researcher",
+  evidence="",
+  fallback=true
+}={}) {
+  const requiresReview=["researcher","web-research","medical","reviewed"].includes(role);
+  let draft=await generateWithRouter({task,system,messages,preferred,role,fallback});
+  let structure=inspectAnswerDraft(task,draft?.text||"",{requiresEvidence:requiresReview});
+
+  if(!structure.ok){
+    try{
+      draft=await generateWithRouter({
+        task,
+        system:String(system||"")+"\n\nIMPORTANT: The previous draft was rejected as malformed or too short. Answer the user's question directly in complete sentences. Never output a fragment.",
+        messages,
+        role,
+        exclude:draft?.provider?[draft.provider]:[],
+        fallback:true
+      });
+      structure=inspectAnswerDraft(task,draft?.text||"",{requiresEvidence:requiresReview});
+    }catch{}
+  }
+
+  if(!structure.ok){
+    return {
+      ...draft,
+      verified:false,
+      quality:{reviewed:false,verdict:"FAIL",issues:structure.flags}
+    };
+  }
+
+  if(!requiresReview){
+    return {
+      ...draft,
+      verified:false,
+      quality:{reviewed:false,verdict:"SKIPPED",issues:structure.flags}
+    };
+  }
+
+  const reviewerExclude=draft?.provider?[draft.provider]:[];
+  try{
+    const review=await reviewWithMultiAI({
+      task,
+      draft:draft.text,
+      evidence,
+      exclude:reviewerExclude
+    });
+    const parsed=parseReviewerVerdict(review?.text||"");
+
+    if(parsed.verdict==="PASS"){
+      return {
+        ...draft,
+        verified:true,
+        quality:{
+          reviewed:true,
+          verdict:"PASS",
+          reviewer:review?.provider||null,
+          issues:parsed.issues,
+          corrections:parsed.corrections,
+          flags:structure.flags
+        }
+      };
+    }
+
+    const correctionPrompt=[
+      String(task),
+      evidence?"\nEVIDENCE:\n"+String(evidence).slice(0,18000):"",
+      "\nINDEPENDENT REVIEW FEEDBACK:",
+      ...(parsed.issues||[]).map(x=>"- Issue: "+x),
+      ...(parsed.corrections||[]).map(x=>"- Correction: "+x),
+      "\nRewrite the answer from scratch using only supported facts. Do not mention the review process. If evidence is insufficient for a specific claim, say so instead of guessing."
+    ].join("\n");
+
+    const corrected=await generateWithRouter({
+      task,
+      system:String(system||"")+"\n\nQUALITY-CORRECTION MODE: Never repeat a claim that the reviewer flagged as unsupported, contradictory, overconfident, or unsafe.",
+      messages:[{role:"user",text:correctionPrompt}],
+      preferred:draft?.provider||"",
+      role,
+      exclude:review?.provider?[review.provider]:[],
+      fallback:true
+    });
+    const finalStructure=inspectAnswerDraft(task,corrected?.text||"",{requiresEvidence:true});
+    if(!finalStructure.ok){
+      return {
+        ...corrected,
+        verified:false,
+        quality:{
+          reviewed:true,
+          verdict:"FAIL",
+          reviewer:review?.provider||null,
+          issues:[...(parsed.issues||[]),"Corrected draft still failed structural quality."],
+          corrections:parsed.corrections||[],
+          flags:finalStructure.flags
+        }
+      };
+    }
+
+    return {
+      ...corrected,
+      verified:true,
+      quality:{
+        reviewed:true,
+        verdict:"CORRECTED",
+        reviewer:review?.provider||null,
+        issues:parsed.issues||[],
+        corrections:parsed.corrections||[],
+        flags:finalStructure.flags
+      }
+    };
+  }catch(error){
+    console.warn("[AI Router] independent answer review unavailable:",String(error?.message||error));
+    return {
+      ...draft,
+      verified:false,
+      quality:{
+        reviewed:false,
+        verdict:"UNVERIFIED",
+        reviewer:null,
+        issues:["Independent answer review was unavailable."],
+        corrections:[],
+        flags:structure.flags
+      }
+    };
+  }
+}
+

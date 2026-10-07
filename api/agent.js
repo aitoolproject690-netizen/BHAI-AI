@@ -13,7 +13,7 @@ import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter } from 
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
-import { webSearch } from "../src/webSearch.js";
+import { webSearch, filterResearchSources } from "../src/webSearch.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 

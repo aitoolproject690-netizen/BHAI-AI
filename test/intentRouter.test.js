@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent} from "../src/intentRouter.js";
 
 test("normalizes bhai prefix and suffix",()=>{
  assert.equal(normalizeIntent("Bhai kya haal hai?"),"kya haal hai");
@@ -25,6 +25,13 @@ test("casual chat catches natural meal questions and returns a deterministic rep
  const text="Bhai khana khaya tune? Aaj kya khaya?";
  assert.equal(isCasualIntent(text),true);
  assert.match(getCasualReply(text),/main AI hoon.*khana nahi kha sakta/i);
+});
+
+test("detects fresh web/current-information requests",()=>{
+ assert.equal(isWebResearchIntent("What is the latest news today?"),true);
+ assert.equal(isWebResearchIntent("Aaj ka gold price kya hai?"),true);
+ assert.equal(isWebResearchIntent("Search online for the official docs"),true);
+ assert.equal(isWebResearchIntent("What is 2+2?"),false);
 });
 
 test("media intent distinguishes image and video",()=>{

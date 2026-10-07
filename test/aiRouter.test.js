@@ -62,6 +62,21 @@ test("AI router honors an explicitly configured provider and exclusion",()=>{
 });
 
 
+test("research routing prefers configured stronger providers before local Core",()=>{
+ const old={...process.env};
+ try{
+  process.env.BHAI_CORE_URL="http://core.test";
+  process.env.BHAI_CORE_API_KEY="x";
+  process.env.GEMINI_API_KEY="x";
+  process.env.OPENAI_API_KEY="x";
+  process.env.ANTHROPIC_API_KEY="x";
+  assert.equal(routeAI({task:"latest news today",role:"researcher"}),"gemini");
+ }finally{
+  for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+  Object.assign(process.env,old);
+ }
+});
+
 test("reviewer routing can choose an independent provider",()=>{
   const originals={
     openai:process.env.OPENAI_API_KEY,

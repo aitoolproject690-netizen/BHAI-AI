@@ -287,6 +287,35 @@ async function searchGeminiGrounding(q) {
   return unique;
 }
 
+function researchTopicPenalty(task,result){
+  const q=String(task||"").toLowerCase();
+  const text=(String(result?.title||"")+" "+String(result?.snippet||"")).toLowerCase();
+  let penalty=0;
+  if(/\\b(petrol|gasoline)\\b/.test(q)){
+    if(/\\b(jet fuel|aviation fuel|diesel|kerosene|asphalt|heating oil|lpg|petroleum naphtha)\\b/.test(text)) penalty-=30;
+    if(/price|station|discount|petrol pump|gas station/.test(text)) penalty-=20;
+    if(/\\b(petrol|gasoline|hydrocarbon|fuel|octane|ethanol|additive|composition|blend|refin)/.test(text)) penalty+=8;
+  }
+  if(/\\b(fiber|fibre)\\b/.test(q)){
+    if(/restaurant|recipe|menu|price/.test(text)) penalty-=25;
+    if(/\\b(fiber|fibre|constipation|nutrition|diet|health|whole grain|vegetable|fruit)\\b/.test(text)) penalty+=8;
+  }
+  return penalty;
+}
+
+export function filterResearchSources(task,results=[]){
+  const items=(results||[]).map(result=>({
+    ...result,
+    _topic:researchTopicPenalty(task,result),
+    _authority:sourceAuthorityScore(result)
+  }));
+  const relevant=items.filter(x=>x._topic>-10);
+  const pool=relevant.length?relevant:items.filter(x=>x._authority>=5);
+  return pool
+    .sort((a,b)=>(b._topic+b._authority)-(a._topic+a._authority))
+    .map(({_topic,_authority,...result})=>result);
+}
+
 function sourceAuthorityScore(result){
   const url=String(result?.url||"");
   let host="";

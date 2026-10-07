@@ -115,6 +115,8 @@ export function solveSimpleMath(text = "") {
   raw = raw.replace(/^(?:what(?:'s| is)?|calculate|solve|find)\s+/i, "").trim();
   raw = raw.replace(/^(?:kya|kitna|kitne|nikalo)\s+(?:hoga|hoga\?|hai|hain)\s*/i, "").trim();
 
+  raw = raw.replace(/[×✕✖]/g, "*").replace(/[÷∕]/g, "/");
+
   if (!raw || raw.length > 100) return null;
   if (!/^[0-9+*/().\s-]+$/.test(raw)) return null;
   if (!/[0-9]/.test(raw) || !/[+*/-]/.test(raw)) return null;

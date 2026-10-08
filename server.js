@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {requireSession} from "./api/_utils.js";
+import {isInternalRequest} from "./api/internalAuth.js";
+import {startJobRunner} from "./api/jobRunner.js";
 import {attachRequestId,sendJson,sendError,createRequestId} from "./api/responseGuard.js";
 import agent from "./api/agent.js";
 import health from "./api/health.js";
@@ -98,7 +100,10 @@ http.createServer((req,res)=>{
   if(routes[u.pathname]){
     const fn=routes[u.pathname];
     // BHAI-X is a private owner-only app. Authentication is intentionally bypassed only for login/account bootstrap and Render health checks.
-    if(u.pathname!=="/api/accounts"&&u.pathname!=="/api/health"&&u.pathname!=="/api/youtube/callback")return runApi(async(req,res)=>{if(!await requireSession(req,res))return;return fn(req,res);},req,res);
+    if(u.pathname!=="/api/accounts"&&u.pathname!=="/api/health"&&u.pathname!=="/api/youtube/callback")return runApi(async(req,res)=>{
+      if(!isInternalRequest(req) && !await requireSession(req,res))return;
+      return fn(req,res);
+    },req,res);
     return runApi(fn,req,res);
   }
   let p=decodeURIComponent(u.pathname);if(p==="/")p="/index.html";
@@ -116,4 +121,4 @@ http.createServer((req,res)=>{
     res.setHeader("Cache-Control",p.includes("/assets/")?"public, max-age=31536000, immutable":"no-cache");
     res.end(data);
   });
-}).listen(port,"0.0.0.0",()=>console.log("BHAI X listening on "+port));
+}).listen(port,"0.0.0.0",()=>{startJobRunner();console.log("BHAI X listening on "+port);});

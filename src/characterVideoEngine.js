@@ -102,6 +102,7 @@ export function isLikelyCharacterVideoRequest(text=""){
   const videoCue=/\b(?:video|clip|animation|animated|animate|motion|reel)\b/i.test(raw)
     && /\b(?:bana|banao|banado|generate|create|make|render|produce|animate)\b/i.test(raw);
   const characterCue=/\b(?:character|hero|heroine|protagonist|villain|cartoon\s+character|patra|kirdar)\b/i.test(raw)
-    || /\b(?:ki|ka|ke)\s+(?:video|clip|animation|animated|reel)\b/i.test(raw);
+    || /\b(?:ki|ka|ke|ko)\s+(?:video|clip|animation|animated|reel)\b/i.test(raw)
+    || /\b(?:ki|ka|ke|ko)\s+animate\b/i.test(raw);
   return videoCue&&characterCue;
 }

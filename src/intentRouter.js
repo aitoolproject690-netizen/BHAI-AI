@@ -54,6 +54,15 @@ export function normalizeIntent(text="") {
 export function getCasualReply(text=""){
   const key=normalizeIntent(text);
   if(!key)return null;
+  if(!hasClearWorkCue(text) && CONVERSATION_KEYS.some(pattern=>pattern.test(String(text||"")))){
+    if(/\b(?:kya|kaisa)\s+(?:reply|jawab|response)\s+(?:dega|deta|deti|aayega|aata|milega|milta)\b/i.test(text)){
+      return "😂 Haan bhai, samajh gaya — tu bas test kar raha tha ki main kya reply deta hoon. Main yahin hoon, bol kya scene hai! 🚀";
+    }
+    if(/\b(?:mazak|mazaak|masti|timepass)\b/i.test(text)){
+      return "😂 Samajh gaya bhai, thodi masti chal rahi thi. Main ready hoon — bol, ab kya karna hai? 😄";
+    }
+    return "Haan bhai 😄 Samajh gaya. Main yahin hoon — bol kya scene hai? 🚀";
+  }
   if(/\bkya\s+kar\s+(?:raha|rahi)\s+hai\b/i.test(key)||/\bkya\s+kar\s+rahe\s+ho\b/i.test(key)){
     return "Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tu bata, kya scene hai?";
   }
@@ -72,6 +81,7 @@ export function getCasualReply(text=""){
 export function isCasualIntent(text="") {
   const key=normalizeIntent(text);
   if(CASUAL_KEYS.has(key)) return true;
+  if(!hasClearWorkCue(text) && CONVERSATION_KEYS.some(pattern=>pattern.test(String(text||"")))) return true;
   if(getCasualReply(text)) return true;
   return /^(?:khana\s+(?:kha|khaya)\s+liya(?:\s+hai)?|kha\s+liya|chai\s+(?:pi|pili)\s+liya|so\s+gaye|so\s+rahe\s+ho|kahan\s+ho|kya\s+kar\s+rahe\s+ho|busy\s+ho|free\s+ho)$/i.test(key);
 }

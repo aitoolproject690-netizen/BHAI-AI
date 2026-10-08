@@ -23,10 +23,10 @@ const INSULT_WORDS = /\b(?:chutiya|chutiye|bewakoof|bewkoof|gadha|gadhi|pagal|ka
 const MEDICAL_WORDS = /\b(?:sardi|shardi|cold|runny nose|naak se pani|naak bah|khansi|cough|bukhar|fever|dard|pain|headache|medicine|dawai|dava|doctor|hospital|symptom|tabiyat|health|sehat|pregnan|baby|baccha|infant|vomit|diarrhea|dast|blood|bleeding|saans|breathing|chest|seene|allergy|rash|swelling|infection|thakan|weakness|chakkar|dizziness|bp|blood pressure|sugar|diabetes|nutrition|diet|fiber|fibre|vitamin|protein|supplement|constipation)\b/i;
 
 // Indirect current-context cues matter too: users often ask about the present
-// situation without writing "latest" or "today" explicitly.
+// situation without writing "latest", "today", or "current" explicitly.
 const WEATHER_CLIMATE_WORDS = /\b(?:garmi|garmee|heat|heatwave|loo|baarish|barish|rain|rainfall|monsoon|mausam|weather|temperature|temp|tapman|humidity|nami|drought|sukha|sukha padna|sukha pada|thand|cold wave|flood|baadh|pani|water level|water shortage|rainy season|summer|winter|season)\b/i;
 const CURRENT_CONTEXT_CUES = /\b(?:is\s+bar|iss\s+bar|is\s+bhaar|iss\s+bhaar|is\s+baar|iss\s+baar|this\s+year|this\s+season|this\s+summer|this\s+winter|is\s+saal|iss\s+saal|is\s+season|iss\s+season|aajkal|in\s+dino|in\s+dinon|these\s+days|lately|recently|abhi|filhaal|filhal|is\s+waqt|right\s+now|aane\s+wala|aane\s+wali|padne\s+wala|padne\s+wali|hone\s+wala|hone\s+wali|expected|forecast|prediction|kitni\s+garmi|bahut\s+garmi|kam\s+baarish|kam\s+pani|kam\s+paanee|zyada\s+garmi|zyada\s+baarish|pani\s+kam|paanee\s+kam)\b/i;
-const CURRENT_QUESTION_CUES = /(?:\?|\b(?:kya|kaisa|kaisi|kitna|kitni|kitne|hoga|hogi|honge|padegi|padega|badhegi|badhega|rahega|rahegi|scene|haalat|situation|expected|forecast|prediction)\b)/i;
+const CURRENT_STATUS_CUES = /(?:\?\s*$|\b(?:kya\s+scene|kaisa\s+weather|mausam\s+kaisa|weather\s+kaisa|kaisi\s+garmi|kaisa\s+mausam|haalat\s+kya|situation\s+kya|padegi|padega|hogi|hoga|rahegi|rahega|kitni\s+garmi|kitna\s+temperature|temperature\s+kya|tapman\s+kya)\b)/i;
 
 // Natural conversational phrases that are clearly social/check-in chatter,
 // not a request to search, code, execute, or generate media.
@@ -123,7 +123,7 @@ export function isCurrentContextIntent(text="") {
   const raw=String(text||"").trim();
   if(!raw || isCasualIntent(raw)) return false;
   if(!WEATHER_CLIMATE_WORDS.test(raw)) return false;
-  return CURRENT_CONTEXT_CUES.test(raw) || CURRENT_QUESTION_CUES.test(raw);
+  return CURRENT_CONTEXT_CUES.test(raw) || CURRENT_STATUS_CUES.test(raw);
 }
 
 export function isKnowledgeResearchIntent(text="") {

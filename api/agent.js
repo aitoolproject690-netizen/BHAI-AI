@@ -110,6 +110,18 @@ async function saveCharacterVisualAsset(db,accountId,character,request,media,ver
  return assetId;
 }
 
+async function generateCharacterVisual(db,accountId,prompt,aspectRatio="16:9"){
+ const character=await findCharacterForVisual(db,accountId,prompt);
+ if(!character) return {media:await generateImage(prompt,aspectRatio),character:null,request:normalizeVisualRequest({prompt}),verification:null};
+ const request=normalizeVisualRequest({prompt,aspectRatio});
+ const lockedPrompt=buildCharacterVisualPrompt(character,request);
+ const verification=verifyCharacterVisualContract(character,lockedPrompt);
+ if(!verification.ok) throw new Error("Character visual contract failed closed; locked identity was not embedded completely.");
+ const media=await generateImage(lockedPrompt,request.aspectRatio||aspectRatio);
+ const assetId=await saveCharacterVisualAsset(db,accountId,character,request,media,verification);
+ return {media,character,request,verification,assetId,lockedPrompt};
+}
+
 async function generateImage(prompt,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
  const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import {isCasualIntent,isGeneralChatIntent,isKnowledgeResearchIntent,isWebResearchIntent,isMedicalChatIntent,isLocalCodingIntent,detectMediaIntent} from "../src/intentRouter.js";
+import {isCasualIntent,isGeneralChatIntent,isKnowledgeResearchIntent,isWebResearchIntent,isCurrentContextIntent,isMedicalChatIntent,isLocalCodingIntent,detectMediaIntent} from "../src/intentRouter.js";
 import {selectSkillForTask,selectSkillsForTask} from "../src/skillsRouter.js";
 
 const cases=[
@@ -10,6 +10,7 @@ const cases=[
 ["knowledge",isKnowledgeResearchIntent,"Why is the sky blue?"],
 ["hinglish knowledge",isKnowledgeResearchIntent,"Mujhe samjha petrol mein kya hota hai"],
 ["current",isWebResearchIntent,"Aaj ka latest gold price kya hai?"],
+["indirect current weather",isWebResearchIntent,"Bhai is bar garmi bahut padne wali hai kya scene hai or pani bhi bahut kam pada"],
 ["medical",isMedicalChatIntent,"Mujhe sardi aur khansi ho rahi hai kya karun?"],
 ["coding",isLocalCodingIntent,"Is Python code mein bug hai, fix karke samjhao"],
 ["image",t=>detectMediaIntent(t).type==="image","Ek cinematic 3D image banao"],
@@ -30,6 +31,17 @@ test("unknown non-work requests do not default to coding",()=>{
 test("default skill is general",()=>{
  assert.equal(selectSkillForTask("random baat"),"general");
  assert.deepEqual(selectSkillsForTask("random baat"),["general"]);
+});
+
+test("current-context weather requests select web research skill",()=>{
+ const text="Bhai is bar garmi bahut padne wali hai kya scene hai or pani bhi bahut kam pada";
+ assert.equal(selectSkillForTask(text),"web-research");
+ assert.equal(selectSkillsForTask(text)[0],"web-research");
+});
+
+test("video requests select video skill",()=>{
+ assert.equal(selectSkillForTask("Is image ka short video bana do"),"video");
+ assert.deepEqual(selectSkillsForTask("Is image ka short video bana do"),["video"]);
 });
 
 test("generic chat does not hard-wire Core-first route",()=>{

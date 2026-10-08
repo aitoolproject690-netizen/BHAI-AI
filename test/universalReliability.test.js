@@ -68,3 +68,16 @@ test("provider boundary has a malformed-output recovery gate",()=>{
  const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
  assert.match(source,/isObviouslyGarbledResponse\(result\?\.text,task\)/);
 });
+
+
+test("stable knowledge questions do not enter the web-research gate",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.match(source,/if\(isWebResearchIntent\(task\)\)/);
+ assert.doesNotMatch(source,/isWebResearchIntent\(task\)\|\|isKnowledgeResearchIntent\(task\)/);
+ assert.doesNotMatch(source,/import[^;]*isKnowledgeResearchIntent/);
+});
+
+test("default AI route keeps BHAI-CORE as last-resort for unclassified chat",()=>{
+ const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
+ assert.match(source,/\["gemini", "openai", "huggingface", "anthropic", "core"\]/);
+});

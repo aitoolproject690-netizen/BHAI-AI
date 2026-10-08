@@ -26,6 +26,9 @@ const MEDICAL_WORDS = /\b(?:sardi|shardi|cold|runny nose|naak se pani|naak bah|k
 // not a request to search, code, execute, or generate media.
 const CONVERSATION_KEYS = [
   /\b(?:bas|aise|waise)\s+hi\b.{0,80}\b(?:test|check|try|dekh|dekhta|dekhna)\b/i,
+  /\b(?:sirf|bas|just)\s+(?:check|test|dekh|try)\s+(?:kar|kr)\b.{0,80}(?:raha|rha|rahi|rhi)?\b/i,
+  /\b(?:aise|waise)\s+hi\b.{0,100}\b(?:puch|pooch|puchh)\s+(?:raha|rha|rahi|rhi|tha|thi)\b/i,
+  /\b(?:bas|sirf)\s+dekh\s+(?:raha|rha|rahi|rhi|tha|thi)\b/i,
   /\b(?:test|check|try)\s+(?:kar|kr)\s+(?:raha|rha|rahi|rhi)\b.{0,80}\b(?:reply|jawab|response)\b/i,
   /\b(?:kya|kaisa)\s+(?:reply|jawab|response)\s+(?:dega|deta|deti|aayega|aata|milega|milta)\b/i,
   /\b(?:mazak|mazaak|masti|timepass)\b.{0,50}(?:kar|tha|thi|hai|hoon|hun)?\b/i,

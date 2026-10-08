@@ -48,7 +48,7 @@ test("brain summary is deterministic",()=>{
 
 
 test("brain marks ordinary chat/general work as mobile-preferred",()=>{
-  const chat=buildBrainPlan({task:"Bhai ek simple baat samjha de",messages:[]});
+  const chat=buildBrainPlan({task:"Bhai kya haal hai?",messages:[]});
   assert.equal(chat.signals.mobilePreferred,true);
   assert.match(brainSummary(chat),/mobilePreferred=true/);
 });

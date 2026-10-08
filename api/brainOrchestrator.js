@@ -6,6 +6,7 @@ import { routeConversationContext, shouldAutoExecuteTask } from "./contextRouter
 export const BRAIN_SCHEMA_VERSION = "2.0";
 
 const clean=(v,n=12000)=>String(v??"").trim().slice(0,n);
+const LOCAL_CUES=/\b(?:local|private|offline|phone|mobile|device|apna\s+(?:model|ai)|hamara\s+(?:model|ai)|cloud\s+ke\s+bina|internet\s+ke\s+bina)\b/i;
 
 function explicitMutation(text=""){
   return /\b(?:create|make|build|bana|banado|ban[aā]o|fix|repair|update|modify|change|write|commit|push|delete|remove|deploy|publish|ship|release|run|execute|verify|test)\b/i.test(String(text||""));
@@ -42,6 +43,7 @@ export function buildBrainPlan({messages=[],task=""}={}){
   const casual=isCasualIntent(latest);
   const mutation=explicitMutation(latest);
   const github=explicitGithub(latest);
+  const mobilePreferred=Boolean(LOCAL_CUES.test(latest) || request.lane==="conversation" || request.lane==="general");
   const autoExecute=Boolean(!casual && (autonomous || youtube || (github&&mutation) || shouldAutoExecuteTask(latest)));
   const proofRequired=Boolean(autoExecute && (autonomous || youtube || (github&&mutation)));
   const tools=buildTools(latest,request);
@@ -60,6 +62,7 @@ export function buildBrainPlan({messages=[],task=""}={}){
       casual,
       mutation,
       github,
+      mobilePreferred,
       autoExecute,
       proofRequired
     },

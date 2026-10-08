@@ -31,16 +31,19 @@ jobs:
               data=json.load(f)
           deployment=data.get("deployment") or {}
           medical=data.get("medicalSafety") or {}
+          conversation=data.get("conversationRouting") or {}
           expected=os.environ["EXPECTED_SHA"]
           actual=deployment.get("commit","")
           ok=medical.get("ok") is True
+          conversation_ok=conversation.get("ok") is True
           exact=actual==expected
           print(f"production_http=200")
           print(f"deployment_status={deployment.get('status')}")
           print(f"deployment_commit_matches_expected={exact}")
           print(f"medical_safety_ok={ok}")
           print(f"medical_safety_failures={len(medical.get('failures') or [])}")
-          sys.exit(0 if exact and ok else 2)
+          print(f"conversation_routing_ok={conversation_ok}")
+          sys.exit(0 if exact and ok and conversation_ok else 2)
           PY
               rc=$?
               set -e
@@ -56,6 +59,6 @@ jobs:
           done
 
           if [ "$ready" -ne 1 ]; then
-            echo "Production medical smoke test failed: exact commit did not become live with medicalSafety.ok=true."
+            echo "Production medical smoke test failed: exact commit did not become live with all health self-checks passing."
             exit 1
           fi

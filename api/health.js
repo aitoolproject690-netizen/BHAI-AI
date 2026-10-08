@@ -1,4 +1,15 @@
 import { isMedicalIntent, getMedicalRiskSignals, sanitizeMedicalResponse } from "../src/medicalSafety.js";
+import { isCasualIntent, getCasualReply } from "../src/intentRouter.js";
+
+function runConversationRoutingSelfCheck(){
+  const task="Bhai aise hi test kar rha tha kya reply deta hai tu 😅";
+  const reply=getCasualReply(task);
+  return {
+    ok:isCasualIntent(task)===true && typeof reply==="string" && reply.length>20 && /test kar raha tha|kya reply deta/i.test(reply),
+    task,
+    reply:reply||""
+  };
+}
 
 function runMedicalSafetySelfCheck(){
   const failures=[];
@@ -54,6 +65,7 @@ export default async function handler(req,res){
   const url=process.env.RENDER_EXTERNAL_URL||"";
   const verified=Boolean(commit&&branch&&url);
   const medicalSafety=runMedicalSafetySelfCheck();
+  const conversationRouting=runConversationRoutingSelfCheck();
   return res.status(200).json({
     ok:true,
     service:"BHAI AI",
@@ -63,6 +75,7 @@ export default async function handler(req,res){
     aiConfigured:Boolean(process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY),
     provider:"gemini",
     medicalSafety,
+    conversationRouting,
     deployment:{verified,commit,branch,url,status:verified?"live":"unknown"},
     time:new Date().toISOString()
   });

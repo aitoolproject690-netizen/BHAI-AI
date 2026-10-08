@@ -268,7 +268,7 @@ function App(){
     if(!rr.ok||d.error)throw new Error(d.error||('Media backend HTTP '+rr.status));
     setActivity(a=>{const base=a.map(x=>({...x,state:'done'}));if(d.character)return [...base,{id:id+'3',step:'Character ID',text:'🎭 '+(d.character.name||'Character')+' linked to '+(d.character.characterId||'permanent identity')+' · 🔒 identity contract verified.',state:'done'}];return base;});
     if(d.usage)setUsage(d.usage);
-    upd(m=>m.map(x=>x.id===id+'-media-reply'?{...x,text:d.text||'✅ Media ready.',images:d.images||[]}:x));
+    upd(m=>m.map(x=>x.id===id+'-media-reply'?{...x,text:d.text||'✅ Media ready.',images:d.images||[],audio:d.audio||[],postProduction:d.postProduction||null}:x));
    }catch(e){
     setActivity(a=>a.map(x=>({...x,state:'failed'})));
     upd(m=>m.map(x=>x.id===id+'-media-reply'?{...x,text:'⚠️ ERROR DETECTOR\\n\\n'+e.message+'\\n\\nBHAI X ne failed provider ko DONE nahi maana. Sealed media pipeline ke through retry/switch-provider possible hai. 😎'}:x));
@@ -309,7 +309,7 @@ function App(){
    }
    if(d.usage)setUsage(d.usage); setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
-   upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}:x));
+   upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[],audio:d.audio||[],postProduction:d.postProduction||null}:x));
    if(casualChat)return;
    void (async()=>{
     await Promise.allSettled([
@@ -436,6 +436,8 @@ function App(){
        <div className="messageText">{renderText(m.text,v=>copyText(v,'code-'+m.id))}</div>
        {m.role==='assistant'&&m.providerMeta&&<div style={{marginTop:8,fontSize:11,opacity:.72,display:'flex',gap:6,flexWrap:'wrap'}}><span>🔌 Route: <b>{m.providerMeta.provider==='core'?'BHAI-CORE':m.providerMeta.provider}</b></span>{m.providerMeta.backend_provider&&<span>→ Backend: <b>{m.providerMeta.backend_provider}</b></span>}{m.providerMeta.model&&<span>· Model: <b>{m.providerMeta.model}</b></span>}</div>}
        {m.images?.map((im,i)=>{const src='data:'+im.mimeType+';base64,'+im.data;return <div className="generatedWrap" key={i}>{im.video?<video className="generatedImage" src={src} controls playsInline/>:<img className="generatedImage" src={src}/>} {im.characterId&&<div className="mediaIdentityMeta">🎭 <b>{im.characterId}</b>{im.identityFingerprint&&<> · 🔒 <code>{im.identityFingerprint}</code></>}{im.verificationMode&&<> · ✅ {im.verificationMode}</>}</div>}<a className="downloadBtn" href={src} download={im.video?'bhai-x-video-'+(i+1)+'.mp4':'bhai-x-image-'+(i+1)+'.png'}><Download size={14}/> Download</a></div>})}
+       {m.audio?.map((au,i)=>{const src='data:'+au.mimeType+';base64,'+au.data;return <div className="generatedWrap" key={'audio-'+i}><div style={{fontSize:12,marginBottom:6}}>🔊 {au.kind==='sfx'?'SFX':'Music'} · {au.name||'audio preview'}</div><audio src={src} controls style={{width:'100%'}}/><a className="downloadBtn" href={src} download={'bhai-x-'+(au.kind||'audio')+'-'+(i+1)+'.wav'}><Download size={14}/> Download</a></div>})}
+       {m.postProduction&&<div className="mediaIdentityMeta">🎚️ <b>Post-production manifest</b> · {m.postProduction.vfx?.effects?.length||0} VFX · {m.postProduction.sfx?.tracks?.length||0} SFX · 🎵 {m.postProduction.mood||'cinematic'} · 🔒 manifest contract</div>}
        {m.role==='assistant'&&!running&&<div className="messageActions"><button onClick={()=>copyText(m.text,m.id)}>{copied===m.id?<Check size={13}/>:<Copy size={13}/>} {copied===m.id?'Copied':'Copy'}</button></div>}
       </div>
     </div>)}

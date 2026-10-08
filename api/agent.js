@@ -15,6 +15,7 @@ import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaT
 import {normalizeVisualRequest,buildCharacterVisualPrompt,verifyCharacterVisualContract,pickCharacterForPrompt} from "../src/characterVisualEngine.js";
 import {normalizeVideoRequest,buildCharacterVideoPrompt,verifyCharacterVideoContract} from "../src/characterVideoEngine.js";
 import {normalizeVoiceRequest,makeCharacterVoiceProfile,buildCharacterVoiceContract,verifyCharacterVoiceContract,extractSpokenText,buildLipSyncManifest,isLikelyCharacterVoiceRequest} from "../src/characterVoiceEngine.js";
+import {normalizeScenePostRequest,detectScenePostIntent,buildScenePostProductionManifest,renderProceduralAudio,verifyScenePostManifest} from "../src/scenePostProductionEngine.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
@@ -302,7 +303,7 @@ async function saveCharacterVideoAsset(db,accountId,character,request,media,veri
 
 async function generateCharacterVideo(db,accountId,prompt,duration=5,aspectRatio="16:9",fallbackSourceImage=null){
  const character=await findCharacterForVisual(db,accountId,prompt);
- if(!character) return {media:await generateVideo(prompt,duration,aspectRatio,fallbackSourceImage),character:null,request:normalizeVideoRequest({prompt,duration,aspectRatio}),verification:null,sourceVisualAsset:null};
+ if(!character) return {media:await generateVideo(prompt,duration,aspectRatio,fallbackSourceImage),character:null,request:normalizeVideoRequest({prompt,duration,aspectRatio}),verification:null,sourceVisualAsset:null,postProduction:buildScenePostProductionManifest({prompt,duration,style:"cinematic"})};
  const request=normalizeVideoRequest({prompt,duration,aspectRatio});
  const lockedPrompt=buildCharacterVideoPrompt(character,request);
  const verification=verifyCharacterVideoContract(character,lockedPrompt);
@@ -310,8 +311,9 @@ async function generateCharacterVideo(db,accountId,prompt,duration=5,aspectRatio
  const sourceVisualAsset=await getLatestCharacterVisualAsset(db,accountId,character.character_id,character.identity_fingerprint);
  const sourceImage=sourceVisualAsset?.data ? {mimeType:sourceVisualAsset.mime_type,data:sourceVisualAsset.data,provider:sourceVisualAsset.provider||"character-visual"} : fallbackSourceImage;
  const media=await generateVideo(lockedPrompt,request.duration,request.aspectRatio,sourceImage);
+ const postProduction=buildScenePostProductionManifest({prompt:request.prompt,duration:request.duration,style:request.style||character?.identity_json?.visualStyle||character?.identity?.visualStyle||"cinematic"});
  const assetId=await saveCharacterVideoAsset(db,accountId,character,request,media,verification,sourceVisualAsset?.asset_id||null);
- return {media,character,request,verification,sourceVisualAsset,assetId,lockedPrompt};
+ return {media,character,request,verification,sourceVisualAsset,assetId,lockedPrompt,postProduction};
 }
 
 async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=null){
@@ -743,6 +745,24 @@ export default async function handler(req,res){
     }catch(e){await releaseMedia(db,account.id,"image");return json(res,502,{error:"Image generation failed: "+String(e?.message||e),activity:[{tool:"generate_image",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});}
    }catch(e){return json(res,502,{error:"Image generation pre-flight failed: "+String(e?.message||e)});}
   }
+  if(type==="audio"){
+   const intent=detectScenePostIntent(prompt)||{music:true,sfx:false,vfx:false};
+   const request=normalizeScenePostRequest({prompt,duration:body.duration||8,mood:body.mood,style:body.style||"cinematic"});
+   const manifest=buildScenePostProductionManifest(request);
+   const verified=verifyScenePostManifest(manifest);
+   if(!verified.ok)return json(res,502,{error:"Scene post-production contract failed.",verified:false});
+   const audio=[];
+   const kind=String(body.kind||"music").toLowerCase();
+   if(kind==="sfx"){
+    const name=String(body.name||manifest.sfx?.tracks?.[0]?.name||"generic_sfx");
+    const sfx=renderProceduralAudio({kind:"sfx",duration:Math.min(5,Math.max(1,Number(body.duration)||3)),name});
+    audio.push({mimeType:sfx.mimeType,data:sfx.data,duration:sfx.duration,kind:"sfx",name});
+   }else{
+    const music=renderProceduralAudio({kind:"music",duration:Math.min(12,Math.max(1,Number(body.duration)||8)),mood:request.mood});
+    audio.push({mimeType:music.mimeType,data:music.data,duration:music.duration,kind:"music",name:"background_music"});
+   }
+   return json(res,200,{ok:true,text:"## 🔊 Audio preview ready\\n\\nProvider-free procedural audio asset generated successfully.",verified:true,postProduction:manifest,audio,images:[],usage:await getMediaUsage(db,account.id)});
+  }
   if(type==="video"){
    try{
     await reserveMedia(db,account.id,"video",3);
@@ -753,7 +773,7 @@ export default async function handler(req,res){
      const visual=await generateCharacterVideo(db,account.id,videoPrompt,Math.min(5,Math.max(1,Number(body.duration)||5)),aspectRatio,fallbackSourceImage);
      const media=visual.media;
      const videoMeta={mimeType:media.mimeType,data:media.data,video:true,duration:media.duration,...(visual.character?{characterId:visual.character.character_id,identityFingerprint:visual.character.identity_fingerprint,visualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,identityLock:true,verificationMode:visual.verification?.mode||"generation-contract",verificationScore:visual.verification?.score||0}:{} )};
-     return json(res,200,{ok:true,text:visual.character?"## 🎬 Character video generated\\n\\nBHAI X ne permanent Character ID ke locked video contract ke saath animation generate ki aur visual lineage preserve ki.":"## 🎬 Video generated\\n\\nBHAI X ne dedicated video pipeline, provider fallback aur output validation complete kiya.",activity:[{tool:"generate_video",state:"done",details:visual.character?"Character identity lock + source visual lineage verified before video generation.":"Dedicated media endpoint generated and validated the video."}],images:[videoMeta],character:visual.character?{characterId:visual.character.character_id,name:visual.character.name,identityFingerprint:visual.character.identity_fingerprint,sourceVisualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,verification:visual.verification}:null,usage:await getMediaUsage(db,account.id)});
+     return json(res,200,{ok:true,text:visual.character?"## 🎬 Character video generated\\n\\nBHAI X ne permanent Character ID ke locked video contract ke saath animation generate ki aur visual lineage preserve ki.":"## 🎬 Video generated\\n\\nBHAI X ne dedicated video pipeline, provider fallback aur output validation complete kiya.",activity:[{tool:"generate_video",state:"done",details:visual.character?"Character identity lock + source visual lineage verified before video generation.":"Dedicated media endpoint generated and validated the video."}],images:[videoMeta],postProduction:visual.postProduction||null,character:visual.character?{characterId:visual.character.character_id,name:visual.character.name,identityFingerprint:visual.character.identity_fingerprint,sourceVisualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,verification:visual.verification}:null,usage:await getMediaUsage(db,account.id)});
     }catch(e){await releaseMedia(db,account.id,"video");return json(res,502,{error:"Video generation failed: "+String(e?.message||e),activity:[{tool:"generate_video",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});}
    }catch(e){return json(res,502,{error:"Video generation pre-flight failed: "+String(e?.message||e)});
    }
@@ -807,6 +827,57 @@ export default async function handler(req,res){
   };
   return json(res,200,{ok:true,text:conversationalReply||casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
  }
+
+// Deterministic scene post-production routing: VFX manifests and provider-free Music/SFX
+// previews are generated without calling an external provider. This keeps Stage 6 usable
+// even when media quotas/providers are unavailable.
+const scenePostIntent=detectScenePostIntent(latestUserMessage);
+if(scenePostIntent.type==="scene-post"){
+  const postRequest=normalizeScenePostRequest({prompt:latestUserMessage,duration:8,style:"cinematic"});
+  const manifest=buildScenePostProductionManifest({...postRequest,includeMusic:scenePostIntent.music});
+  const manifestVerification=verifyScenePostManifest(manifest);
+  if(!manifestVerification.ok){
+    return json(res,502,{
+      ok:false,
+      text:"⚠️ Scene post-production contract fail-closed hua. BHAI X ne unverified VFX/Music/SFX package ko use nahi kiya.",
+      verified:false,
+      activity:[{tool:"scene-post-contract",state:"blocked",details:"VFX/Music/SFX manifest failed verification."}],
+      images:[],
+      audio:[],
+      usage:await getMediaUsage(db,account.id)
+    });
+  }
+
+  const audio=[];
+  if(scenePostIntent.music){
+    const music=renderProceduralAudio({kind:"music",duration:Math.min(12,postRequest.duration),mood:postRequest.mood});
+    audio.push({mimeType:music.mimeType,data:music.data,duration:music.duration,kind:"music",name:"background_music"});
+  }
+  if(scenePostIntent.sfx){
+    const tracks=manifest.sfx?.tracks||[];
+    const selected=tracks.length?tracks:[{name:"generic_sfx"}];
+    for(const track of selected.slice(0,4)){
+      const sfx=renderProceduralAudio({kind:"sfx",duration:Math.min(5,Math.max(1,postRequest.duration)),name:track.name});
+      audio.push({mimeType:sfx.mimeType,data:sfx.data,duration:sfx.duration,kind:"sfx",name:track.name});
+    }
+  }
+
+  activity.push({tool:"scene-post-manifest",state:"done",details:"VFX + Music + SFX editor contract verified."});
+  if(audio.length) activity.push({tool:"procedural-audio",state:"done",details:audio.length+" provider-free playable audio asset(s) prepared."});
+  return json(res,200,{
+    ok:true,
+    text:"## 🎚️ Scene post-production ready\\n\\nBHAI X ne scene ke liye VFX manifest, music/SFX timing aur provider-free playable audio preview prepare kar diya. Final video editor is manifest ko consume karke effects mix karega.",
+    verified:true,
+    provider:"deterministic",
+    backend_provider:"scene-post-production",
+    model:"bhai-scene-post-v1",
+    postProduction:manifest,
+    audio,
+    images:[],
+    usage:await getMediaUsage(db,account.id),
+    activity
+  });
+}
 
 // Deterministic voice routing: explicit character voice requests stay local/server-deterministic.
 // The permanent Character ID remains the source of truth; browser speech playback is used for the first
@@ -899,7 +970,7 @@ if(directVideoRequest){
    const visual=await generateCharacterVideo(db,account.id,videoPrompt,5,"16:9",sourceImage);
    const media=visual.media;
    const videoMeta={mimeType:media.mimeType,data:media.data,video:true,duration:media.duration,...(visual.character?{characterId:visual.character.character_id,identityFingerprint:visual.character.identity_fingerprint,visualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,identityLock:true,verificationMode:visual.verification?.mode||"generation-contract",verificationScore:visual.verification?.score||0}:{} )};
-   return json(res,200,{ok:true,text:visual.character?"## 🎬 Character video generated\\n\\nBHAI X ne permanent Character ID ke locked video contract ke saath animation generate ki aur visual lineage preserve ki.":"## 🎬 Video generated\\n\\nBHAI X ne request ko verified video pipeline par route kiya — capability match + fallback + output validation complete.",activity:[{tool:"generate_video",state:"done",details:visual.character?"Character identity lock + source visual lineage verified before video generation.":"Direct video request routed to the video generator."}],images:[videoMeta],character:visual.character?{characterId:visual.character.character_id,name:visual.character.name,identityFingerprint:visual.character.identity_fingerprint,sourceVisualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,verification:visual.verification}:null,usage:await getMediaUsage(db,account.id)});
+   return json(res,200,{ok:true,text:visual.character?"## 🎬 Character video generated\\n\\nBHAI X ne permanent Character ID ke locked video contract ke saath animation generate ki aur visual lineage preserve ki.":"## 🎬 Video generated\\n\\nBHAI X ne request ko verified video pipeline par route kiya — capability match + fallback + output validation complete.",activity:[{tool:"generate_video",state:"done",details:visual.character?"Character identity lock + source visual lineage verified before video generation.":"Direct video request routed to the video generator."}],images:[videoMeta],postProduction:visual.postProduction||null,character:visual.character?{characterId:visual.character.character_id,name:visual.character.name,identityFingerprint:visual.character.identity_fingerprint,sourceVisualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,verification:visual.verification}:null,usage:await getMediaUsage(db,account.id)});
   }catch(e){
    await releaseMedia(db,account.id,"video");
    return json(res,502,{error:"Video generation failed: "+String(e?.message||e),activity:[{tool:"generate_video",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});

@@ -119,7 +119,7 @@ export function isMedicalChatIntent(text="") {
   // a health issue. Current-weather requests must not enter the medical lane
   // unless a clear health symptom is also present.
   if(isCurrentContextIntent(raw)){
-    const medicalWithoutWeather=/\\b(?:sardi|shardi|runny nose|naak se pani|naak bah|khansi|cough|bukhar|fever|dard|pain|headache|medicine|dawai|dava|doctor|hospital|symptom|tabiyat|health|sehat|pregnan|baby|baccha|infant|vomit|diarrhea|dast|blood|bleeding|saans|breathing|chest|seene|allergy|rash|swelling|infection|thakan|weakness|chakkar|dizziness|bp|blood pressure|sugar|diabetes|nutrition|diet|fiber|fibre|vitamin|protein|supplement|constipation)\\b/i;
+    const medicalWithoutWeather=/\b(?:sardi|shardi|runny nose|naak se pani|naak bah|khansi|cough|bukhar|fever|dard|pain|headache|medicine|dawai|dava|doctor|hospital|symptom|tabiyat|health|sehat|pregnan|baby|baccha|infant|vomit|diarrhea|dast|blood|bleeding|saans|breathing|chest|seene|allergy|rash|swelling|infection|thakan|weakness|chakkar|dizziness|bp|blood pressure|sugar|diabetes|nutrition|diet|fiber|fibre|vitamin|protein|supplement|constipation)\b/i;
     return medicalWithoutWeather.test(raw);
   }
   return MEDICAL_WORDS.test(raw);

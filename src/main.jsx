@@ -120,6 +120,9 @@ function App(){
    "hi":"Arre bhai! 😄 Main yahin hoon. Batao kya scene hai? 🚀","hello":"Hello bhai! 😎 BHAI X ready hai. Batao kya karna hai? 🚀","hey":"Hey bhai! 😄 Kya chal raha hai? 🚀","hii":"Hii bhai! 😄 Batao kya karna hai? 🚀","helo":"Hello bhai! 😄 Main ready hoon. 🚀","namaste":"Namaste bhai! 🙏 Batao kya kaam karein?","salam":"Walaikum salam bhai! 😄 Batao kya scene hai?","kaise ho":"Ekdum badhiya bhai 😎 Tum batao?","kaisa hai":"Badhiya bhai 😎 Main full ready hoon!","kya haal":"Mast bhai 😄 Tum batao kya haal?","kya haal hai":"Mast bhai 😄 Tum batao kya haal?","kya chal raha":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?","kya chal raha hai":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?","kya chal rha":"Bas bhai, BHAI X ka kaam full speed mein chal raha hai 😄🚀 Tum batao?","kya kar rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya kaam kar rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya kam kar rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya kaam kr rahe ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya kam kr reh ho":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","khana kha liya":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","khana kha liya hai":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","khana khaya":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","khana khaya hai":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","kha liya":"😂 Bhai, main AI hoon—khana nahi kha sakta. Tu kha le pehle! 🍛😄","kya kar rahe ho bhai":"Bhai, tumse baat aur tumhare kaam mein laga hoon 😎🚀","kya scene hai":"Sab mast bhai 😄 Batao aaj kya kaam pakadna hai? 🚀","kya hua":"Kuch nahi bhai 😄 Main ekdum ready hoon. Batao kya hua?","thanks":"Arey bhai, anytime! 😎❤️","thank you":"Arey bhai, anytime! 😎❤️","thik hai":"Theek hai bhai 😄👍","theek hai":"Theek hai bhai 😄👍","ok":"Done bhai 😎👍","okay":"Done bhai 😎👍","nice":"Hehe 😄🔥","wah":"😄🔥 Bas bhai!","haha":"😂😂 Bhai, hasi rukni nahi chahiye!","bye":"Bye bhai! 👋😄","goodbye":"Bye bhai! 👋😄"
   };
   const webResearchMessage=isWebResearchIntent(userIntentText);
+  const autonomousProductionMessage=isAutonomousProductionRequest(userIntentText);
+  const youtubePublishMessage=!autonomousProductionMessage&&isYouTubePublishRequest(userIntentText);
+  const youtubeConnectMessage=/\byoutube\b[\s\S]{0,80}\b(?:connect|link|jod|jodo|channel)\b/i.test(userIntentText);
   const casualSocial=isCasualIntent(userIntentText);
   const casualChat=Object.prototype.hasOwnProperty.call(instantCasual,casualKey)||casualSocial;
   const fastLocal={
@@ -199,6 +202,61 @@ function App(){
     setActivity(a=>a.map(x=>({...x,state:x.state==='running'?'failed':x.state})));
     upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ GitHub check failed\\n\\n'+e.message}:x));
    }finally{setRunning(false)}
+   return;
+  }
+  if(autonomousProductionMessage){
+   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
+   const id=crypto.randomUUID(),replyId=id+'-production-reply';
+   upd(m=>[...m,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'🚀 BHAI X autonomous production start kar raha hai...'}]);
+   setActivity([
+    {id:id+'0',step:'Plan',text:'🧠 Story → Character → Visual → Video → VFX/SFX → MP4 → YouTube pipeline lock ho rahi hai...',state:'running'},
+    {id:id+'1',step:'Production',text:'⚙️ Actual media pipeline execute hogi; har stage verify hoga...',state:'pending'},
+    {id:id+'2',step:'Proof',text:'✅ Final MP4 aur publishing proof ke bina DONE claim nahi hoga...',state:'pending'}
+   ]);
+   try{
+    const rr=await fetch(apiUrl('/api/production'),{method:'POST',headers:authHeaders(),body:JSON.stringify({
+     prompt:userIntentText,durationSeconds:15,language:'Hindi',genre:'suspense',visualStyle:'3D anime cinematic cartoon',
+     aspectRatio:'16:9',autoPublish:true,privacy:/\bpublic\b/i.test(userIntentText)?'public':/\bunlisted\b/i.test(userIntentText)?'unlisted':'private',render:true,maxScenes:3
+    })});
+    const d=await rr.json().catch(()=>({}));
+    if(!rr.ok||d.error)throw new Error(d.error||('Production backend HTTP '+rr.status));
+    setActivity(a=>a.map(x=>({...x,state:'done'})));if(d.usage)setUsage(d.usage);
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:(d.text||'✅ Autonomous production result ready.')+(d.youtubeAuthUrl?'\n\n🔐 [YouTube connect karo]('+d.youtubeAuthUrl+')':''),images:d.images||[],providerMeta:{provider:'bhai-self-hosted',backend_provider:'autonomous-production',model:'bhai-production-v1'}}:x));
+    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Production',text:x.details||x.state||'',state:x.state||'done'}))]);
+   }catch(e){
+    setActivity(a=>a.map(x=>({...x,state:'failed'})));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ AUTONOMOUS PRODUCTION STOPPED\n\n'+e.message+'\n\nBHAI X ne unverified final output ko DONE nahi maana.'}:x));
+   }finally{setRunning(false);clearInterval(workTicker.current);workTicker.current=null;}
+   return;
+  }
+  if(youtubeConnectMessage){
+   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
+   const id=crypto.randomUUID(),replyId=id+'-youtube-connect';
+   upd(m=>[...m,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'🔐 Secure YouTube OAuth link bana raha hoon...'}]);
+   setActivity([{id:id+'0',step:'OAuth',text:'🔐 Account-scoped secure YouTube authorization URL generate ho rahi hai...',state:'running'},{id:id+'1',step:'Verify',text:'✅ OAuth state server-side protected hai...',state:'pending'}]);
+   try{
+    const d=await requestJson('/api/youtube',{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'connect'})},{label:'/api/youtube',retrySafe:false,retries:0});
+    setActivity(a=>a.map(x=>({...x,state:'done'})));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'## 🔐 YouTube Connect\n\nBHAI X ka secure Google authorization link ready hai.\n\n[Open YouTube connection]('+d.authUrl+')\n\nAuthorization complete hone ke baad wapas BHAI X par aakar publish command de sakte ho.'}:x));
+   }catch(e){
+    setActivity(a=>a.map(x=>({...x,state:'failed'})));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ YouTube connect failed\n\n'+e.message}:x));
+   }finally{setRunning(false);}
+   return;
+  }
+  if(youtubePublishMessage){
+   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
+   const id=crypto.randomUUID(),replyId=id+'-youtube-publish';
+   upd(m=>[...m,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'📺 Verified final MP4 ko YouTube par publish kar raha hoon...'}]);
+   setActivity([{id:id+'0',step:'Input',text:'🎬 Saved verified final video locate ho raha hai...',state:'running'},{id:id+'1',step:'Upload',text:'📤 YouTube resumable upload execute hoga...',state:'pending'},{id:id+'2',step:'Proof',text:'✅ Post-upload video ID + URL verify hoga...',state:'pending'}]);
+   try{
+    const d=await requestJson('/api/youtube',{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'upload',privacy:'private'})},{label:'/api/youtube',retrySafe:false,retries:0});
+    setActivity(a=>a.map(x=>({...x,state:'done'})));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'## ✅ YouTube publish verified\n\n**Title:** '+(d.title||'BHAI X Video')+'\n\n**Video ID:** '+d.videoId+'\n\n🔗 '+d.url+'\n\n**Privacy:** '+(d.privacyStatus||'private')}:x));
+   }catch(e){
+    setActivity(a=>a.map(x=>({...x,state:'failed'})));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ YouTube publish failed\n\n'+e.message+'\n\nBHAI X ne upload ko verified DONE nahi maana.'}:x));
+   }finally{setRunning(false);}
    return;
   }
   if(characterCreationMessage){

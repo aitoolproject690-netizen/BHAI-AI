@@ -7,7 +7,7 @@ const KNOWN_GARBLED=/^(?:essors|rylic|are|я|р|л|ж|д|ц|щ|ы)(?:\s+|$)/iu;
 const EXPLANATORY_TASK=/\b(?:batao|samjhao|explain|describe|kaise|kyu|kyon|why|how|ek\s+sentence|in\s+(?:one|a)\s+sentence)\b/i;
 const WORD_ONLY=/^[\p{L}\p{N}_-]{1,48}$/u;
 const REPEATED_PUNCT=/[A-Za-z\p{L}\p{N}]{3,}[\/\\|_~]{3,}/u;
-const STANDALONE_FRAGMENT=/^(?:from|the|and|or|of|to|a|an|is|are|was|were|be|been|being)$/i;
+const STANDALONE_FRAGMENT=/^(?:from|the|and|or|of|to|a|an|is|are|was|were|be|been|being)$/i;\nconst CONVERSATIONAL_TASK=/\\b(?:hello|hi|hey|namaste|salam|kaise ho|kya haal|kya scene|bas|aise hi|waise hi|test|check|reply|jawab|response|baat|sun bhai|bhai sun|mazak|mazaak|masti|timepass|random|sirf|just)\\b/i;\nconst ACCEPTABLE_SHORT_REPLIES=new Set(["yes","no","haan","han","nahi","nahin","ok","okay","theek","thik","badhiya","mast","hello","hi","hey","thanks","thank","done"]);
 
 function isLikelyOneTokenNonAnswer(value,task){
   if(!WORD_ONLY.test(value)) return false;

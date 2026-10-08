@@ -661,6 +661,18 @@ export default async function handler(req,res){
   // Automatic execution: no user-facing DO IT switch is required.
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
  const canonicalRequest=classifyUserRequest(latestUserMessage);
+
+ // Canonical deterministic lanes must be identical in /api/chat and /api/agent.
+ // Provider outages must never turn simple math/time into weak local-model output.
+ const deterministicMath=solveSimpleMath(latestUserMessage);
+ if(deterministicMath!==null){
+  return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true,activity:[]});
+ }
+ const deterministicTime=solveSimpleTime(latestUserMessage);
+ if(deterministicTime){
+  return json(res,200,{ok:true,text:deterministicTime,provider:"deterministic",backend_provider:"reasoning",model:"bhai-reasoning-v1",verified:true,activity:[]});
+ }
+
  const normalizedCasual=normalizeIntent(latestUserMessage);
  const conversationalReply=getCasualReply(latestUserMessage);
  const serverCasual=isCasualIntent(latestUserMessage);
@@ -900,7 +912,7 @@ if(localCodingRequest){
    task:latestText,
    system:"You are BHAI X, a practical coding assistant. For standalone code questions, answer directly with the corrected code and a brief explanation. Do not claim GitHub, repository, build, deploy, or file changes unless they were actually performed.",
    messages:[{role:"user",text:latestText}],
-   preferred:"core",
+   preferred:"",
    role:"coding",
    fallback:true
   });
@@ -1214,12 +1226,14 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   }
   const generalConversation=isGeneralChatIntent(latestText);
   const directAnswerLane=!agentNeedsTools && ["general","knowledge","coding"].includes(canonicalRequest.lane);
+  const directRole=canonicalRequest.lane==="coding"?"coding":"chat-general";
   let routed=await generateWithRouter({
    task:latestText,
    system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
    messages:chatMessages,
    preferred:directAnswerLane?"":(generalConversation?"":"core"),
-   role:directAnswerLane||generalConversation?"chat-general":"engineering",
+   role:directAnswerLane?directRole:(generalConversation?"chat-general":"engineering"),
+   exclude:directAnswerLane?["core"]:[],
    fallback:true
   });
 
@@ -1237,8 +1251,8 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
       system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
       messages:chatMessages,
       preferred:provider,
-      role:directAnswerLane||generalConversation?"chat-general":"engineering",
-      exclude:[routed?.provider||"core"],
+      role:directAnswerLane?directRole:(generalConversation?"chat-general":"engineering"),
+      exclude:[routed?.provider||"core",...(directAnswerLane?["core"]:[])],
       fallback:true
      });
      if(!isObviouslyGarbledResponse(candidate?.text,latestText)){

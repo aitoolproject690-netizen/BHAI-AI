@@ -50,6 +50,19 @@ test("generic chat does not hard-wire Core-first route",()=>{
  const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
  assert.doesNotMatch(source,/preferred:"core",role:"chat",fallback:true/);
  assert.match(source,/role:codingMode\?"coding":"chat-general"/);
+ assert.doesNotMatch(source,/preferred:"core",\s*\n\s*role:"coding"/);
+});
+
+test("agent applies canonical deterministic math/time before provider routing",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.match(source,/const deterministicMath=solveSimpleMath\(latestUserMessage\)/);
+ assert.match(source,/const deterministicTime=solveSimpleTime\(latestUserMessage\)/);
+});
+
+test("direct knowledge/general lanes never fall back to weak local Core",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.match(source,/const directAnswerLane=!agentNeedsTools && \["general","knowledge","coding"\]\.includes\(canonicalRequest\.lane\)/);
+ assert.match(source,/exclude:directAnswerLane\?\["core"\]:\[\]/);
 });
 
 test("agent prioritizes canonical conversation/coding gates before current research",()=>{
@@ -100,7 +113,9 @@ test("known fragment outputs are always blocked on substantive questions",()=>{
   ["pathlib","Ek sentence me batao: Baarish ke baad mitti ki khushboo ko kya kehte hain?"],
   ["b","Mujhe sardi ho rahi hai kya karun?"],
   ["actly","Bhai is bar garmi bahut padne wali hai kya scene hai?"],
-  ["uge","Bhai aise hi test kar raha tha tu kya reply deta hai?"]
+  ["uge","Bhai aise hi test kar raha tha tu kya reply deta hai?"],
+  ["sohn","Petrol (गैसोलीन) में असल में क्या-क्या होता है?"],
+  ["labor","Agar main subah 8 baje ghar se niklu aur 3 ghante travel karu to kitne baje pahuchunga?"]
  ];
  for(const [answer,prompt] of samples){
   assert.equal(isObviouslyGarbledResponse(answer,prompt),true,prompt+" -> "+answer);

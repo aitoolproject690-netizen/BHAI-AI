@@ -10,8 +10,9 @@ import { generateWithRouter, generateVerifiedAnswer, reviewWithMultiAI, getConfi
 import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpleColdQuestion } from "../src/medicalSafety.js";
-import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent,isGeneralChatIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isGeneralChatIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
+import {classifyUserRequest} from "../src/requestRouter.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
 import { webSearch, filterResearchSources } from "../src/webSearch.js";
 
@@ -435,6 +436,7 @@ export default async function handler(req,res){
   chatMessages=chatMessages.filter(m=>m&&["user","assistant"].includes(m.role)&&String(m.text??m.content??"").trim()).map(m=>({role:m.role,text:String(m.text??m.content??"").trim()}));
   while(chatMessages.length&&chatMessages[chatMessages.length-1].role==="assistant") chatMessages.pop();
   const task=String([...chatMessages].reverse().find(m=>m.role==="user")?.text||"").trim();
+  const canonicalRequest=classifyUserRequest(task);
   if(!task)return json(res,400,{error:"Chat message is required."});
   try{
    const medicalMode=isMedicalIntent(task);
@@ -452,7 +454,7 @@ export default async function handler(req,res){
 
    // High-risk medical triage and simple cold advice stay deterministic and
    // never wait for a language model.
-   if(isMedicalChatIntent(task)){
+   if(canonicalRequest.lane==="medical"){
     const deterministicMedical=applyMedicalSafetyFooter("",task);
     if(isSimpleColdQuestion(task)||/(?:chest pain|severe chest|difficulty breathing|shortness of breath|fainting|behosh|overdose|poisoning|suicide|self harm)/i.test(task) || /(?:\bbp\b|blood pressure)\s*(?:is|=|:)\s*\d{2,3}\s*(?:\/|over)\s*\d{2,3}/i.test(task)){
      if(deterministicMedical){
@@ -489,14 +491,13 @@ export default async function handler(req,res){
     return json(res,200,{ok:true,text:deterministicConversationReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true});
    }
 
-   const standaloneCodingRequest=isLocalCodingIntent(task);
-   if(standaloneCodingRequest){
+   if(canonicalRequest.lane==="coding"){
     try{
      const coding=await generateWithRouter({
       task,
       system:system+"\n\nCODING-ONLY MODE: Answer the standalone coding question directly. Do not search the web unless the user explicitly asks for current documentation.",
       messages:chatMessages,
-      preferred:"core",
+      preferred:"",
       role:"coding",
       fallback:true
      });
@@ -506,7 +507,7 @@ export default async function handler(req,res){
     }
    }
 
-   if(isWebResearchIntent(task)||isKnowledgeResearchIntent(task)){
+   if(canonicalRequest.lane==="current"){
     try{
      const results=await webSearch(task);
      const researchResults=filterResearchSources(task,results);
@@ -533,12 +534,12 @@ export default async function handler(req,res){
     }
    }
 
-   const codingMode=isLocalCodingIntent(task);
+   const codingMode=canonicalRequest.lane==="coding";
    let routed=await generateWithRouter({
     task,
     system,
     messages:chatMessages,
-    preferred:codingMode?"core":"",
+    preferred:"",
     role:codingMode?"coding":"chat-general",
     fallback:true
    });
@@ -598,6 +599,7 @@ export default async function handler(req,res){
  const {messages=[]}=req.body||{},activity=[];
   // Automatic execution: no user-facing DO IT switch is required.
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
+ const canonicalRequest=classifyUserRequest(latestUserMessage);
  // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
  const normalizedCasual=normalizeIntent(latestUserMessage);
@@ -793,7 +795,7 @@ async function getModelsFast(){
   modelCache.models=list;
   return list;
 }
-if(isMedicalChatIntent(latestUserMessage)){
+if(canonicalRequest.lane==="medical"){
  try{
   const deterministicMedical=applyMedicalSafetyFooter("",latestUserMessage);
   if(deterministicMedical){
@@ -824,7 +826,7 @@ if(deterministicConversationReply){
 
 // Standalone coding-help MUST beat knowledge/web research. This prevents
 // Python/JS explanations from being hijacked into generic search results.
-const localCodingRequest=isLocalCodingIntent(latestText);
+const localCodingRequest=canonicalRequest.lane==="coding";
 if(localCodingRequest){
  try{
   const routed=await generateWithRouter({
@@ -841,7 +843,7 @@ if(localCodingRequest){
  }
 }
 
-const currentResearchRequest=isWebResearchIntent(latestText);
+const currentResearchRequest=canonicalRequest.lane==="current";
 if(currentResearchRequest){
  try{
   const results=await webSearch(latestText);
@@ -1112,7 +1114,10 @@ if(githubLinkRequest && githubRequestedRepo && autoDoIt && !githubFileRequest){
  }
 }
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
- const agentNeedsTools=latestRequestsProjectExecution || latestHasExplicitGithub ||
+ const explicitExecutionCue=latestHasExplicitGithub ||
+  /\b(?:repo(?:sitory)?|app|project|website|apk|deploy|commit|push|pull request|build|release|publish)\b/i.test(latestText) ||
+  /\b(?:edit|update|fix|debug|implement|refactor|modify)\b.{0,80}\b(?:file|repo(?:sitory)?|codebase|project|github|code)\b/i.test(latestText);
+ const agentNeedsTools=explicitExecutionCue ||
   selectedSkills.some(skill=>["github","file","build","automation"].includes(skill));
  const generateWithFallback=async(useTools=true)=>{
   const chatMessages=compactContents(contents).flatMap(x=>{
@@ -1137,12 +1142,13 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
    if(lastError)throw lastError;
   }
   const generalConversation=isGeneralChatIntent(latestText);
+  const directAnswerLane=!agentNeedsTools && ["general","knowledge","coding"].includes(canonicalRequest.lane);
   let routed=await generateWithRouter({
    task:latestText,
    system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
    messages:chatMessages,
-   preferred:generalConversation?"":"core",
-   role:generalConversation?"chat-general":"engineering",
+   preferred:directAnswerLane?"":(generalConversation?"":"core"),
+   role:directAnswerLane||generalConversation?"chat-general":"engineering",
    fallback:true
   });
 
@@ -1160,7 +1166,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
       system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
       messages:chatMessages,
       preferred:provider,
-      role:generalConversation?"chat-general":"engineering",
+      role:directAnswerLane||generalConversation?"chat-general":"engineering",
       exclude:[routed?.provider||"core"],
       fallback:true
      });

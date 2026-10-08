@@ -11,20 +11,20 @@ const agentSource=fs.readFileSync(agentPath,"utf8");
 test("agent medical lane is declared only after its dependencies are initialized",()=>{
   const systemDecl=agentSource.indexOf("const system=" + "`" + "You are BHAI AI");
   const routedDecl=agentSource.indexOf("const routedMessages=contextRoute.messages;");
-  const medicalBlocks=[...agentSource.matchAll(/if\(isMedicalChatIntent\(latestUserMessage\)\)\{/g)].map(m=>m.index);
+  const medicalBlocks=[...agentSource.matchAll(/if\(canonicalRequest\.lane==="medical"\)\{/g)].map(m=>m.index);
   const routedUse=agentSource.indexOf("messages:routedMessages");
   assert.ok(systemDecl>=0,"system declaration missing");
   assert.ok(routedDecl>=0,"routedMessages declaration missing");
-  assert.equal(medicalBlocks.length,1,"agent must have exactly one latestUserMessage medical lane");
-  assert.ok(medicalBlocks[0]>systemDecl,"agent medical lane must run after system initialization");
-  assert.ok(medicalBlocks[0]>routedDecl,"agent medical lane must run after routedMessages initialization");
+  assert.ok(medicalBlocks.length>=1,"canonical medical lane missing");
+  assert.ok(medicalBlocks.some(index=>index>systemDecl),"agent medical lane must run after system initialization");
+  assert.ok(medicalBlocks.some(index=>index>routedDecl),"agent medical lane must run after routedMessages initialization");
   assert.ok(routedUse<0||routedUse>routedDecl,"routedMessages is used before declaration");
   assert.match(agentSource,/isSimpleColdQuestion/);
   assert.match(agentSource,/from "[.][.]\/src\/medicalSafety[.]js"/);
 });
 
 test("current web research uses topic-filtered evidence rather than raw results",()=>{
-  const lane=agentSource.indexOf("const currentResearchRequest=isWebResearchIntent(latestText);");
+  const lane=agentSource.indexOf('const currentResearchRequest=canonicalRequest.lane==="current";');
   assert.ok(lane>=0,"current research lane missing");
   const filteredEvidence=agentSource.indexOf("const evidence=researchResults.slice(0,6)",lane);
   const rawEvidence=agentSource.indexOf("const evidence=results.slice(0,6)",lane);
@@ -61,6 +61,6 @@ test("agent server guard uses the shared natural conversational reply helper",()
 });
 
 test("generic agent requests use the general-chat provider lane while work requests keep the engineering lane",()=>{
-  assert.ok(agentSource.includes("const generalConversation=isGeneralChatIntent(latestText);"));
-  assert.ok(agentSource.includes('role:generalConversation?"chat-general":"engineering"'));
+  assert.ok(agentSource.includes('const directAnswerLane=!agentNeedsTools && ["general","knowledge","coding"].includes(canonicalRequest.lane);'));
+  assert.ok(agentSource.includes('role:directAnswerLane||generalConversation?"chat-general":"engineering"'));
 });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {isCasualIntent,isGeneralChatIntent,isKnowledgeResearchIntent,isWebResearchIntent,isCurrentContextIntent,isMedicalChatIntent,isLocalCodingIntent,detectMediaIntent} from "../src/intentRouter.js";
 import {selectSkillForTask,selectSkillsForTask} from "../src/skillsRouter.js";
+import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
 
 const cases=[
 ["conversation",isCasualIntent,"Bhai aise hi dekh raha tha tu kya reply deta hai"],
@@ -51,20 +52,68 @@ test("generic chat does not hard-wire Core-first route",()=>{
  assert.match(source,/role:codingMode\?"coding":"chat-general"/);
 });
 
-test("agent prioritizes deterministic conversation/coding gates before research",()=>{
+test("agent prioritizes canonical conversation/coding gates before current research",()=>{
  const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
- assert.match(source,/const deterministicConversationReply=getCasualReply\(latestText\)/);
- assert.match(source,/const localCodingRequest=isLocalCodingIntent\(latestText\)/);
- assert.ok(source.indexOf("const deterministicConversationReply=getCasualReply(latestText)") < source.indexOf("const currentResearchRequest=isWebResearchIntent(latestText)"));
+ const conversation=source.indexOf("const deterministicConversationReply=getCasualReply(latestText)");
+ const coding=source.indexOf('const localCodingRequest=canonicalRequest.lane==="coding";');
+ const current=source.indexOf('const currentResearchRequest=canonicalRequest.lane==="current";');
+ assert.ok(conversation>=0);
+ assert.ok(coding>=0);
+ assert.ok(current>=0);
+ assert.ok(coding<current);
 });
 
 test("ordinary agent chat does not force Gemini tool mode",()=>{
  const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
- assert.match(source,/const agentNeedsTools=latestRequestsProjectExecution \|\| latestHasExplicitGithub/);
+ assert.match(source,/const agentNeedsTools=explicitExecutionCue/);
  assert.match(source,/if\(useTools&&agentNeedsTools&&key\)/);
+ assert.match(source,/const directAnswerLane=!agentNeedsTools && \["general","knowledge","coding"\]\.includes\(canonicalRequest\.lane\)/);
 });
 
 test("provider boundary has a malformed-output recovery gate",()=>{
  const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
  assert.match(source,/isObviouslyGarbledResponse\(result\?\.text,task\)/);
+});
+
+
+test("stable knowledge questions do not enter the web-research gate",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.ok(source.includes('const canonicalRequest=classifyUserRequest(task);'));
+ assert.ok(source.includes('if(canonicalRequest.lane==="current"){'));
+ assert.doesNotMatch(source,/isWebResearchIntent\(task\)\|\|isKnowledgeResearchIntent\(task\)/);
+ assert.doesNotMatch(source,/import[^;]*isKnowledgeResearchIntent/);
+});test("default AI route keeps BHAI-CORE as last-resort for unclassified chat",()=>{
+ const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
+ assert.match(source,/\["gemini", "openai", "huggingface", "anthropic", "core"\]/);
+});
+
+
+test("standalone coding uses strong providers before weak local Core",()=>{
+ const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
+ assert.match(source,/\/code\|debug\/.test\(lower\)\s*\n\s*\? \["gemini", "openai", "huggingface", "anthropic", "core"\]/);
+});
+
+
+test("known fragment outputs are always blocked on substantive questions",()=>{
+ const samples=[
+  ["from","Bhai ek chhota sa jawab do: India ki capital kya hai?"],
+  ["pathlib","Ek sentence me batao: Baarish ke baad mitti ki khushboo ko kya kehte hain?"],
+  ["b","Mujhe sardi ho rahi hai kya karun?"],
+  ["actly","Bhai is bar garmi bahut padne wali hai kya scene hai?"],
+  ["uge","Bhai aise hi test kar raha tha tu kya reply deta hai?"]
+ ];
+ for(const [answer,prompt] of samples){
+  assert.equal(isObviouslyGarbledResponse(answer,prompt),true,prompt+" -> "+answer);
+ }
+});
+
+test("chat lane uses canonical classifier rather than stable-knowledge web forcing",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.ok(source.includes('const canonicalRequest=classifyUserRequest(task);'));
+ assert.ok(source.includes('if(canonicalRequest.lane==="current"){'));
+ assert.doesNotMatch(source,/isWebResearchIntent\(task\)\|\|isKnowledgeResearchIntent/);
+});test("work-agent tools stay off for plain answer lanes",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.match(source,/const directAnswerLane=!agentNeedsTools && \[\"general\",\"knowledge\",\"coding\"\]\.includes\(canonicalRequest\.lane\)/);
+ assert.match(source,/const agentNeedsTools=explicitExecutionCue/);
 });

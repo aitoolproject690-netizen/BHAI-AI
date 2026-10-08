@@ -660,7 +660,11 @@ export default async function handler(req,res){
  const {messages=[]}=req.body||{},activity=[];
   // Automatic execution: no user-facing DO IT switch is required.
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
- const canonicalRequest=classifyUserRequest(latestUserMessage); if(serverCasual){
+ const canonicalRequest=classifyUserRequest(latestUserMessage);
+ const normalizedCasual=normalizeIntent(latestUserMessage);
+ const conversationalReply=getCasualReply(latestUserMessage);
+ const serverCasual=isCasualIntent(latestUserMessage);
+ if(serverCasual){
   const casualReplies={
    "kya chal raha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
    "kya chal raha hai":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",

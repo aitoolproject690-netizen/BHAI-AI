@@ -11,7 +11,7 @@ import GeneratorPanel from'./GeneratorPanel.jsx';
 import SystemPanel from'./SystemPanel.jsx';
 import ResellerPanel from'./ResellerPanel.jsx';
 import ProjectBrainPanel from'./ProjectBrainPanel.jsx';
-import {normalizeIntent,isCasualIntent,detectMediaIntent,isStoryScriptIntent,isGeneralChatIntent,isLocalCodingIntent,isWebResearchIntent} from './intentRouter.js';
+import {normalizeIntent,isCasualIntent,detectMediaIntent,isStoryScriptIntent,isCharacterCreationIntent,isGeneralChatIntent,isLocalCodingIntent,isWebResearchIntent} from './intentRouter.js';
 import {apiUrl,readJsonResponse,requestJson} from './apiClient.js';
 
 const authToken=()=>localStorage.getItem('bhai_user_session')||sessionStorage.getItem('bhai_user_session')||'';
@@ -160,7 +160,8 @@ function App(){
   const githubMutationRequest=/\b(?:fix|repair|update|modify|change|write|commit|push|delete|create|build|deploy|publish)\b/i.test(userIntentText);
   const githubReadIntent=/\b(?:check|inspect|read|open|verify|dekh|dekho)\b/i.test(userIntentText);
   const directGithubRead=Boolean(explicitGithubRepo&&githubReadIntent&&!githubMutationRequest&&(githubFilePath||/\b(?:repo|repository)\b/i.test(userIntentText)));
-  const storyScriptMessage=!instantMessage&&!mediaMessage&&!directGithubRead&&!webResearchMessage&&isStoryScriptIntent(userIntentText);
+  const characterCreationMessage=!instantMessage&&!mediaMessage&&!directGithubRead&&!webResearchMessage&&isCharacterCreationIntent(userIntentText);
+  const storyScriptMessage=!instantMessage&&!mediaMessage&&!directGithubRead&&!characterCreationMessage&&!webResearchMessage&&isStoryScriptIntent(userIntentText);
   const generalChatMessage=!instantMessage&&!mediaMessage&&!directGithubRead&&!storyScriptMessage&&!webResearchMessage&&(isGeneralChatIntent(userIntentText)||isLocalCodingIntent(userIntentText));
   if(instantMessage){
    const id=crypto.randomUUID();
@@ -198,6 +199,20 @@ function App(){
     setActivity(a=>a.map(x=>({...x,state:x.state==='running'?'failed':x.state})));
     upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ GitHub check failed\\n\\n'+e.message}:x));
    }finally{setRunning(false)}
+   return;
+  }
+  if(characterCreationMessage){
+   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
+   const id=crypto.randomUUID(),replyId=id+'-character-reply';
+   upd(m=>[...m,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'🎭 BHAI X permanent character identity bana raha hai...'}]);
+   setActivity([{id:id+'0',step:'Identity',text:'🧠 Character ki permanent visual identity design ho rahi hai...',state:'running'},{id:id+'1',step:'Lock',text:'🔒 Face, hair, eyes, body aur clothing identity lock hogi...',state:'pending'},{id:id+'2',step:'Verify',text:'✅ Permanent character ID aur identity fingerprint validate hoga...',state:'pending'}]);
+   try{
+    const rr=await fetch(apiUrl('/api/characters'),{method:'POST',headers:authHeaders(),body:JSON.stringify({name:t.slice(0,120),description:userIntentText,visualStyle:'3D anime cinematic cartoon'})});
+    const d=await rr.json().catch(()=>({}));if(!rr.ok||d.error)throw new Error(d.error||('Character backend HTTP '+rr.status));
+    const c=d.character||{};const identity=c.identity_json||{};setActivity(a=>a.map(x=>({...x,state:'done'})));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'## 🎭 Permanent Character Ready\n\n**'+(c.name||identity.name||'Character')+'**\n\n**Character ID:** `'+(c.character_id||'—')+'`\n\n**Identity fingerprint:** `'+(c.identity_fingerprint||'—')+'`\n\n**Face:** '+(identity.face||'—')+'\n\n**Hair:** '+(identity.hair||'—')+'\n\n**Clothing:** '+(identity.clothing||'—')+'\n\n**Visual style:** '+(identity.visualStyle||'3D anime cinematic cartoon')+'\n\n🔒 Ye identity future image/video/voice/lip-sync stages ke liye canonical rahegi.'}:x));
+   }catch(e){setActivity(a=>a.map(x=>({...x,state:'failed'})));upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ CHARACTER ENGINE ERROR\n\n'+e.message+'\n\nIncomplete identity ko BHAI X ne DONE nahi maana.'}:x));}
+   finally{setRunning(false);clearInterval(workTicker.current);workTicker.current=null;}
    return;
   }
   if(storyScriptMessage){

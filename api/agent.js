@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { ownerState, ownerReady } from "./owner.js";
 import { getDb } from "./db.js";
-import { getSession } from "./accounts.js";
+import { getSession,getAccountById } from "./accounts.js";
+import { isInternalRequest } from "./internalAuth.js";
 import { resolveGithubTarget, extractGithubRepoReference, classifyEngineeringError, createRetryGuard, createEvidence, createRecoveryStateMachine, createMissionController } from "./engineeringCore.js";
 import { generateWithRouter, generateVerifiedAnswer, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
@@ -620,7 +621,7 @@ export default async function handler(req,res){
  await ownerReady;
  const db=await getDb();
  if(!db) return json(res,503,{error:"DATABASE_URL is required"});
- const account=await getSession(req,db);
+ const account=isInternalRequest(req) ? await getAccountById(req.headers["x-bhai-account-id"],db) : await getSession(req,db);
  if(!account) return json(res,401,{error:"Login required. Open Account and login before using BHAI X Agent."});
  const control=ownerState();
  if(control.serverMode==="maintenance") return json(res,503,{error:"BHAI X is in owner maintenance mode.",maintenance:true});

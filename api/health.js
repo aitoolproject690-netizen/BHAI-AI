@@ -3,6 +3,7 @@ import { isCasualIntent, getCasualReply } from "../src/intentRouter.js";
 import { rendererSupports } from "../src/videoRenderer.js";
 import { youtubeConfigured } from "./youtube.js";
 import { buildBrainPlan } from "./brainOrchestrator.js";
+import { jobRunnerStatus } from "./jobRunner.js";
 
 function runBrainSelfCheck(){
   const autonomous=buildBrainPlan({task:"story bana kar final video YouTube ke liye ready karo",messages:[]});
@@ -89,6 +90,7 @@ export default async function handler(req,res){
   const conversationRouting=runConversationRoutingSelfCheck();
   const brainRouting=runBrainSelfCheck();
   const videoRenderer=rendererSupports();
+  const jobRunner=jobRunnerStatus();
   const youtubePublisher={configured:youtubeConfigured(),oauthRequired:true};
   return res.status(200).json({
     ok:true,
@@ -101,7 +103,7 @@ export default async function handler(req,res){
     medicalSafety,
     conversationRouting,
     brainRouting,
-    videoRenderer,youtubePublisher,
+    videoRenderer,youtubePublisher,jobRunner,
     deployment:{verified,commit,branch,url,status:verified?"live":"unknown"},
     time:new Date().toISOString()
   });

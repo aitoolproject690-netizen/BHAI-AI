@@ -453,13 +453,64 @@ function App(){
     try{const cp=await fetch(apiUrl('/api/system'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'checkpoint',goal,state:{missionId:m.id,steps:m.steps.map(s=>({id:s.id,name:s.name,state:s.state})),messages:next.slice(-6)}})}).then(x=>x.json()); if(cp?.checkpoint){localStorage.setItem('bhai_x_checkpoint',JSON.stringify(cp.checkpoint));setResumeMission(cp.checkpoint)}}catch{}
     let dnaMission='';try{const dr=await fetch(apiUrl('/api/dna?project=default'),{headers:authHeaders()}).then(x=>x.json());dnaMission=JSON.stringify(dr.data||{}).slice(0,5000)}catch{}
     const execMessages=[...next,{id:crypto.randomUUID(),role:'user',text:'MISSION EXECUTION: Ab compiled mission ko end-to-end execute karo. Required files/code changes/build/test/deploy jo possible ho actual tools se karo. Har step verify karo; kaam complete hone tak execute karo. Agar execution interrupt ho to last checkpoint se resume karne ke liye state preserve karo.'},{id:crypto.randomUUID(),role:'user',text:'RECOVERY CHECKPOINT: '+JSON.stringify(m.steps)+'\\nPROJECT DNA: '+dnaMission}];
-    const missionToken=account?.session||localStorage.getItem("bhai_user_session")||sessionStorage.getItem("bhai_user_session")||"";
-    const missionHeaders={"Content-Type":"application/json"}; if(missionToken)missionHeaders.Authorization="Bearer "+missionToken;
-    const controller=new AbortController(); const missionTimeout=setTimeout(()=>controller.abort(),300000);
-    let er; try{er=await fetch(apiUrl('/api/mission'),{method:'POST',headers:missionHeaders,body:JSON.stringify({task:goal,projectName:m.goal||'BHAI-App',platform:'android',branch:'main',doIt:true,maxFixes:2,autoDeploy:true}),signal:controller.signal});}finally{clearTimeout(missionTimeout)}
-    const ed=await readJsonResponse(er,'/api/mission');
-    upd(msgs=>[...msgs,{id:crypto.randomUUID(),role:'assistant',text:ed.text||('⚠️ '+(ed.error||'Mission execution failed')),images:ed.images||[]}]);
-    try{await fetch(apiUrl('/api/diff'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:'mission',summary:goal,files:(ed.activity||[]).map(x=>x.tool||'mission-step'),commit:ed.commit||null,verification:ed.verified||ed.verification||null})})}catch{}
+    const missionHeaders=authHeaders();
+    let jobId="";
+    let ed=null;
+    try{
+     const jr=await fetch(apiUrl('/api/jobs'),{
+      method:'POST',
+      headers:missionHeaders,
+      body:JSON.stringify({
+       type:'mission',
+       goal:goal,
+       payload:{
+        task:goal,
+        projectName:m.goal||'BHAI-App',
+        platform:'android',
+        branch:'main',
+        doIt:true,
+        maxFixes:2,
+        autoDeploy:true
+       },
+       maxAttempts:3
+      })
+     });
+     const jd=await readJsonResponse(jr,'/api/jobs');
+     if(!jr.ok||!jd?.job?.id)throw new Error(jd?.error||'Mission job could not be queued.');
+     jobId=jd.job.id;
+     localStorage.setItem('bhai_x_checkpoint',JSON.stringify({...m,jobId,goal,state:{steps:m.steps},messages:next.slice(-6)}));
+     setActivity([
+      {id:crypto.randomUUID(),step:'Queue',text:'🎯 Mission job queued: '+jobId.slice(0,8),state:'done'},
+      {id:crypto.randomUUID(),step:'Execution',text:'⚙️ Background worker mission execute kar raha hai...',state:'running'},
+      {id:crypto.randomUUID(),step:'Verification',text:'🛡️ Completion proof ka wait ho raha hai...',state:'pending'}
+     ]);
+     for(let i=0;i<720;i++){
+      await new Promise(r=>setTimeout(r,1000));
+      const sr=await fetch(apiUrl('/api/jobs?id='+encodeURIComponent(jobId)),{headers:missionHeaders});
+      const sd=await readJsonResponse(sr,'/api/jobs');
+      if(!sr.ok)throw new Error(sd?.error||'Mission job status request failed.');
+      const j=sd.job||{};
+      if(Array.isArray(j.events)&&j.events.length){
+       setActivity(j.events.slice(-8).map(ev=>({
+        id:crypto.randomUUID(),
+        step:String(ev.state||'running').toUpperCase(),
+        text:String(ev.message||ev.error||''),
+        state:ev.state==='completed'?'done':ev.state==='failed'||ev.state==='cancelled'?'failed':'running'
+       })));
+      }
+      if(['completed','failed','cancelled'].includes(j.status)){
+       if(j.status!=='completed')throw new Error(j.error||'Mission job ended in '+j.status+'.');
+       ed=j.result||{};
+       setActivity(a=>a.map(x=>x.state==='failed'?x:{...x,state:'done'}));
+       break;
+      }
+     }
+     if(!ed)throw new Error('Mission job did not finish within the bounded 12-minute UI wait window.');
+    }catch(e){
+     ed={ok:false,error:String(e?.message||e),verified:false,activity:[{tool:'job-runner',state:'failed',details:String(e?.message||e)}]};
+     throw e;
+    }
+        try{await fetch(apiUrl('/api/diff'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:'mission',summary:goal,files:(ed.activity||[]).map(x=>x.tool||'mission-step'),commit:ed.commit||null,verification:ed.verified||ed.verification||null})})}catch{}
     try{await fetch(apiUrl('/api/dna'),{method:'POST',headers:authHeaders(),body:JSON.stringify({project:'default',data:{lastMission:goal,lastMissionResult:String(ed.text||'').slice(0,2500),lastMissionVerified:ed.verified||ed.verification||null,lastUpdated:new Date().toISOString()}})})}catch{}
     if(ed.verified===true||/verified|successfully completed|all steps complete/i.test(String(ed.text||''))){localStorage.removeItem('bhai_x_checkpoint');setResumeMission(null)}
     if(Array.isArray(ed.activity)&&ed.activity.length)setActivity(ed.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Mission',text:x.state||'done',state:x.state||'done'})));

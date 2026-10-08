@@ -3,8 +3,8 @@ export const AUTONOMOUS_PRODUCTION_SCHEMA_VERSION="1.0";
 const clean=(v,n=12000)=>String(v??"").trim().slice(0,n);
 const clamp=(v,min,max,fb)=>{const n=Number(v);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):fb;};
 
-const FULL_PIPELINE=/(?:end[- ]to[- ]end|end to end|autonomous|full pipeline|pooras+pipeline|pooras+video|completes+episode|episodes+bana|story.*(?:video|youtube)|youtube.*(?:video|upload|publish)|publish.*final|final.*publish|story.*se.*youtube|story.*to.*youtube)/i;
-const YOUTUBE=/(?:youtube|publish|uploads+(?:the|this|final)?s*video|final.*(?:publish|upload)|video.*youtube)/i;
+const FULL_PIPELINE=/(?:end[- ]to[- ]end|end to end|autonomous|full pipeline|poora[- ]pipeline|poora[- ]video|complete[- ]episode|episode[- ]bana|story.*(?:video|youtube)|youtube.*(?:video|upload|publish)|publish.*final|final.*publish|story.*se.*youtube|story.*to.*youtube)/i;
+const YOUTUBE=/(?:youtube|publish|upload(?: (?:the|this|final))? ?video|final.*(?:publish|upload)|video.*youtube)/i;
 
 export function isAutonomousProductionRequest(text=""){
  const raw=String(text||"").trim();
@@ -28,7 +28,7 @@ export function normalizeAutonomousRequest(input={}){
  });
  return {
   schemaVersion:AUTONOMOUS_PRODUCTION_SCHEMA_VERSION,
-  prompt:story.prompt,story,
+  prompt:story.prompt,story,durationSeconds:story.durationSeconds,
   autoPublish:Boolean(input.autoPublish||isYouTubePublishRequest(prompt)),
   privacy:["public","unlisted","private"].includes(input.privacy)?input.privacy:(/\bpublic\b/i.test(prompt)?"public":/\bunlisted\b/i.test(prompt)?"unlisted":"private"),
   render:Boolean(input.render!==false),

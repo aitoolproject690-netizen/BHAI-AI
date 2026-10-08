@@ -2,6 +2,25 @@ import { isMedicalIntent, getMedicalRiskSignals, sanitizeMedicalResponse } from 
 import { isCasualIntent, getCasualReply } from "../src/intentRouter.js";
 import { rendererSupports } from "../src/videoRenderer.js";
 import { youtubeConfigured } from "./youtube.js";
+import { buildBrainPlan } from "./brainOrchestrator.js";
+
+function runBrainSelfCheck(){
+  const autonomous=buildBrainPlan({task:"story bana kar final video YouTube ke liye ready karo",messages:[]});
+  const followup=buildBrainPlan({task:"ab deploy kar do",messages:[
+    {role:"user",text:"GitHub repo check karo"},
+    {role:"assistant",text:"Repo inspect ho gaya."}
+  ]});
+  return {
+    ok:autonomous.mode==="autonomous_production" &&
+      autonomous.signals.proofRequired===true &&
+      autonomous.tools.includes("render") &&
+      followup.context.mode==="contextual_followup" &&
+      followup.context.isolated===false,
+    autonomousMode:autonomous.mode,
+    autonomousTools:autonomous.tools,
+    followupMode:followup.context.mode
+  };
+}
 
 function runConversationRoutingSelfCheck(){
   const task="Bhai aise hi test kar rha tha kya reply deta hai tu 😅";
@@ -68,6 +87,7 @@ export default async function handler(req,res){
   const verified=Boolean(commit&&branch&&url);
   const medicalSafety=runMedicalSafetySelfCheck();
   const conversationRouting=runConversationRoutingSelfCheck();
+  const brainRouting=runBrainSelfCheck();
   const videoRenderer=rendererSupports();
   const youtubePublisher={configured:youtubeConfigured(),oauthRequired:true};
   return res.status(200).json({
@@ -80,6 +100,7 @@ export default async function handler(req,res){
     provider:"gemini",
     medicalSafety,
     conversationRouting,
+    brainRouting,
     videoRenderer,youtubePublisher,
     deployment:{verified,commit,branch,url,status:verified?"live":"unknown"},
     time:new Date().toISOString()

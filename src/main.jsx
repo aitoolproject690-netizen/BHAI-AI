@@ -266,7 +266,7 @@ function App(){
     const rr=await fetch(apiUrl('/api/media'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:mediaIntent.type,prompt:userIntentText,aspectRatio:'16:9',duration:5,imageToVideo:mediaIntent.imageToVideo})});
     const d=await rr.json().catch(()=>({}));
     if(!rr.ok||d.error)throw new Error(d.error||('Media backend HTTP '+rr.status));
-    setActivity(a=>a.map(x=>x.id===id+'1'||x.id===id+'2'?{...x,state:'done'}:x));
+    setActivity(a=>{const base=a.map(x=>({...x,state:'done'}));if(d.character)return [...base,{id:id+'3',step:'Character ID',text:'🎭 '+(d.character.name||'Character')+' linked to '+(d.character.characterId||'permanent identity')+' · 🔒 identity contract verified.',state:'done'}];return base;});
     if(d.usage)setUsage(d.usage);
     upd(m=>m.map(x=>x.id===id+'-media-reply'?{...x,text:d.text||'✅ Media ready.',images:d.images||[]}:x));
    }catch(e){
@@ -422,7 +422,7 @@ function App(){
        {m.role==='assistant'&&<div className="assistantLabel"><div className="miniLogo">B</div><b>BHAI X</b></div>}
        <div className="messageText">{renderText(m.text,v=>copyText(v,'code-'+m.id))}</div>
        {m.role==='assistant'&&m.providerMeta&&<div style={{marginTop:8,fontSize:11,opacity:.72,display:'flex',gap:6,flexWrap:'wrap'}}><span>🔌 Route: <b>{m.providerMeta.provider==='core'?'BHAI-CORE':m.providerMeta.provider}</b></span>{m.providerMeta.backend_provider&&<span>→ Backend: <b>{m.providerMeta.backend_provider}</b></span>}{m.providerMeta.model&&<span>· Model: <b>{m.providerMeta.model}</b></span>}</div>}
-       {m.images?.map((im,i)=>{const src='data:'+im.mimeType+';base64,'+im.data;return <div className="generatedWrap" key={i}>{im.video?<video className="generatedImage" src={src} controls playsInline/>:<img className="generatedImage" src={src}/>}<a className="downloadBtn" href={src} download={im.video?'bhai-x-video-'+(i+1)+'.mp4':'bhai-x-image-'+(i+1)+'.png'}><Download size={14}/> Download</a></div>})}
+       {m.images?.map((im,i)=>{const src='data:'+im.mimeType+';base64,'+im.data;return <div className="generatedWrap" key={i}>{im.video?<video className="generatedImage" src={src} controls playsInline/>:<img className="generatedImage" src={src}/>} {im.characterId&&<div className="mediaIdentityMeta">🎭 <b>{im.characterId}</b>{im.identityFingerprint&&<> · 🔒 <code>{im.identityFingerprint}</code></>}{im.verificationMode&&<> · ✅ {im.verificationMode}</>}</div>}<a className="downloadBtn" href={src} download={im.video?'bhai-x-video-'+(i+1)+'.mp4':'bhai-x-image-'+(i+1)+'.png'}><Download size={14}/> Download</a></div>})}
        {m.role==='assistant'&&!running&&<div className="messageActions"><button onClick={()=>copyText(m.text,m.id)}>{copied===m.id?<Check size={13}/>:<Copy size={13}/>} {copied===m.id?'Copied':'Copy'}</button></div>}
       </div>
     </div>)}

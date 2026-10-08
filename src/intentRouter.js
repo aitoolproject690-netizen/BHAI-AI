@@ -22,6 +22,22 @@ const CREATE_WORDS = /\b(?:generate|create|make|draw|design|render|visualize|pro
 const INSULT_WORDS = /\b(?:chutiya|chutiye|bewakoof|bewkoof|gadha|gadhi|pagal|kamine|kamina|nalayak|ullu|saala|sala)\b/i;
 const MEDICAL_WORDS = /\b(?:sardi|shardi|cold|runny nose|naak se pani|naak bah|khansi|cough|bukhar|fever|dard|pain|headache|medicine|dawai|dava|doctor|hospital|symptom|tabiyat|health|sehat|pregnan|baby|baccha|infant|vomit|diarrhea|dast|blood|bleeding|saans|breathing|chest|seene|allergy|rash|swelling|infection|thakan|weakness|chakkar|dizziness|bp|blood pressure|sugar|diabetes|nutrition|diet|fiber|fibre|vitamin|protein|supplement|constipation)\b/i;
 
+// Natural conversational phrases that are clearly social/check-in chatter,
+// not a request to search, code, execute, or generate media.
+const CONVERSATION_KEYS = [
+  /\b(?:bas|aise|waise)\s+hi\b.{0,80}\b(?:test|check|try|dekh|dekhta|dekhna)\b/i,
+  /\b(?:test|check|try)\s+(?:kar|kr)\s+(?:raha|rha|rahi|rhi)\b.{0,80}\b(?:reply|jawab|response)\b/i,
+  /\b(?:kya|kaisa)\s+(?:reply|jawab|response)\s+(?:dega|deta|deti|aayega|aata|milega|milta)\b/i,
+  /\b(?:mazak|mazaak|masti|timepass)\b.{0,50}(?:kar|tha|thi|hai|hoon|hun)?\b/i,
+  /\b(?:sun bhai|bhai sun|oye bhai|arre bhai)\b/i,
+  /\b(?:haan bhai|han bhai|nahi bhai|nahin bhai|bas bhai|acha bhai|accha bhai)\b/i,
+  /\b(?:ready ho|online ho|jag rahe ho|zinda ho|free ho)\b/i
+];
+
+function hasClearWorkCue(text=""){
+  return /\b(?:github|git\s*hub|repo(?:sitory)?|code|coding|python|javascript|typescript|bug|error|debug|fix|deploy|build|commit|push|pull\s+request|app|project|website|apk|image|picture|photo|video|clip|animation|generate|create|draw|design|render|medical|medicine|dawai|doctor|symptom|fever|cough|pain|blood|bp|research|search|latest|current|today|news|price|weather)\b/i.test(String(text||""));
+}
+
 export function normalizeIntent(text="") {
   return String(text)
     .toLowerCase()

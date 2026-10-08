@@ -53,3 +53,10 @@ test("checkpoint survives recovery history snapshot",async()=>{
  const h=buildHistoryRecord(job);
  assert.equal(h.checkpoint.phase,"build"); assert.equal(h.checkpoint.tool,"github-actions"); assert.equal(h.checkpoint.progress,42); assert.equal(h.recovery.checkpoint.phase,"build");
 });
+
+
+test("brain plan becomes persisted executable step state",async()=>{
+ const {buildHistoryRecord}=await import("../api/jobRunner.js");
+ const job={id:"step-job",owner:"o",type:"mission",goal:"ship",status:"failed",attempts:1,maxAttempts:3,progress:55,checkpoint:{phase:"execution",tool:"github",progress:55,message:"Running github",stepIndex:1,steps:[{index:0,tool:"preflight",status:"completed"},{index:1,tool:"github",status:"running"},{index:2,tool:"verify",status:"planned"}]},payload:{brainPlan:{tools:["preflight","github","verify"]}},events:[]};
+ const h=buildHistoryRecord(job); assert.equal(h.checkpoint.steps[1].status,"running"); assert.equal(h.checkpoint.steps[0].status,"completed"); assert.equal(h.checkpoint.steps[2].status,"planned");
+});

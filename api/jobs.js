@@ -1,4 +1,5 @@
 import {requireSession} from "./_utils.js";
+import {buildBrainPlan} from "./brainOrchestrator.js";
 import {cancelJob,createJob,getJobForOwner,listHistoryForOwner,listJobsForOwner,resumeJob} from "./jobRunner.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
@@ -14,7 +15,8 @@ export default async function handler(req,res){
   const goal=String(body.goal||payload.goal||payload.task||"").trim();
   if((type==="agent"||type==="mission")&&!goal)return json(res,400,{ok:false,error:"goal is required for "+type+" jobs."});
   if(type==="health"&&!String(payload.url||"").trim())return json(res,400,{ok:false,error:"payload.url is required for health jobs."});
-  const job=await createJob({account,type,payload,goal,maxAttempts:body.maxAttempts,runAt:body.runAt});
+  const brainPlan=(type==="agent"||type==="mission")?buildBrainPlan({task:goal||payload?.goal||"",messages:Array.isArray(payload?.messages)?payload.messages:[]}):null;
+   const job=await createJob({account,type,payload:{...payload,...(brainPlan?{brainPlan}: {})},goal,maxAttempts:body.maxAttempts,runAt:body.runAt});
   return json(res,202,{ok:true,job});
  }
  if(req.method==="GET"){

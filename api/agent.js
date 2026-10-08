@@ -10,7 +10,7 @@ import { generateWithRouter, generateVerifiedAnswer, reviewWithMultiAI, getConfi
 import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpleColdQuestion } from "../src/medicalSafety.js";
-import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent,isGeneralChatIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
 import { webSearch, filterResearchSources } from "../src/webSearch.js";
@@ -1104,12 +1104,13 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
    }
    if(lastError)throw lastError;
   }
+  const generalConversation=isGeneralChatIntent(latestText);
   let routed=await generateWithRouter({
    task:latestText,
    system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
    messages:chatMessages,
-   preferred:"core",
-   role:"engineering",
+   preferred:generalConversation?"":"core",
+   role:generalConversation?"chat-general":"engineering",
    fallback:true
   });
 
@@ -1126,7 +1127,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
       system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
       messages:chatMessages,
       preferred:provider,
-      role:"engineering",
+      role:generalConversation?"chat-general":"engineering",
       exclude:[routed?.provider||"core"],
       fallback:true
      });

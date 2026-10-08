@@ -8,12 +8,16 @@ const EXPLANATORY_TASK=/\b(?:batao|samjhao|explain|describe|kaise|kyu|kyon|why|h
 const WORD_ONLY=/^[\p{L}\p{N}_-]{1,48}$/u;
 const REPEATED_PUNCT=/[A-Za-z\p{L}\p{N}]{3,}[\/\\|_~]{3,}/u;
 const STANDALONE_FRAGMENT=/^(?:from|the|and|or|of|to|a|an|is|are|was|were|be|been|being)$/i;
+const CONVERSATIONAL_TASK=/\b(?:hello|hi|hey|namaste|salam|kaise ho|kya haal|kya scene|bas|aise hi|waise hi|test|check|reply|jawab|response|baat|sun bhai|bhai sun|mazak|mazaak|masti|timepass|random|sirf|just)\b/i;
+const ACCEPTABLE_SHORT_REPLIES=new Set(["yes","no","haan","han","nahi","nahin","ok","okay","theek","thik","badhiya","mast","hello","hi","hey","thanks","thank","done"]);
 
 function isLikelyOneTokenNonAnswer(value,task){
   if(!WORD_ONLY.test(value)) return false;
   const taskText=String(task??"").trim();
   if(!taskText) return false;
-  return EXPLANATORY_TASK.test(taskText);
+  if(EXPLANATORY_TASK.test(taskText)) return true;
+  const wordCount=taskText.split(/\s+/).filter(Boolean).length;
+  return wordCount>=4 && CONVERSATIONAL_TASK.test(taskText) && !ACCEPTABLE_SHORT_REPLIES.has(value.toLowerCase());
 }
 
 export function isObviouslyGarbledResponse(text="",task=""){
@@ -26,7 +30,7 @@ export function isObviouslyGarbledResponse(text="",task=""){
   if(hasCyrillic&&!taskHasCyrillic&&!/[\u0900-\u097F]/u.test(taskText)) return true;
   if(KNOWN_GARBLED.test(value)) return true;
   if(REPEATED_PUNCT.test(value)) return true;
-  if(STANDALONE_FRAGMENT.test(value)&&String(taskText).trim().split(/\s+/).filter(Boolean).length>=2) return true;
+  if(STANDALONE_FRAGMENT.test(value)&&taskText.split(/\s+/).filter(Boolean).length>=2) return true;
   if(isLikelyOneTokenNonAnswer(value,taskText)) return true;
   return false;
 }

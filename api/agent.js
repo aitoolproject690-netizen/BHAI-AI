@@ -1118,7 +1118,8 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
    fallback:true
   });
 
-  // BHAI-CORE is the first local lane, but malformed/nonsense output must never reach the user.
+  // Central router quality fallback handles malformed output from any provider;
+  // this endpoint guard covers stale/legacy execution paths too.
   if(isObviouslyGarbledResponse(routed?.text,latestText)){
    const alternateIds=getConfiguredAIProviders()
     .filter(id=>id!==routed?.provider)

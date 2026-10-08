@@ -1,43 +1,64 @@
-import crypto from "node:crypto";
 import {requireSession} from "./_utils.js";
-import {getDb,initDb} from "./db.js";
-const memory=new Map();
-let ready=null;
-const boot=()=>ready||(ready=initDb().catch(()=>false));
-const now=()=>new Date().toISOString();
-async function save(job){
- const db=await getDb();
- if(db)await db.query("INSERT INTO bhai_jobs(id,data,updated_at) VALUES($1,$2,NOW()) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",[job.id,job]);
- else memory.set(job.id,job);
- return !!db;
-}
-const ownerKey=(account)=>String(account?.id||account?.email||"").slice(0,300);
-async function get(id,account){
- const db=await getDb();
- if(db){const r=await db.query("SELECT data FROM bhai_jobs WHERE id=$1",[id]);const job=r.rows[0]?.data;return job&&job.owner===ownerKey(account)?job:undefined;}
- const job=memory.get(id);return job&&job.owner===ownerKey(account)?job:undefined;
-}
+import {cancelJob,createJob,getJobForOwner,listJobsForOwner} from "./jobRunner.js";
+
+const json=(res,status,data)=>res.status(status).json(data);
+
 export default async function handler(req,res){
- const account=await requireSession(req,res); if(!account)return;
- await boot();
- const owner=ownerKey(account);
  if(req.method==="POST"){
-  const body=req.body||{}, id=crypto.randomUUID();
-  const job={id,owner,type:String(body.type||"general"),payload:body.payload||{},status:"queued",attempts:0,createdAt:now(),updatedAt:now()};
-  const persistent=await save(job);
-  return res.status(202).json({...job,persistent});
+  const account=await requireSession(req,res);if(!account)return;
+  const body=req.body||{};
+  const type=String(body.type||"agent").toLowerCase();
+  const allowed=["agent","mission","health","build","deploy"];
+  if(!allowed.includes(type))return json(res,400,{ok:false,error:"Unsupported job type. Allowed: "+allowed.join(", ")+"."});
+  const payload=body.payload&&typeof body.payload==="object"?body.payload:{};
+  const goal=String(body.goal||payload.goal||payload.task||"").trim();
+  if((type==="agent"||type==="mission")&&!goal)return json(res,400,{ok:false,error:"goal is required for "+type+" jobs."});
+  if(type==="health"&&!String(payload.url||"").trim())return json(res,400,{ok:false,error:"payload.url is required for health jobs."});
+  const job=await createJob({account,type,payload,goal,maxAttempts:body.maxAttempts,runAt:body.runAt});
+  return json(res,202,{ok:true,job});
  }
  if(req.method==="GET"){
-  const id=req.query?.id;
-  if(!id)return res.status(400).json({error:"id is required"});
-  const job=await get(id,account);
-  return res.status(200).json(job||{id,status:"unknown"});
+  const account=await requireSession(req,res);if(!account)return;
+  const id=String(req.query?.id||"").trim();
+  if(!id){
+   return json(res,200,{ok:true,jobs:await listJobsForOwner(account,{limit:req.query?.limit}),persistent:true});
+  }
+  const job=await getJobForOwner(id,account);
+  if(!job)return json(res,404,{ok:false,error:"Job not found"});
+  if(req.query?.stream==="1"){
+   res.statusCode=200;
+   res.setHeader("Content-Type","text/event-stream; charset=utf-8");
+   res.setHeader("Cache-Control","no-cache");
+   res.setHeader("Connection","keep-alive");
+   let last="";
+   for(let i=0;i<60;i++){
+    const current=await getJobForOwner(id,account);
+    if(!current)break;
+    const signature=String(current.updatedAt||current.progress)+"|"+String(current.status)+"|"+String(current.events?.length||0);
+    if(signature!==last){
+     last=signature;
+     res.write("event: job\n");
+     res.write("data: "+JSON.stringify(current)+"\n\n");
+    }
+    if(["completed","failed","cancelled"].includes(current.status))break;
+    await new Promise(r=>setTimeout(r,1000));
+   }
+   res.end();
+   return;
+  }
+  return json(res,200,{ok:true,job});
  }
  if(req.method==="PATCH"){
-  const id=String(req.body?.id||""); if(!id)return res.status(400).json({error:"id is required"});
-  const current=await get(id,account); if(!current)return res.status(404).json({error:"job not found"});
-  const job={...current,...(req.body?.patch||{}),id,owner,updatedAt:now()};
-  const persistent=await save(job); return res.status(200).json({ok:true,job,persistent});
+  const account=await requireSession(req,res);if(!account)return;
+  const id=String(req.body?.id||"").trim();
+  if(!id)return json(res,400,{ok:false,error:"id is required"});
+  if(req.body?.action==="cancel"){
+   try{
+    const job=await cancelJob(id,account);
+    return job?json(res,200,{ok:true,job}):json(res,404,{ok:false,error:"Job not found"});
+   }catch(e){return json(res,409,{ok:false,error:String(e?.message||e)})}
+  }
+  return json(res,400,{ok:false,error:"Only action=cancel is supported. Job state is worker-controlled."});
  }
- return res.status(405).json({error:"Method not allowed"});
+ return json(res,405,{ok:false,error:"Method not allowed"});
 }

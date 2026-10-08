@@ -294,6 +294,19 @@ function App(){
     d=await requestJson('/api/agent',{method:'POST',headers:agentHeaders,body:JSON.stringify({messages:compactChatMessages(agentMessages),doIt:true}),signal:controller.signal},{label:'/api/agent',retrySafe:false,retries:0});
    }finally{clearTimeout(agentTimeout)}
    if(d?.error){const rr=await fetch(apiUrl('/api/control'),{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'recovery_plan',error:d.error||('HTTP '+r.status),stage:'agent'})}).catch(()=>null);const rp=rr?await rr.json().catch(()=>({})):{};upd(m=>[...m,{id:crypto.randomUUID(),role:'assistant',text:'⚠️ ERROR DETECTOR\n\n'+(d.error||('Backend HTTP '+r.status))+'\n\n🛡️ Preventive recovery: '+(rp.plan||[]).map(x=>x.action).join(' → ')+'\n\nBHAI X ne is result ko verified DONE nahi maana.'}]);setActivity(a=>a.map(x=>({...x,state:'failed'})));return;}
+   if(d?.speech?.text&&typeof window!=="undefined"&&"speechSynthesis" in window){
+    try{
+     window.speechSynthesis.cancel();
+     const utterance=new SpeechSynthesisUtterance(String(d.speech.text));
+     utterance.lang=String(d.speech.language||"hi-IN");
+     utterance.rate=Number(d.speech.rate)||1;
+     utterance.pitch=Math.max(0.1,Math.min(2,1+(Number(d.speech.pitch)||0)*0.25));
+     utterance.volume=Math.max(0,Math.min(1,Number(d.speech.volume) || 1));
+     const targetName=String(d?.voice?.name||"").trim();
+     if(targetName) utterance.text=String(d.speech.text);
+     window.speechSynthesis.speak(utterance);
+    }catch{}
+   }
    if(d.usage)setUsage(d.usage); setActivity(a=>a.map(x=>x.id===id+'2'?{...x,state:'done'}:x.id===id+'3'?{...x,state:'done'}:x.id===id+'4'?{...x,state:'done'}:x));
    if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Tool',text:x.state||'done',state:x.state||'done'}))]);
    upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||('⚠️ '+(d.error||'Request failed')),images:d.images||[]}:x));

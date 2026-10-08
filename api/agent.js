@@ -1853,4 +1853,4 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 }
 
 
-export { generateImage,generateVideo,saveMediaAsset,getLatestMediaAsset,reserveMedia,releaseMedia,getMediaUsage };
+export { generateImage,generateVideo,generateCharacterVisual,generateCharacterVideo,saveMediaAsset,getLatestMediaAsset,reserveMedia,releaseMedia,getMediaUsage };

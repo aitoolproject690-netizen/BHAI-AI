@@ -1,5 +1,6 @@
 import { isMedicalIntent, getMedicalRiskSignals, sanitizeMedicalResponse } from "../src/medicalSafety.js";
 import { isCasualIntent, getCasualReply } from "../src/intentRouter.js";
+import { rendererSupports } from "../src/videoRenderer.js";
 
 function runConversationRoutingSelfCheck(){
   const task="Bhai aise hi test kar rha tha kya reply deta hai tu 😅";
@@ -66,6 +67,7 @@ export default async function handler(req,res){
   const verified=Boolean(commit&&branch&&url);
   const medicalSafety=runMedicalSafetySelfCheck();
   const conversationRouting=runConversationRoutingSelfCheck();
+  const videoRenderer=rendererSupports();
   return res.status(200).json({
     ok:true,
     service:"BHAI AI",

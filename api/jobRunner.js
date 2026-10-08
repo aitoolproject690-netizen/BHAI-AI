@@ -148,8 +148,8 @@ export async function listJobsForOwner(account,{limit=50}={}){
   await initDb();
   const db=await getDb();
   if(!db)return [];
-  const r=await db.query("SELECT data FROM bhai_jobs ORDER BY updated_at DESC LIMIT $1",[Math.min(Math.max(Number(limit)||50,1),100)]);
-  return r.rows.map(x=>x.data).filter(x=>x?.owner===ownerKey(account));
+  const r=await db.query("SELECT data FROM bhai_jobs WHERE data->>'owner'=$1 ORDER BY updated_at DESC LIMIT $2",[ownerKey(account),Math.min(Math.max(Number(limit)||50,1),100)]);
+  return r.rows.map(x=>x.data);
 }
 
 export async function getJobForOwner(id,account){

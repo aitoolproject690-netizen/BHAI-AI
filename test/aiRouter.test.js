@@ -123,6 +123,7 @@ test("AI router falls back when the primary provider reports high demand",async(
 test("AI router falls through when Hugging Face provider returns an HTTP failure",async()=>{
   const old={...process.env};
   const originalFetch=global.fetch;
+  delete process.env.POLLINATIONS_API_KEY;
   process.env.HF_TOKEN="test-hf";
   process.env.BHAI_CORE_URL="https://core.test";
   process.env.BHAI_CORE_API_KEY="test-core";
@@ -157,6 +158,7 @@ test("AI router falls through when Hugging Face provider returns an HTTP failure
 test("HF credit exhaustion falls through to Core and the failed provider stays excluded during review",async()=>{
   const old={...process.env};
   const originalFetch=global.fetch;
+  delete process.env.POLLINATIONS_API_KEY;
   process.env.HF_TOKEN="test-hf";
   process.env.BHAI_CORE_URL="https://core.test";
   process.env.BHAI_CORE_API_KEY="test-core";
@@ -246,6 +248,7 @@ test("all HTTP provider failures are fallback-worthy even when the message has n
 test("provider cooldown skips an exhausted provider on the next request",async()=>{
   const old={...process.env};
   const originalFetch=global.fetch;
+  delete process.env.POLLINATIONS_API_KEY;
   process.env.HF_TOKEN="test-hf";
   process.env.BHAI_CORE_URL="https://core.test";
   process.env.BHAI_CORE_API_KEY="test-core";
@@ -518,6 +521,7 @@ test("reviewer falls back to another configured provider after reviewer outage",
 test("single-provider research can use a same-provider second-pass reviewer",async()=>{
   const old={...process.env};
   const originalFetch=global.fetch;
+  delete process.env.POLLINATIONS_API_KEY;
   process.env.GEMINI_API_KEY="test-gemini";
   delete process.env.OPENAI_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
@@ -646,6 +650,12 @@ test("AI router falls back from Gemini quota to Pollinations text",async()=>{
   const originalFetch=global.fetch;
   process.env.GEMINI_API_KEY="test-gemini";
   process.env.POLLINATIONS_API_KEY="test-pollinations";
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.HF_TOKEN;
+  delete process.env.BHAI_CORE_URL;
+  delete process.env.BHAI_CORE_API_KEY;
   try{
     const calls=[];
     global.fetch=async(url)=>{

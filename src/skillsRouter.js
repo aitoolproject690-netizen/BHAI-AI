@@ -2,7 +2,7 @@
  * BHAI AI Skill Selector & Router
  * Supports ordered multi-skill chains for complex tasks.
  */
-export const SKILLS={GITHUB:"github",WEB_RESEARCH:"web-research",CODING:"coding",FILE:"file",IMAGE:"image",BUILD:"build",AUTOMATION:"automation",HEALTH:"health",SUPPORT:"support"};
+export const SKILLS={GENERAL:"general",GITHUB:"github",WEB_RESEARCH:"web-research",CODING:"coding",FILE:"file",IMAGE:"image",VIDEO:"video",BUILD:"build",AUTOMATION:"automation",HEALTH:"health",SUPPORT:"support"};
 
 export function selectSkillsForTask(taskText=""){
  const text=taskText.toLowerCase(),skills=[];
@@ -16,11 +16,11 @@ export function selectSkillsForTask(taskText=""){
  if(/image|photo|picture|draw|generate/.test(text))add(SKILLS.IMAGE);
  if(/apk|android|build app|compile/.test(text))add(SKILLS.BUILD);
  if(/schedule|remind|every day|automate/.test(text))add(SKILLS.AUTOMATION);
- return skills.length?skills:[SKILLS.CODING];
+ return skills.length?skills:[SKILLS.GENERAL];
 }
 export function selectSkillForTask(taskText=""){return selectSkillsForTask(taskText)[0];}
 export function getSkillPromptContext(skillNames){
  const names=Array.isArray(skillNames)?skillNames:[skillNames],valid=names.filter(Boolean);
  if(!valid.length)return "[Skill Chain: General Agent]";
- return "[Skill Chain: "+valid.join(" → ")+"] Execute the selected skills in this order. Web Research gathers current facts first when needed; Health handles medical-information safety; Support handles empathetic conversation; Coding analyzes/implements; File handles file-level work; GitHub inspects and commits repository changes last; Image handles visual generation; Build handles app/build requests; Automation handles scheduled/background tasks.";
+ return "[Skill Chain: "+valid.join(" → ")+"] Execute the selected skills in this order. Web Research gathers current facts first when needed; Health handles medical-information safety; Support handles empathetic conversation; Coding analyzes/implements; File handles file-level work; GitHub inspects and commits repository changes last; Image handles visual generation; Video handles video generation; Build handles app/build requests; Automation handles scheduled/background tasks; General handles ordinary conversation and broad questions.";
 }

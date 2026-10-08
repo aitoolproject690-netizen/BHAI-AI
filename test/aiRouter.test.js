@@ -588,3 +588,40 @@ test("general chat routing prefers stronger configured providers before local Co
     Object.assign(process.env,old);
   }
 });
+
+ 
+test("AI router quality fallback skips malformed provider output and uses the next provider",async()=>{
+ const old={...process.env};
+ const originalFetch=global.fetch;
+ process.env.GEMINI_API_KEY="test-gemini";
+ process.env.OPENAI_API_KEY="test-openai";
+ delete process.env.BHAI_CORE_URL;
+ delete process.env.BHAI_CORE_API_KEY;
+ try{
+  const calls=[];
+  global.fetch=async(url)=>{
+   const u=String(url); calls.push(u);
+   if(u.includes("generativelanguage.googleapis.com")){
+    return new Response(JSON.stringify({candidates:[{content:{parts:[{text:"uge"}]}}]}),{status:200});
+   }
+   if(u.includes("api.openai.com")){
+    return new Response(JSON.stringify({output_text:"Hello bhai, samajh gaya. Main ready hoon."}),{status:200});
+   }
+   throw new Error("Unexpected provider: "+u);
+  };
+  const {generateWithRouter}=await import("../api/aiRouter.js?quality-fallback="+Date.now());
+  const out=await generateWithRouter({
+   task:"Bhai aise hi test kar raha tha kya reply deta hai",
+   role:"chat-general",
+   fallback:true
+  });
+  assert.equal(out.provider,"openai");
+  assert.match(out.text,/samajh gaya/i);
+  assert.deepEqual(out.failedProviders,["gemini"]);
+  assert.equal(calls.length,2);
+ }finally{
+  global.fetch=originalFetch;
+  for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+  Object.assign(process.env,old);
+ }
+});

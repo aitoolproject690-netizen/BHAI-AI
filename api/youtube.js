@@ -199,7 +199,7 @@ export default async function handler(req,res){
    if(!state||!code)return res.status(400).end("YouTube OAuth callback is missing state or code.");
    await completeYouTubeOAuth({state,code});
    res.setHeader("Content-Type","text/html; charset=utf-8");
-   return res.status(200).end("<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>BHAI X</title></head><body style="font-family:system-ui;background:#080a0f;color:#eef2ff;padding:32px"><h2>✅ YouTube connected</h2><p>BHAI X ko YouTube channel access mil gaya. Ab is tab ko band karke BHAI X par wapas aa sakte ho.</p><script>setTimeout(()=>window.close(),900)</script></body></html>");
+   return res.status(200).end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>BHAI X</title></head><body style="font-family:system-ui;background:#080a0f;color:#eef2ff;padding:32px"><h2>✅ YouTube connected</h2><p>BHAI X ko YouTube channel access mil gaya. Ab is tab ko band karke BHAI X par wapas aa sakte ho.</p><script>setTimeout(()=>window.close(),900)</script></body></html>`);
   }
   const db=await getDb();if(!db)return res.status(503).json({error:"DATABASE_URL is required"});
   const account=await getSession(req,db);if(!account)return res.status(401).json({error:"Login required."});

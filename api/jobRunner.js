@@ -256,7 +256,7 @@ async function executeAgent(job){
   return requestJson(base+"/api/agent",{
     method:"POST",
     headers:{"Content-Type":"application/json",...internalHeaders(job.owner)},
-    body:JSON.stringify({messages:Array.isArray(job.payload?.messages)&&job.payload.messages.length?job.payload.messages:[{role:"user",text:job.goal}],doIt:job.payload?.doIt!==false})
+    body:JSON.stringify({messages:Array.isArray(job.payload?.messages)&&job.payload.messages.length?job.payload.messages:[{role:"user",text:job.goal}],doIt:job.payload?.doIt!==false,executionPlan:job.payload?.brainPlan||null,recoveryCheckpoint:job.payload?.recovery?.checkpoint||job.checkpoint||null})
   });
 }
 
@@ -269,7 +269,7 @@ async function executeMission(job){
     branch:String(job.payload?.branch||"main"),
     doIt:true,
     maxFixes:Math.min(Math.max(Number(job.payload?.maxFixes)||2,0),3),
-    autoDeploy:job.payload?.autoDeploy!==false
+    autoDeploy:job.payload?.autoDeploy!==false,executionPlan:job.payload?.brainPlan||null,recoveryCheckpoint:job.payload?.recovery?.checkpoint||job.checkpoint||null
   };
   return requestJson(base+"/api/mission",{
     method:"POST",headers:{"Content-Type":"application/json",...internalHeaders(job.owner)},body:JSON.stringify(body)

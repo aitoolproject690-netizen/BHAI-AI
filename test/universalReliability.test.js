@@ -13,6 +13,7 @@ const cases=[
 ["indirect current weather",isWebResearchIntent,"Bhai is bar garmi bahut padne wali hai kya scene hai or pani bhi bahut kam pada"],
 ["medical",isMedicalChatIntent,"Mujhe sardi aur khansi ho rahi hai kya karun?"],
 ["coding",isLocalCodingIntent,"Is Python code mein bug hai, fix karke samjhao"],
+["technical explainer",isKnowledgeResearchIntent,"Bhai phone mein AI local model chalane ka simple scene samjha"],
 ["image",t=>detectMediaIntent(t).type==="image","Ek cinematic 3D image banao"],
 ["video",t=>detectMediaIntent(t).type==="video","Is scene ka short video bana do"]
 ];
@@ -48,6 +49,19 @@ test("generic chat does not hard-wire Core-first route",()=>{
  const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
  assert.doesNotMatch(source,/preferred:"core",role:"chat",fallback:true/);
  assert.match(source,/role:codingMode\?"coding":"chat-general"/);
+});
+
+test("agent prioritizes deterministic conversation/coding gates before research",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.match(source,/const deterministicConversationReply=getCasualReply\(latestText\)/);
+ assert.match(source,/const localCodingRequest=isLocalCodingIntent\(latestText\)/);
+ assert.ok(source.indexOf("const deterministicConversationReply=getCasualReply(latestText)") < source.indexOf("const currentResearchRequest=isWebResearchIntent(latestText)"));
+});
+
+test("ordinary agent chat does not force Gemini tool mode",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.match(source,/const agentNeedsTools=latestRequestsProjectExecution \|\| latestHasExplicitGithub/);
+ assert.match(source,/if\(useTools&&agentNeedsTools&&key\)/);
 });
 
 test("provider boundary has a malformed-output recovery gate",()=>{

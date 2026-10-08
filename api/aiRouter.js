@@ -114,7 +114,9 @@ export function routeAI({ task="", preferred="", role="chat", exclude=[] }={}) {
   const lower = String(task).toLowerCase();
   const order = role === "reviewer"
     ? ["openai", "anthropic", "pollinations", "huggingface", "gemini", "core"]
-    : role === "researcher" || role === "web-research"
+    : role === "story"
+      ? ["core", "gemini", "openai", "anthropic", "pollinations", "huggingface"]
+      : role === "researcher" || role === "web-research"
       ? ["gemini", "openai", "anthropic", "pollinations", "huggingface", "core"]
       : role === "medical"
         ? ["gemini", "openai", "anthropic", "pollinations", "huggingface", "core"]

@@ -190,6 +190,8 @@ function App(){
   const instantReply=instantCasual[fastKey]||fastLocal[fastKey];
   const instantMessage=Boolean(instantReply);
   const mediaMessage=!instantMessage&&Boolean(mediaIntent.type);
+  const imagePackMessage=mediaMessage&&mediaIntent.type==="image"&&/\b(?:3|three)\s*(?:image|images|tasveer|tasveeren)\b/i.test(userIntentText);
+  const mediaStyle=/\banime\b/i.test(userIntentText)?"anime":/\b2d\b|hand.?drawn/i.test(userIntentText)?"2d":"3d";
   const explicitGithubRepo=extractExplicitGithubRepo(userIntentText);
   const githubFilePath=extractGithubFilePath(userIntentText);
   const githubMutationRequest=/\b(?:fix|repair|update|modify|change|write|commit|push|delete|create|build|deploy|publish)\b/i.test(userIntentText);
@@ -352,11 +354,11 @@ function App(){
    upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
    setActivity([
     {id:id+'0',step:'Intent',text:mediaIntent.type==='video'?'🎬 Video request samajh liya...':'🖼️ Image request samajh liya...',state:'done'},
-    {id:id+'1',step:'Working',text:mediaIntent.type==='video'?'⚙️ Video provider pipeline execute ho rahi hai...':'⚙️ Image provider pipeline execute ho rahi hai...',state:'running'},
+    {id:id+'1',step:'Working',text:mediaIntent.type==='video'?'⚙️ Video provider pipeline execute ho rahi hai...':imagePackMessage?'⚙️ 3-image continuity pack generate ho raha hai...':'⚙️ Image provider pipeline execute ho rahi hai...',state:'running'},
     {id:id+'2',step:'Verifying',text:'✅ Actual media output validate kiya jayega...',state:'pending'}
    ]);
    try{
-    const rr=await fetch(apiUrl('/api/media'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:mediaIntent.type,prompt:userIntentText,aspectRatio:'16:9',duration:5,imageToVideo:mediaIntent.imageToVideo})});
+    const rr=await fetch(apiUrl('/api/media'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:imagePackMessage?'image-pack':mediaIntent.type,prompt:userIntentText,style:mediaStyle,aspectRatio:'16:9',duration:5,imageToVideo:mediaIntent.imageToVideo})});
     const d=await rr.json().catch(()=>({}));
     if(!rr.ok||d.error)throw new Error(d.error||('Media backend HTTP '+rr.status));
     setActivity(a=>{const base=a.map(x=>({...x,state:'done'}));if(d.character)return [...base,{id:id+'3',step:'Character ID',text:'🎭 '+(d.character.name||'Character')+' linked to '+(d.character.characterId||'permanent identity')+' · 🔒 identity contract verified.',state:'done'}];return base;});

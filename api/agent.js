@@ -11,6 +11,7 @@ import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, asse
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpleColdQuestion } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isMedicalChatIntent,isGeneralChatIntent} from "../src/intentRouter.js";
+import { classifyUserRequest } from "../src/requestRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
 import { webSearch, filterResearchSources } from "../src/webSearch.js";
@@ -436,6 +437,7 @@ export default async function handler(req,res){
   while(chatMessages.length&&chatMessages[chatMessages.length-1].role==="assistant") chatMessages.pop();
   const task=String([...chatMessages].reverse().find(m=>m.role==="user")?.text||"").trim();
   if(!task)return json(res,400,{error:"Chat message is required."});
+  const canonicalRequest=classifyUserRequest(task);
   try{
    const medicalMode=isMedicalIntent(task);
    const system=[
@@ -452,7 +454,7 @@ export default async function handler(req,res){
 
    // High-risk medical triage and simple cold advice stay deterministic and
    // never wait for a language model.
-   if(isMedicalChatIntent(task)){
+   if(canonicalRequest.lane==="medical"){
     const deterministicMedical=applyMedicalSafetyFooter("",task);
     if(isSimpleColdQuestion(task)||/(?:chest pain|severe chest|difficulty breathing|shortness of breath|fainting|behosh|overdose|poisoning|suicide|self harm)/i.test(task) || /(?:\bbp\b|blood pressure)\s*(?:is|=|:)\s*\d{2,3}\s*(?:\/|over)\s*\d{2,3}/i.test(task)){
      if(deterministicMedical){
@@ -489,7 +491,7 @@ export default async function handler(req,res){
     return json(res,200,{ok:true,text:deterministicConversationReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true});
    }
 
-   const standaloneCodingRequest=isLocalCodingIntent(task);
+   const standaloneCodingRequest=canonicalRequest.lane==="coding";
    if(standaloneCodingRequest){
     try{
      const coding=await generateWithRouter({
@@ -506,7 +508,7 @@ export default async function handler(req,res){
     }
    }
 
-   // Stable knowledge questions must not be forced into web research.\n   // Only explicitly current/online requests enter the evidence lane; ordinary\n   // facts/explainers use the strongest general provider route instead.\n   if(isWebResearchIntent(task)){
+   // Stable knowledge questions must not be forced into web research.\n   // Only explicitly current/online requests enter the evidence lane; ordinary\n   // facts/explainers use the strongest general provider route instead.\n   if(canonicalRequest.lane==="current"){
     try{
      const results=await webSearch(task);
      const researchResults=filterResearchSources(task,results);
@@ -533,7 +535,7 @@ export default async function handler(req,res){
     }
    }
 
-   const codingMode=isLocalCodingIntent(task);
+   const codingMode=canonicalRequest.lane==="coding";
    let routed=await generateWithRouter({
     task,
     system,
@@ -817,14 +819,15 @@ if(isMedicalChatIntent(latestUserMessage)){
 
 // Deterministic conversation gate MUST run before any provider or research lane.
 const latestText=String(latestUserMessage||"").trim();
-const deterministicConversationReply=getCasualReply(latestText);
+const canonicalRequest=classifyUserRequest(latestText);
+const deterministicConversationReply=canonicalRequest.deterministicReply||getCasualReply(latestText);
 if(deterministicConversationReply){
  return json(res,200,{ok:true,text:deterministicConversationReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true,activity:[]});
 }
 
 // Standalone coding-help MUST beat knowledge/web research. This prevents
 // Python/JS explanations from being hijacked into generic search results.
-const localCodingRequest=isLocalCodingIntent(latestText);
+const localCodingRequest=canonicalRequest.lane==="coding";
 if(localCodingRequest){
  try{
   const routed=await generateWithRouter({
@@ -841,7 +844,7 @@ if(localCodingRequest){
  }
 }
 
-const currentResearchRequest=isWebResearchIntent(latestText);
+const currentResearchRequest=canonicalRequest.lane==="current";
 if(currentResearchRequest){
  try{
   const results=await webSearch(latestText);
@@ -1136,7 +1139,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
    }
    if(lastError)throw lastError;
   }
-  const generalConversation=isGeneralChatIntent(latestText);
+  const generalConversation=canonicalRequest.lane==="general"||canonicalRequest.lane==="knowledge"||canonicalRequest.lane==="conversation";
   let routed=await generateWithRouter({
    task:latestText,
    system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),

@@ -515,30 +515,34 @@ export default async function handler(req,res){
    if(casualReply){
     return json(res,200,{ok:true,text:casualReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true});
    }
+   const codingMode=isLocalCodingIntent(task);
    let routed=await generateWithRouter({
     task,
     system,
     messages:chatMessages,
-    preferred:"core",role:"chat",fallback:true
+    preferred:codingMode?"core":"",
+    role:codingMode?"coding":"chat-general",
+    fallback:true
    });
-   if(routed?.provider==="core"&&isObviouslyGarbledResponse(routed?.text,task)){
-    const alternates=getConfiguredAIProviders().filter(id=>id!=="core");
+   // Any provider can occasionally emit a fragment. The router already
+   // performs provider-level quality fallback; keep this final endpoint guard
+   // as a last line of defence.
+   if(isObviouslyGarbledResponse(routed?.text,task)){
+    const alternates=getConfiguredAIProviders().filter(id=>id!==routed?.provider);
     if(alternates.length){
      routed=await generateWithRouter({
       task,
       system,
       messages:chatMessages,
       preferred:alternates[0],
-      role:"chat",
-      exclude:["core"],
+      role:codingMode?"coding":"chat-general",
+      exclude:[routed?.provider||"core"],
       fallback:true
      });
-    }else{
-     return json(res,502,{error:"Local AI returned a low-quality or malformed answer; it was blocked instead of showing nonsense."});
     }
    }
    if(isObviouslyGarbledResponse(routed?.text,task)){
-    return json(res,502,{error:"AI returned malformed output; response was blocked instead of showing corrupted text."});
+    return json(res,502,{error:"AI returned malformed or low-quality output; BHAI X blocked it instead of showing nonsense."});
    }
    const safeText=medicalMode?applyMedicalSafetyFooter(routed.text,task):routed.text;
    return json(res,200,{ok:true,text:safeText,provider:routed.provider,backend_provider:routed.backend_provider||null,model:routed.model,verified:true});

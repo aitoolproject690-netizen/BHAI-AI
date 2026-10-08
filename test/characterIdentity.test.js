@@ -16,7 +16,7 @@ test("identity prompt locks visual continuity",()=>{
 });
 
 test("draft validation blocks incomplete identity",()=>{
- const out=parseCharacterDraft(JSON.stringify({name:"Aarav"}),base);
+ const out=parseCharacterDraft(JSON.stringify({name:"Aarav"}),{name:"Aarav"});
  assert.equal(out.ok,false); assert.ok(out.errors.includes("missing_face")); assert.ok(out.errors.includes("missing_hair")); assert.ok(out.errors.includes("missing_clothing"));
 });
 

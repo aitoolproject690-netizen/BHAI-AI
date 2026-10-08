@@ -1104,12 +1104,13 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
    }
    if(lastError)throw lastError;
   }
+  const generalConversation=isGeneralChatIntent(latestText);
   let routed=await generateWithRouter({
    task:latestText,
    system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
    messages:chatMessages,
-   preferred:"core",
-   role:"engineering",
+   preferred:generalConversation?"":"core",
+   role:generalConversation?"chat-general":"engineering",
    fallback:true
   });
 
@@ -1126,7 +1127,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
       system:system+(useTools?"\n\nAnswer without claiming external tool execution unless verified evidence exists.":""),
       messages:chatMessages,
       preferred:provider,
-      role:"engineering",
+      role:generalConversation?"chat-general":"engineering",
       exclude:[routed?.provider||"core"],
       fallback:true
      });

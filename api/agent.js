@@ -14,6 +14,7 @@ import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpl
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isGeneralChatIntent} from "../src/intentRouter.js";
 import {normalizeVisualRequest,buildCharacterVisualPrompt,verifyCharacterVisualContract,pickCharacterForPrompt} from "../src/characterVisualEngine.js";
 import {normalizeVideoRequest,buildCharacterVideoPrompt,verifyCharacterVideoContract} from "../src/characterVideoEngine.js";
+import {normalizeVoiceRequest,makeCharacterVoiceProfile,buildCharacterVoiceContract,verifyCharacterVoiceContract,extractSpokenText,buildLipSyncManifest,isLikelyCharacterVoiceRequest} from "../src/characterVoiceEngine.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
@@ -806,6 +807,70 @@ export default async function handler(req,res){
   };
   return json(res,200,{ok:true,text:conversationalReply||casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
  }
+
+// Deterministic voice routing: explicit character voice requests stay local/server-deterministic.
+// The permanent Character ID remains the source of truth; browser speech playback is used for the first
+// provider-free preview, while the lip-sync manifest is kept ready for future rendered audio.
+const characterVoiceIntent=isLikelyCharacterVoiceRequest(latestUserMessage);
+if(characterVoiceIntent){
+  const character=await findCharacterForVisual(db,account.id,latestUserMessage);
+  if(!character){
+    return json(res,200,{
+      ok:false,
+      text:"⚠️ Permanent Character Voice blocked. Is request mein koi saved Character ID/Character name match nahi hua. Pehle character banao, phir usi character ki voice use hogi.",
+      verified:false,
+      activity:[{tool:"character-voice",state:"blocked",details:"No account-scoped permanent character matched the voice request."}],
+      images:[],
+      usage:await getMediaUsage(db,account.id)
+    });
+  }
+  const spokenText=extractSpokenText(latestUserMessage);
+  const voiceRequest=normalizeVoiceRequest({text:spokenText,prompt:latestUserMessage});
+  const voiceProfile=makeCharacterVoiceProfile(character);
+  const contract=buildCharacterVoiceContract(character,voiceRequest);
+  const verification=verifyCharacterVoiceContract(character,contract);
+  if(!verification.ok){
+    return json(res,502,{
+      ok:false,
+      text:"⚠️ Character voice contract fail-closed hua. BHAI X ne unverified voice identity ko play nahi kiya.",
+      verified:false,
+      activity:[{tool:"character-voice-contract",state:"blocked",details:verification.issues.join(" ")}],
+      images:[],
+      usage:await getMediaUsage(db,account.id)
+    });
+  }
+  const lipSync=buildLipSyncManifest(voiceRequest.text,voiceRequest);
+  activity.push({tool:"character-voice-identity",state:"done",details:"Permanent Character ID → stable Voice ID contract verified."});
+  activity.push({tool:"lip-sync-manifest",state:"done",details:"Deterministic word timing + viseme manifest prepared; pixel lip-sync verification is not claimed."});
+  return json(res,200,{
+    ok:true,
+    text:"## 🔊 Character voice ready\\n\\nBHAI X ne "+voiceProfile.name+" ke permanent Character ID se stable Voice ID lock kiya. Device-native voice preview ke liye dialogue ready hai, aur lip-sync timing manifest bhi prepare ho gaya.",
+    verified:true,
+    provider:"deterministic",
+    backend_provider:"device-native-tts",
+    model:"bhai-character-voice-v1",
+    voice:{
+      schemaVersion:voiceProfile.schemaVersion,
+      voiceId:voiceProfile.voiceId,
+      voiceFingerprint:voiceProfile.voiceFingerprint,
+      characterId:voiceProfile.characterId,
+      identityFingerprint:voiceProfile.identityFingerprint,
+      name:voiceProfile.name,
+      providerMode:voiceProfile.providerMode,
+      verification
+    },
+    speech:{
+      text:voiceRequest.text,
+      language:voiceRequest.language,
+      rate:voiceRequest.rate,
+      pitch:voiceRequest.pitch,
+      volume:voiceRequest.volume,
+      voiceId:voiceProfile.voiceId
+    },
+    lipSync,
+    activity
+  });
+}
 
 // Deterministic media routing: explicit video requests always win over image-reference wording in video prompts.
 // Intent routing accepts natural Hinglish/Hindi forms such as "isko video bana", "is image ko video bana do".

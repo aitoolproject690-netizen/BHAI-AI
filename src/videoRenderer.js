@@ -115,7 +115,7 @@ function filterForPost(post,width,height){
   return list.join(",");
 }
 
-async function renderScene(dir,scene,index,{width,height,fps}){
+async function renderScene(dir,scene,index,{width,height,fps,audioMaster}){
   const duration=clamp(scene.durationSeconds||scene.duration,0.1,MAX_SCENE_SECONDS,1);
   const post=scene.postProduction||null;
   const voice=mediaObject(scene.voiceAudio||scene.voice||null,"audio/wav");
@@ -159,21 +159,45 @@ async function renderScene(dir,scene,index,{width,height,fps}){
   }else{
     for(const p of inputAudioPaths)args.push("-i",p);
   }
-  args.push("-t",String(duration),"-vf",vf,
-    "-r",String(fps),"-map","0:v:0");
+  args.push("-t",String(duration),"-vf",vf,"-r",String(fps),"-map","0:v:0");
 
+  const master=audioMaster||{};
+  const voiceDb=Number.isFinite(Number(master.voiceDb))?Number(master.voiceDb):0;
+  const musicDb=Number.isFinite(Number(master.musicDb))?Number(master.musicDb):-8;
+  const sfxDb=Number.isFinite(Number(master.sfxDb))?Number(master.sfxDb):-6;
   const audioInputCount=inputAudioPaths.length||1;
-  if(audioInputCount===1&&!voicePath){
-    // One post-production track: straightforward audio map.
+  const filterParts=[];
+  if(!inputAudioPaths.length){
     args.push("-map","1:a:0");
+  }else if(voicePath&&audioInputCount===1){
+    filterParts.push("[1:a]aresample=48000,volume="+voiceDb+"dB[a]");
+    args.push("-filter_complex",filterParts.join(";"),"-map","[a]");
+  }else if(voicePath){
+    filterParts.push("[1:a]aresample=48000,volume="+voiceDb+"dB[voice]");
+    const bg=[];
+    for(let i=1;i<audioInputCount;i++){
+      const inputIndex=1+i;
+      const db=i===1?musicDb:sfxDb;
+      const label="[bg"+i+"]";
+      filterParts.push("["+inputIndex+":a]aresample=48000,volume="+db+"dB"+label);
+      bg.push(label);
+    }
+    if(bg.length===1)filterParts.push(bg[0]+"anull[bg]");
+    else filterParts.push(bg.join("")+"amix=inputs="+bg.length+":duration=longest:dropout_transition=2[bg]");
+    if(master.ducking!==false)filterParts.push("[bg][voice]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=300:makeup=0[ducked]","[voice][ducked]amix=inputs=2:duration=longest:dropout_transition=2,aresample=48000[a]");
+    else filterParts.push("[voice][bg]amix=inputs=2:duration=longest:dropout_transition=2,aresample=48000[a]");
+    args.push("-filter_complex",filterParts.join(";"),"-map","[a]");
   }else{
-    const labels=[];
+    const tracks=[];
     for(let i=0;i<audioInputCount;i++){
       const inputIndex=1+i;
-      labels.push("["+inputIndex+":a:0]");
+      const db=i===0?musicDb:sfxDb;
+      const label="[track"+i+"]";
+      filterParts.push("["+inputIndex+":a]aresample=48000,volume="+db+"dB"+label);
+      tracks.push(label);
     }
-    const mix=labels.join("")+"amix=inputs="+audioInputCount+":duration=first:dropout_transition=2,aresample=48000[a]";
-    args.push("-filter_complex",mix,"-map","[a]");
+    filterParts.push(tracks.join("")+"amix=inputs="+tracks.length+":duration=longest:dropout_transition=2,aresample=48000[a]");
+    args.push("-filter_complex",filterParts.join(";"),"-map","[a]");
   }
   args.push("-c:v","libx264","-preset","veryfast","-crf","21","-pix_fmt","yuv420p",
     "-c:a","aac","-b:a","128k","-movflags","+faststart",out);
@@ -196,6 +220,52 @@ async function extractThumbnail(dir,video){
   const stat=await fs.stat(file);
   if(!stat.size)throw new Error("Thumbnail extraction produced an empty file.");
   return {mimeType:"image/jpeg",data:(await fs.readFile(file)).toString("base64")};
+}
+
+async function extractThumbnailVariants(dir,video,duration){
+  const base=Math.max(0.1,Number(duration)||1);
+  const times=[0.15,0.5,0.85].map(x=>Math.max(0.1,Math.min(Math.max(0.1,base-0.1),base*x)));
+  const out=[];
+  for(let i=0;i<times.length;i++){
+    const file=path.join(dir,"thumbnail_"+(i+1)+".jpg");
+    await run(assertFfmpeg(),["-y","-hide_banner","-loglevel","error","-ss",String(times[i]),"-i",video,"-frames:v","1","-q:v","3",file],{timeoutMs:60000,cwd:dir});
+    const stat=await fs.stat(file);
+    if(!stat.size)throw new Error("Thumbnail variant "+(i+1)+" is empty.");
+    out.push({index:i+1,mimeType:"image/jpeg",data:(await fs.readFile(file)).toString("base64"),atSeconds:Number(times[i].toFixed(3))});
+  }
+  return out;
+}
+
+export async function renderShortsFromVideo(media={},shortsPlan={},options={}){
+  const verification=verifyRenderedVideo(media);
+  if(!verification.ok)throw new Error("Verified final MP4 is required before Shorts rendering.");
+  const shorts=Array.isArray(shortsPlan?.shorts)?shortsPlan.shorts.slice(0,5):[];
+  if(!shorts.length)throw new Error("No verified Shorts plan is available.");
+  const data=Buffer.from(String(media.data),"base64");
+  if(data.length>MAX_OUTPUT_BYTES)throw new Error("Source video exceeds the Shorts renderer safety limit.");
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),"bhai-x-shorts-"));
+  try{
+    const source=path.join(dir,"source.mp4");
+    await fs.writeFile(source,data);
+    const sourceDuration=Math.max(1,Number(media.duration)||15);
+    const result=[];
+    for(let i=0;i<shorts.length;i++){
+      const plan=shorts[i],duration=Math.min(15,Math.max(3,Number(plan.durationSeconds)||8));
+      const start=Math.max(0,Math.min(Math.max(0,sourceDuration-duration),Number(plan.startSeconds)||0));
+      const out=path.join(dir,"short_"+(i+1)+".mp4");
+      const vf="scale=576:1024:force_original_aspect_ratio=increase,crop=576:1024";
+      await run(assertFfmpeg(),["-y","-hide_banner","-loglevel","error","-ss",String(start),"-i",source,"-t",String(duration),"-vf",vf,"-r","30","-c:v","libx264","-preset","veryfast","-crf","23","-pix_fmt","yuv420p","-c:a","aac","-b:a","96k","-movflags","+faststart",out],{timeoutMs:Math.max(90000,Math.round(duration*30000)),cwd:dir});
+      const stat=await fs.stat(out);
+      if(!stat.size||stat.size>12*1024*1024)throw new Error("Short "+(i+1)+" is empty or exceeds the 12 MB limit.");
+      const shortMedia={mimeType:"video/mp4",data:(await fs.readFile(out)).toString("base64"),duration:Number(duration.toFixed(3)),provider:"bhai-self-hosted-ffmpeg-short"};
+      const proof=verifyRenderedVideo(shortMedia);
+      if(!proof.ok)throw new Error("Short "+(i+1)+" failed MP4 verification.");
+      result.push({id:plan.id||"short_"+(i+1),title:clean(plan.title||"BHAI X Short",90),hook:clean(plan.hook,500),startSeconds:Number(start.toFixed(3)),durationSeconds:shortMedia.duration,aspectRatio:"9:16",media:shortMedia,verification:proof});
+    }
+    return {schemaVersion:VIDEO_RENDERER_SCHEMA_VERSION,renderer:"ffmpeg-static",verified:true,shorts:result};
+  }finally{
+    await fs.rm(dir,{recursive:true,force:true}).catch(()=>{});
+  }
 }
 
 async function inspectVideo(file){
@@ -256,7 +326,7 @@ export async function renderTimeline(timeline={},options={}){
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),"bhai-x-render-"));
   try{
     const rendered=[];
-    for(let i=0;i<scenes.length;i++)rendered.push(await renderScene(dir,scenes[i],i,{width,height,fps}));
+    for(let i=0;i<scenes.length;i++)rendered.push(await renderScene(dir,scenes[i],i,{width,height,fps,audioMaster:timeline.audioMix}));
     const list=await createConcatList(dir,rendered.map(x=>x.file));
     const joined=path.join(dir,"final.mp4");
     await run(assertFfmpeg(),["-y","-hide_banner","-loglevel","error","-f","concat","-safe","0","-i",list,"-c","copy","-movflags","+faststart",joined],{timeoutMs:Math.max(120000,Math.round(total*40000)),cwd:dir});
@@ -268,12 +338,14 @@ export async function renderTimeline(timeline={},options={}){
     const verification=verifyRenderedVideo(media);
     if(!verification.ok)throw new Error("Final MP4 failed encoded-output verification.");
     const thumbnail=await extractThumbnail(dir,joined);
+    const thumbnails=await extractThumbnailVariants(dir,joined,media.duration);
     const youtube=buildYoutubeMetadata({...timeline,totalDurationSeconds:media.duration},{title:options.title,description:options.description,tags:options.tags});
     return {
       schemaVersion:VIDEO_RENDERER_SCHEMA_VERSION,
       renderer:renderer.engine,
       media,
       thumbnail,
+      thumbnails,
       youtube,
       verification,
       stats:{sceneCount:scenes.length,requestedDurationSeconds:Number(total.toFixed(3)),encodedDurationSeconds:media.duration,bytes:Buffer.byteLength(data,"base64")},
@@ -283,7 +355,7 @@ export async function renderTimeline(timeline={},options={}){
         music:"provider-free procedural",
         sfx:"provider-free procedural",
         voice:"scene voice audio when supplied; device-native preview is not server-rendered TTS",
-        lipSync:"timing manifests are preserved but pixel/phoneme lip-sync is not claimed"
+        lipSync:"timing manifests are preserved but pixel/phoneme lip-sync is not claimed",\n        audioMaster:timeline.audioMix||null
       }
     };
   }finally{

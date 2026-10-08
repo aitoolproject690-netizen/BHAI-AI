@@ -9,6 +9,7 @@ import {normalizeScenePostRequest,buildScenePostProductionManifest,verifyScenePo
 import {renderTimeline,verifyRenderedVideo} from "../src/videoRenderer.js";
 import {buildAutonomousPlan,normalizeAutonomousRequest,productionCompletionProof} from "../src/autonomousProductionEngine.js";
 import {buildProductionCheckpoint,productionStepDone} from "../src/productionCheckpoint.js";
+import {buildCharacterBible,buildCameraPlan,buildAudioMasterContract,buildYouTubePackage,buildShortsPlan} from "../src/mediaProductionEngine.js";
 import {beginYouTubeOAuth,getYouTubeStatus,uploadToYouTube} from "./youtube.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
@@ -59,6 +60,7 @@ function cryptoRandomId(input){
 }
 
 async function saveVideoPackage(db,accountId,rendered){
+ const suite=rendered?.mediaSuite||{};
  await db.query(`CREATE TABLE IF NOT EXISTS bhai_video_packages (
   account_id TEXT PRIMARY KEY,
   youtube JSONB NOT NULL,
@@ -70,7 +72,7 @@ async function saveVideoPackage(db,accountId,rendered){
  await db.query(`INSERT INTO bhai_video_packages(account_id,youtube,thumbnail,renderer)
   VALUES($1,$2::jsonb,$3::jsonb,$4::jsonb)
   ON CONFLICT(account_id) DO UPDATE SET youtube=EXCLUDED.youtube,thumbnail=EXCLUDED.thumbnail,renderer=EXCLUDED.renderer,updated_at=NOW()`,
-  [accountId,JSON.stringify(rendered.youtube||{}),JSON.stringify(rendered.thumbnail||null),JSON.stringify({schemaVersion:rendered.schemaVersion,renderer:rendered.renderer,verification:rendered.verification,stats:rendered.stats,applied:rendered.applied})]);
+  [accountId,JSON.stringify(rendered.youtube||{}),JSON.stringify(rendered.thumbnail||null),JSON.stringify({schemaVersion:rendered.schemaVersion,renderer:rendered.renderer,verification:rendered.verification,stats:rendered.stats,applied:rendered.applied,mediaSuite:suite})]);
 }
 
 async function loadVideoPackage(db,accountId){
@@ -240,7 +242,13 @@ async function runProduction(account,rawInput){
    if(evidence.characters)completed.add("characters");
    activity.push({tool:"character-identity",state:evidence.characters?"done":"failed",details:characterRows.length+" account-scoped permanent Character ID(s) verified/reused."});
   }
-  await persist({currentStep:"visuals",message:"Character identity stage verified."});
+  characterBible=characterBible||buildCharacterBible(characterRows);
+  cameraPlan=cameraPlan||buildCameraPlan(selectedScenes,{style:story.visualStyle||request.story.visualStyle});
+  evidence.camera=Boolean(characterBible.verified&&cameraPlan.verified);
+  if(evidence.camera)completed.add("camera");
+  activity.push({tool:"character-bible",state:"done",details:"Permanent Character Bible assembled from locked identities; continuity fields are account-scoped."});
+  activity.push({tool:"camera-director",state:evidence.camera?"done":"failed",details:evidence.camera?"Every renderable scene received shot, lens, angle, movement, lighting and transition direction.":"Camera plan verification failed."});
+  await persist({currentStep:"visuals",message:"Character Bible + Camera Director verified."});
 
   for(let i=0;i<selectedScenes.length;i++){
    const s=selectedScenes[i];
@@ -248,7 +256,9 @@ async function runProduction(account,rawInput){
    const previousScene=sceneStates.find(x=>String(x.sceneId)===sceneId);
    const primary=scenePrimaryCharacter(s,characterRows);
    const charName=primary?.name||"";
-   const scenePrompt=clean([charName&&("Character: "+charName),s.action,s.visualPrompt,s.cameraPrompt].filter(Boolean).join("\n"),9000);
+   const camera=cameraPlan?.scenes?.find(x=>String(x.sceneId)===sceneId)||buildCameraPlan([s],{style:story.visualStyle||request.story.visualStyle}).scenes?.[0];
+   const cameraText=camera?.direction||s.cameraPrompt;
+   const scenePrompt=clean([charName&&("Character: "+charName),s.action,s.visualPrompt,cameraText].filter(Boolean).join("\n"),9000);
 
    let visualMedia=null;
    let visualAssetId=previousScene?.visualAssetId||null;
@@ -273,7 +283,7 @@ async function runProduction(account,rawInput){
    }
    let state=sceneStates.find(x=>String(x.sceneId)===sceneId)||{sceneId,index:i};
    state={...state,index:i,sceneId,visualAssetId,visualVerified:Boolean(visualAssetId&&visualMedia?.data),
-     ...(visualReused?{}:{videoAssetId:null,videoVerified:false,postProduction:null,postVerified:false,verified:false})};
+     cameraDirection:camera?.direction||s.cameraPrompt||"", ...(visualReused?{}:{videoAssetId:null,videoVerified:false,postProduction:null,postVerified:false,verified:false})};
    sceneStates=sceneStates.filter(x=>String(x.sceneId)!==sceneId).concat(state);
    evidence.visuals=selectedScenes.every(scene=>{
     const row=sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(selectedScenes.indexOf(scene)+1))));
@@ -294,7 +304,7 @@ async function runProduction(account,rawInput){
    }else{
     await reserveMedia(db,account.id,"video",3);
     try{
-     const videoPrompt=clean(["Character: "+(charName||"primary story character"),s.action,s.visualPrompt,s.cameraPrompt].filter(Boolean).join("\n"),9000);
+     const videoPrompt=clean(["Character: "+(charName||"primary story character"),s.action,s.visualPrompt,cameraText].filter(Boolean).join("\n"),9000);
      const video=await generateCharacterVideo(db,account.id,videoPrompt,Math.min(5,Math.max(1,Number(s.durationSeconds)||5)),request.aspectRatio,visualMedia);
      videoMedia=video.media;
      await saveMediaAsset(db,account.id,"video",video.media);
@@ -348,7 +358,7 @@ async function runProduction(account,rawInput){
     verified:true,
     postProduction:state.postProduction,
     transition:"cut",
-    scenePrompt:clean([primary?.name,s.action,s.visualPrompt,s.cameraPrompt].filter(Boolean).join(" "),240)
+    scenePrompt:clean([primary?.name,s.action,s.visualPrompt,(sceneStates.find(x=>String(x.sceneId)===id)?.cameraDirection||s.cameraPrompt)].filter(Boolean).join(" "),240)
    });
   }
 
@@ -367,7 +377,7 @@ async function runProduction(account,rawInput){
   }
   if(!rendered){
    try{
-    rendered=await renderTimeline(timeline,{
+    rendered=await renderTimeline({...timeline,audioMix:audioMaster},{
      title:story.youtube?.titleIdeas?.[0]||("BHAI X | "+story.title),
      description:story.youtube?.description||("Created by BHAI X from an autonomous production pipeline.\n\n"+(story.youtube?.hook||"")),
      tags:["BHAI X","Hindi","cartoon","cinematic",story.genre].filter(Boolean)
@@ -380,6 +390,15 @@ async function runProduction(account,rawInput){
   evidence.render=Boolean(rendered?.verification?.ok&&rendered?.media?.data);
   if(evidence.render)completed.add("render"); else completed.delete("render");
   if(evidence.render&&!productionStepDone(previous,"render")) await saveMediaAsset(db,account.id,"video",rendered.media);
+  youtubePackage=buildYouTubePackage(story,timeline,{
+   title:rendered?.youtube?.title,
+   description:rendered?.youtube?.description,
+   tags:rendered?.youtube?.tags
+  });
+  youtubePackage={...youtubePackage,thumbnailCount:Array.isArray(rendered?.thumbnails)?rendered.thumbnails.length:1,thumbnailReady:Boolean(rendered?.thumbnail?.data)};
+  evidence.youtubePackage=Boolean(youtubePackage.verified&&youtubePackage.thumbnailReady);
+  if(evidence.youtubePackage)completed.add("youtubePackage");
+  rendered.mediaSuite={characterBible,cameraPlan,audioMaster,youtubePackage,shortsPlan};
   if(evidence.render&&!productionStepDone(previous,"render")) await saveVideoPackage(db,account.id,rendered);
   await persist({currentStep:request.autoPublish?"youtube":null,message:evidence.render?"Final MP4 checkpoint verified.":"Final MP4 verification failed.",renderProof:rendered?.verification||null});
 
@@ -437,6 +456,9 @@ async function runProduction(account,rawInput){
    story,characters:characterRows.map(c=>({characterId:c.character_id,name:c.name,identityFingerprint:c.identity_fingerprint})),
    timeline,rendered:rendered?{media:rendered.media,thumbnail:rendered.thumbnail,youtube:rendered.youtube,verification:rendered.verification,stats:rendered.stats,applied:rendered.applied}:null,
    youtube,youtubeAuthUrl,
+   characterBible,cameraPlan,audioMaster,youtubePackage,shortsPlan,
+   thumbnails:rendered?.thumbnails||[],
+   mediaSuite:rendered?.mediaSuite||null,
    images:rendered?[{mimeType:rendered.media.mimeType,data:rendered.media.data,video:true,duration:rendered.media.duration,name:rendered.youtube.filename}]:[],
    thumbnail:rendered?.thumbnail||null,
    productionCheckpoint:finalCheckpoint,

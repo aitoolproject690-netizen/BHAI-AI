@@ -34,7 +34,6 @@ test("keeps valid concise factual answers",()=>{
   assert.equal(isObviouslyGarbledResponse("4","2+2=?"),false);
 });
 
-
 test("rejects one-token nonsense on natural conversational testing prompts",()=>{
   assert.equal(isObviouslyGarbledResponse("uge","Bhai aise hi test kar rha tha kya reply deta hai tu 😅"),true);
 });
@@ -42,4 +41,14 @@ test("rejects one-token nonsense on natural conversational testing prompts",()=>
 test("keeps legitimate short conversational replies",()=>{
   assert.equal(isObviouslyGarbledResponse("badhiya","Bhai kya haal hai?"),false);
   assert.equal(isObviouslyGarbledResponse("haan","Bhai sun raha hai?"),false);
+});
+
+test("rejects a tiny one-token output on an indirect current weather question",()=>{
+  const task="Bhai is bar log bol rahe hai ki garmi bahut padne wali hai kya scene hai or is bar pani bhi bahut kam pada";
+  assert.equal(isObviouslyGarbledResponse("actly",task),true);
+  assert.equal(isObviouslyGarbledResponse("Delhi",task),true);
+});
+
+test("does not reject a numeric short math answer",()=>{
+  assert.equal(isObviouslyGarbledResponse("42","37 + 5 = ?"),false);
 });

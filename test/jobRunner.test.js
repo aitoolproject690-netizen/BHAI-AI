@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {JOB_STATES,canTransition,retryDelayMs,verifyJobResult,buildExecutionResume} from "../api/jobRunner.js";
+import {JOB_STATES,canTransition,retryDelayMs,verifyJobResult,buildExecutionResume,buildCheckpoint} from "../api/jobRunner.js";
 
 test("job state machine only permits forward/recovery transitions",()=>{
  assert.equal(canTransition(JOB_STATES.queued,JOB_STATES.running),true);
@@ -87,7 +87,6 @@ test("execution resume hard-skips only verified completed stages and keeps verif
 });
 
 test("checkpoint activity maps media stages to Brain stages",()=>{
- const {buildCheckpoint}=await import("../api/jobRunner.js");
  const job={
   id:"media-job",owner:"owner-media",type:"agent",goal:"make episode",attempts:1,progress:60,
   payload:{brainPlan:{schemaVersion:"2.0",tools:["story","characters","visuals","videos","post-production","render"]}},

@@ -77,18 +77,78 @@ function appendEvent(job,event){
   return next;
 }
 
+function canonicalStepKey(tool=""){
+  const t=String(tool||"").toLowerCase().replace(/[^a-z0-9:_-]+/g,"-");
+  if(/^story(?:-|:)|story-engine/.test(t))return "story";
+  if(/^(?:characters?|character-identity|character:)/.test(t))return "characters";
+  if(/(?:visuals?|image|generate-image|character-visual)/.test(t))return "visuals";
+  if(/(?:videos?|generate-video|character-video)/.test(t))return "videos";
+  if(/(?:post-production|scene-post-production|procedural-audio|vfx|music|sfx)/.test(t))return "post-production";
+  if(/(?:render|ffmpeg|scene-editor)/.test(t))return "render";
+  if(/(?:youtube|publisher)/.test(t))return "youtube";
+  if(/^github(?:[:_-]|$)|github-/.test(t))return "github";
+  if(/preflight/.test(t))return "preflight";
+  if(/verify|verification|completion-proof|evidence/.test(t))return "verify";
+  return t;
+}
+
 function buildStepPlan(job){
   const tools=Array.isArray(job.payload?.brainPlan?.tools)?job.payload.brainPlan.tools:[];
-  return tools.map((tool,index)=>({index,tool:String(tool).slice(0,120),status:index===0?"running":"planned",startedAt:index===0?now():null,completedAt:null}));
+  return tools.map((tool,index)=>({
+    index,
+    stepId:"brain-"+index+"-"+canonicalStepKey(tool),
+    tool:String(tool).slice(0,120),
+    key:canonicalStepKey(tool),
+    status:index===0?"running":"planned",
+    startedAt:index===0?now():null,
+    completedAt:null
+  }));
+}
+
+export function buildExecutionResume(executionPlan={},checkpoint={}){
+  const steps=Array.isArray(checkpoint?.steps)?checkpoint.steps:[];
+  const planTools=Array.isArray(executionPlan?.tools)?executionPlan.tools.map(canonicalStepKey):[];
+  const completed=steps.filter(s=>s?.status==="completed");
+  const completedStepIds=completed.map((s,i)=>String(s?.stepId||("brain-"+String(s?.index??i)+"-"+canonicalStepKey(s?.tool))));
+  const completedKeys=[...new Set(completed.map(s=>canonicalStepKey(s?.key||s?.tool)).filter(Boolean))];
+  const skipTools=completedKeys.filter(k=>!planTools.length||planTools.includes(k));
+  const firstPending=steps.findIndex(s=>s?.status!=="completed"&&s?.status!=="skipped");
+  const resumeFromStepIndex=firstPending>=0?firstPending:steps.length;
+  return {
+    planVersion:String(executionPlan?.schemaVersion||checkpoint?.planVersion||"1"),
+    completedStepIds,
+    completedTools:completedKeys,
+    skipTools,
+    resumeFromStepIndex,
+    steps:steps.map(s=>({...s}))
+  };
 }
 
 function buildCheckpoint(job,result=null,{message="",progress=null,phase=null,tool=null,complete=false}={}){
   const activity=Array.isArray(result?.activity)?result.activity.at(-1):null;
   const steps=Array.isArray(job.checkpoint?.steps)?job.checkpoint.steps:buildStepPlan(job);
-  const activeTool=String(tool||activity?.tool||steps.find(x=>x.status==="running")?.tool||job.type||"executor").slice(0,120);
-  const doneTools=(Array.isArray(result?.activity)?result.activity:[]).filter(x=>x?.state==="done").map(x=>String(x?.tool||""));
-  const nextSteps=steps.map(step=>doneTools.includes(step.tool)?{...step,status:"completed",startedAt:step.startedAt||now(),completedAt:step.completedAt||now()}:step.tool===activeTool?{...step,status:complete?"completed":"running",startedAt:step.startedAt||now(),completedAt:complete?now():null}:step);
-  return {phase:String(phase||activity?.state||job.type||"execution").slice(0,80),tool:activeTool,progress:Math.min(95,Math.max(0,Number(progress??job.progress)||0)),message:String(message||activity?.details||"Execution checkpoint").slice(0,600),at:now(),attempt:Number(job.attempts||0),proofRequired:Boolean(job.type==="mission"||job.type==="agent"||job.type==="build"||job.type==="deploy"),stepIndex:Math.max(0,nextSteps.findIndex(x=>x.status==="running")),steps:nextSteps};
+  const activeRaw=String(tool||activity?.tool||steps.find(x=>x.status==="running")?.tool||job.type||"executor").slice(0,120);
+  const activeKey=canonicalStepKey(activeRaw);
+  const doneKeys=(Array.isArray(result?.activity)?result.activity:[]).filter(x=>x?.state==="done").map(x=>canonicalStepKey(x?.tool)).filter(Boolean);
+  const nextSteps=steps.map(step=>{
+    const key=canonicalStepKey(step?.key||step?.tool);
+    if(doneKeys.includes(key))return {...step,key,status:"completed",startedAt:step.startedAt||now(),completedAt:step.completedAt||now()};
+    if(key===activeKey && key!=="verify")return {...step,key,status:complete?"completed":"running",startedAt:step.startedAt||now(),completedAt:complete?now():null};
+    return {...step,key};
+  });
+  return {
+    planVersion:String(job.payload?.brainPlan?.schemaVersion||job.checkpoint?.planVersion||"1"),
+    phase:String(phase||activity?.state||job.type||"execution").slice(0,80),
+    tool:activeRaw,
+    stepKey:activeKey,
+    progress:Math.min(95,Math.max(0,Number(progress??job.progress)||0)),
+    message:String(message||activity?.details||"Execution checkpoint").slice(0,600),
+    at:now(),
+    attempt:Number(job.attempts||0),
+    proofRequired:Boolean(job.type==="mission"||job.type==="agent"||job.type==="build"||job.type==="deploy"),
+    stepIndex:Math.max(0,nextSteps.findIndex(x=>x.status==="running")),
+    steps:nextSteps
+  };
 }
 
 function compactResult(result){
@@ -254,15 +314,21 @@ async function requestJson(url,options={},timeoutMs=600000){
 
 async function executeAgent(job){
   const base=String(process.env.RENDER_EXTERNAL_URL||process.env.BHAI_PUBLIC_URL||"").replace(/\/$/,"")||`http://127.0.0.1:${Number(process.env.PORT)||10000}`;
+  const recoveryCheckpoint=job.payload?.recovery?.checkpoint||job.checkpoint||null;
+  const executionPlan=job.payload?.brainPlan||null;
+  const executionResume=buildExecutionResume(executionPlan,recoveryCheckpoint);
   return requestJson(base+"/api/agent",{
     method:"POST",
     headers:{"Content-Type":"application/json",...internalHeaders(job.owner)},
-    body:JSON.stringify({messages:Array.isArray(job.payload?.messages)&&job.payload.messages.length?job.payload.messages:[{role:"user",text:job.goal}],doIt:job.payload?.doIt!==false,executionPlan:job.payload?.brainPlan||null,recoveryCheckpoint:job.payload?.recovery?.checkpoint||job.checkpoint||null})
+    body:JSON.stringify({messages:Array.isArray(job.payload?.messages)&&job.payload.messages.length?job.payload.messages:[{role:"user",text:job.goal}],doIt:job.payload?.doIt!==false,executionPlan,recoveryCheckpoint,executionResume})
   });
 }
 
 async function executeMission(job){
   const base=String(process.env.RENDER_EXTERNAL_URL||process.env.BHAI_PUBLIC_URL||"").replace(/\/$/,"")||`http://127.0.0.1:${Number(process.env.PORT)||10000}`;
+  const recoveryCheckpoint=job.payload?.recovery?.checkpoint||job.checkpoint||null;
+  const executionPlan=job.payload?.brainPlan||null;
+  const executionResume=buildExecutionResume(executionPlan,recoveryCheckpoint);
   const body={
     task:job.goal||job.payload?.task||"",
     projectName:String(job.payload?.projectName||"BHAI-App"),
@@ -270,7 +336,10 @@ async function executeMission(job){
     branch:String(job.payload?.branch||"main"),
     doIt:true,
     maxFixes:Math.min(Math.max(Number(job.payload?.maxFixes)||2,0),3),
-    autoDeploy:job.payload?.autoDeploy!==false,executionPlan:job.payload?.brainPlan||null,recoveryCheckpoint:job.payload?.recovery?.checkpoint||job.checkpoint||null
+    autoDeploy:job.payload?.autoDeploy!==false,
+    executionPlan,
+    recoveryCheckpoint,
+    executionResume
   };
   return requestJson(base+"/api/mission",{
     method:"POST",headers:{"Content-Type":"application/json",...internalHeaders(job.owner)},body:JSON.stringify(body)

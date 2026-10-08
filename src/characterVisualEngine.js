@@ -35,9 +35,9 @@ export function normalizeVisualRequest(input={}){
   const detectedStyle=/\b(?:2d|2-d|2 d|flat cartoon|hand drawn|hand-drawn)\b/i.test(text)?"2d":
     /\b(?:anime|manga)\b/i.test(text)?"anime":
     /\b(?:3d|3-d|three dimensional|cinematic 3d)\b/i.test(text)?"3d":"";
-  const aspectRatio=/\b9\s*:\s*16\b/.test(text)?"9:16":
+  const aspectRatio=explicitAspect||(/\b9\s*:\s*16\b/.test(text)?"9:16":
     /\b4\s*:\s*5\b/.test(text)?"4:5":
-    /\b1\s*:\s*1\b|\bsquare\b/.test(text)?"1:1":"16:9";
+    /\b1\s*:\s*1\b|\bsquare\b/.test(text)?"1:1":"16:9");
 
   return {
     prompt:raw,

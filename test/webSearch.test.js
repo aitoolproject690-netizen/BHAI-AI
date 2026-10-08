@@ -181,7 +181,7 @@ test("webSearch falls back to Pollinations search before Gemini when public sear
   try{
     const rows=await webSearch("India mein abhi petrol ka price kya chal raha hai?");
     assert.equal(rows.length,2);
-    assert.match(rows[0].url,/ppac\\.gov\\.in/);
+    assert.match(rows[0].url,/ppac\.gov\.in/);
     assert.ok(calls.some(url=>String(url).includes("gen.pollinations.ai/v1/chat/completions")));
     assert.equal(calls.some(url=>String(url).includes("generativelanguage.googleapis.com")),false);
   }finally{

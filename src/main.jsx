@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState}from'react';
 import{createRoot}from'react-dom/client';
-import{Send,Mic,Activity as ActivityIcon,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,UserCircle,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug,WandSparkles,BrainCircuit}from'lucide-react';
+import{Send,Mic,Activity as ActivityIcon,Paperclip,Plus,Loader2,Zap,ShieldCheck,Globe2,Code2,Image as ImageIcon,Menu,Search,Settings,Copy,Check,ChevronDown,UserCircle,Download,X,Paperclip as Clip,PanelLeftClose,PanelLeftOpen,RefreshCw,Target,Plug,WandSparkles,BrainCircuit,History}from'lucide-react';
 import'./styles.css';
 import OwnerPanel from'./OwnerPanel.jsx';
 import AccountPanel from'./AccountPanel.jsx';
@@ -11,6 +11,7 @@ import GeneratorPanel from'./GeneratorPanel.jsx';
 import SystemPanel from'./SystemPanel.jsx';
 import ResellerPanel from'./ResellerPanel.jsx';
 import ProjectBrainPanel from'./ProjectBrainPanel.jsx';
+import ExecutionHistoryPanel from'./ExecutionHistoryPanel.jsx';
 import {normalizeIntent,isCasualIntent,detectMediaIntent,isStoryScriptIntent,isCharacterCreationIntent,isGeneralChatIntent,isLocalCodingIntent,isWebResearchIntent} from './intentRouter.js';
 import {apiUrl,readJsonResponse,requestJson} from './apiClient.js';
 
@@ -95,7 +96,7 @@ function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),doIt=true;
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
- const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3});
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[historyOpen,setHistoryOpen]=useState(false),[resumeMission,setResumeMission]=useState(null),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3});
  const end=useRef(null),recognition=useRef(null),workTicker=useRef(null);
  const[authChecked,setAuthChecked]=useState(false);
  useEffect(()=>{let live=true;(async()=>{const t=authToken();if(!t){if(live)setAuthChecked(true);return;}try{const r=await fetch(apiUrl("/api/accounts?me=1"),{headers:authHeaders()});const d=await r.json();if(live&&r.ok&&d.account){setAccount(d.account);setAuthChecked(true);return;}}catch{}localStorage.removeItem("bhai_user_session");sessionStorage.removeItem("bhai_user_session");if(live){setAccount(null);setAuthChecked(true);}})();return()=>{live=false}},[]);
@@ -534,10 +535,11 @@ function App(){
   </aside>
   <main>
    <header>
-    {!sidebar&&<button className="openSide" onClick={()=>setSidebar(true)}><PanelLeftOpen size={19}/></button>}
+    {!sidebar&&<button className="openSide" onClick={()=>setSidebar(true)}><PanelLeftOpen size={19}/></button>
     <div className="topTitle"><b>BHAI X</b></div>
     <button className="headerIconBtn" aria-label="Settings" title="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button>
    </header>
+   {resumeMission?.jobId&&<div className="resumeBar"><span>🧭 Previous mission checkpoint saved: <b>{String(resumeMission.goal||resumeMission.name||"Interrupted task").slice(0,90)}</b></span><button onClick={()=>setHistoryOpen(true)}>Open History</button><button onClick={()=>setHistoryOpen(true)}>Resume / Retry</button></div>}
    <section className="messages">
     {chat?.messages.map(m=><div className={m.role==='user'?'row user':'row'} key={m.id}>
       <div className={m.role==='user'?'bubble userBubble':'bubble'}>
@@ -565,7 +567,8 @@ function App(){
     <div className="composerHint">🧠 BHAI X khud samjhega request ka intent — chat, research, coding, GitHub, image, video, app ya doosra kaam. Koi tool select karne ki zarurat nahi.</div>
    </div>
   </main>
- {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false)}/>} {brainOpen&&<ProjectBrainPanel onClose={()=>setBrainOpen(false)}/>} \n </div>
+ {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false}/>} {brainOpen&&<ProjectBrainPanel onClose={()=>setBrainOpen(false)}/>} {historyOpen&&<ExecutionHistoryPanel onClose={()=>setHistoryOpen(false)} />} 
+ </div>
 }
 createRoot(document.getElementById('root')).render(<App/>);
 // CI final verification marker

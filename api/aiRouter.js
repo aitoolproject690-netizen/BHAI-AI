@@ -123,7 +123,7 @@ export function routeAI({ task="", preferred="", role="chat", exclude=[] }={}) {
       : role === "medical"
         ? ["gemini", "openai", "anthropic", "pollinations", "huggingface", "core"]
         : role === "chat-general" || role === "conversation"
-          ? ["gemini", "openai", "pollinations", "huggingface", "anthropic", "core"]
+          ? ["core", "gemini", "openai", "pollinations", "huggingface", "anthropic"]
           : /github|repo|repository|build|test|engineering/.test(lower)
             ? ["core", "gemini", "openai", "pollinations", "anthropic", "huggingface"]
             : /code|debug/.test(lower)

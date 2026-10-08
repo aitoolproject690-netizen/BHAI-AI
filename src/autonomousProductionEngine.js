@@ -1,6 +1,4 @@
 import {normalizeStoryRequest,parseAndValidateStoryPlan} from "./storyEngine.js";
-import {isLikelyEditRequest} from "./sceneEditorEngine.js";
-
 export const AUTONOMOUS_PRODUCTION_SCHEMA_VERSION="1.0";
 const clean=(v,n=12000)=>String(v??"").trim().slice(0,n);
 const clamp=(v,min,max,fb)=>{const n=Number(v);return Number.isFinite(n)?Math.min(max,Math.max(min,n)):fb;};
@@ -11,7 +9,7 @@ const YOUTUBE=/(?:youtube|publish|uploads+(?:the|this|final)?s*video|final.*(?:p
 export function isAutonomousProductionRequest(text=""){
  const raw=String(text||"").trim();
  if(!raw)return false;
- return FULL_PIPELINE.test(raw) || (/(?:story|episode|scene|video)/i.test(raw)&&YOUTUBE.test(raw));
+ return FULL_PIPELINE.test(raw) || (/(?:story|episode|scene)/i.test(raw)&&YOUTUBE.test(raw));
 }
 
 export function isYouTubePublishRequest(text=""){
@@ -23,7 +21,7 @@ export function normalizeAutonomousRequest(input={}){
  const story=normalizeStoryRequest({
   prompt,
   language:input.language||"Hindi",
-  durationSeconds:clamp(input.durationSeconds||input.duration,15,1800,120),
+  durationSeconds:clamp(input.durationSeconds||input.duration,15,1800,15),
   genre:input.genre||"suspense",
   tone:input.tone||"cinematic, emotional, family-friendly",
   visualStyle:input.visualStyle||"3D anime cinematic cartoon"
@@ -34,7 +32,7 @@ export function normalizeAutonomousRequest(input={}){
   autoPublish:Boolean(input.autoPublish||isYouTubePublishRequest(prompt)),
   privacy:["public","unlisted","private"].includes(input.privacy)?input.privacy:"private",
   render:Boolean(input.render!==false),
-  maxScenes:clamp(input.maxScenes,1,12,12),
+  maxScenes:clamp(input.maxScenes,1,3,3),
   aspectRatio:/^(?:9:16|1:1|4:5|16:9)$/.test(String(input.aspectRatio||""))?String(input.aspectRatio):"16:9"
  };
 }

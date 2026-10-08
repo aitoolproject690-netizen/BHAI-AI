@@ -38,11 +38,12 @@ import deploy from "./api/deploy.js";
 import engineering from "./api/engineering.js";
 import mission from "./api/mission.js";
 import story from "./api/story.js";
+import characters from "./api/characters.js";
 import apiKeys from "./api/apiKeys.js";
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT)||10000;
 const configuredCorsOrigin=String(process.env.BHAI_CORS_ORIGIN||"").trim();
-const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/worker":worker,"/api/preflight":preflight,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/ai":ai,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests,"/api/dna":dna,"/api/vault":vault,"/api/accounts":accounts,"/api/resellers":resellers,"/api/billing":billing,"/api/errorfix":errorfix,"/api/deploy":deploy,"/api/engineering":engineering,"/api/mission":mission,"/api/story":story,"/api/api-keys":apiKeys,"/api/media":agent,"/api/chat":agent};
+const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/worker":worker,"/api/preflight":preflight,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/ai":ai,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests,"/api/dna":dna,"/api/vault":vault,"/api/accounts":accounts,"/api/resellers":resellers,"/api/billing":billing,"/api/errorfix":errorfix,"/api/deploy":deploy,"/api/engineering":engineering,"/api/mission":mission,"/api/story":story,"/api/characters":characters,"/api/api-keys":apiKeys,"/api/media":agent,"/api/chat":agent};
 function runApi(fn,req,res){
   attachRequestId(res,req.__bhaiRequestId||createRequestId());
   let body="";

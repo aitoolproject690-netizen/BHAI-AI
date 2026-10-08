@@ -34,3 +34,12 @@ test("keeps valid concise factual answers",()=>{
   assert.equal(isObviouslyGarbledResponse("4","2+2=?"),false);
 });
 
+
+test("rejects one-token nonsense on natural conversational testing prompts",()=>{
+  assert.equal(isObviouslyGarbledResponse("uge","Bhai aise hi test kar rha tha kya reply deta hai tu 😅"),true);
+});
+
+test("keeps legitimate short conversational replies",()=>{
+  assert.equal(isObviouslyGarbledResponse("badhiya","Bhai kya haal hai?"),false);
+  assert.equal(isObviouslyGarbledResponse("haan","Bhai sun raha hai?"),false);
+});

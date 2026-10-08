@@ -32,3 +32,16 @@ test("terminal states cannot transition back into execution",()=>{
  assert.equal(canTransition("cancelled","running"),false);
  assert.equal(canTransition("failed","verifying"),false);
 });
+
+
+test("history record is terminal, owner-scoped, and event-bounded",()=>{
+ const {buildHistoryRecord}=await import("../api/jobRunner.js");
+ const job={id:"job-123",owner:"owner-1",type:"mission",goal:"ship app",status:"failed",attempts:3,maxAttempts:3,createdAt:"2026-01-01T00:00:00Z",finishedAt:"2026-01-01T00:01:00Z",verificationSummary:"proof failed",error:"boom",result:{ok:false},payload:{secret:"must-not-enter-history",resumedFrom:"job-old"},events:Array.from({length:80},(_,i)=>({state:"running",message:String(i)}))};
+ const h=buildHistoryRecord(job);
+ assert.equal(h.id,"job-123");
+ assert.equal(h.owner,"owner-1");
+ assert.equal(h.status,"failed");
+ assert.equal(h.resumedFrom,"job-old");
+ assert.equal(h.events.length,60);
+ assert.equal("secret" in h,false);
+});

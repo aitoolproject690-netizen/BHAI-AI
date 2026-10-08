@@ -321,9 +321,13 @@ export async function generateWithRouter({
     attemptedProviders.push(id);
     try{
       const result=await callProvider(id,{system,messages,model});
-      // Provider success is not enough: malformed/tiny-model fragments are
-      // treated as a quality failure and the next capable provider gets a turn.
-      if(isObviouslyGarbledResponse(result?.text,task)){
+      // Provider success is not enough for conversational/coding lanes:
+      // malformed/tiny-model fragments are a quality failure and the next
+      // capable provider gets a turn. Evidence/reviewer lanes have their own
+      // stricter structured validation below, so do not apply this generic
+      // one-token heuristic to their fixtures.
+      const qualitySensitiveRole=["chat","chat-general","conversation","coding","engineering"].includes(role);
+      if(qualitySensitiveRole&&isObviouslyGarbledResponse(result?.text,task)){
         const qualityError=providerError("Provider returned malformed or non-answer output.",422,id);
         last=qualityError;
         if(!failedProviders.includes(id)) failedProviders.push(id);

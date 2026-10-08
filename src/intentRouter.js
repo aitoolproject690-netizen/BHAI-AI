@@ -17,6 +17,8 @@ const CASUAL_KEYS = new Set([
 ]);
 
 const VISUAL_WORDS = /\b(?:image|picture|photo|pic|poster|illustration|artwork|tasveer|scene|visual|चित्र|तस्वीर)\b/i;
+const STORY_WORDS = /\b(?:story|script|screenplay|episode|kahani|kahaani|kissa|cartoon\s+story)\b/i;
+const STORY_CREATE_CUES = /\b(?:create|make|generate|write|draft|prepare|plan|likho|likh\s+do|banao|bana|banado|tayyar|tayyar\s+karo)\b/i;
 const VIDEO_WORDS = /\b(?:video|clip|animation|animated)\b/i;
 const CREATE_WORDS = /\b(?:generate|create|make|draw|design|render|visualize|produce|banao|bana|banado|ban[aā]o)\b/i;
 const INSULT_WORDS = /\b(?:chutiya|chutiye|bewakoof|bewkoof|gadha|gadhi|pagal|kamine|kamina|nalayak|ullu|saala|sala)\b/i;
@@ -93,6 +95,12 @@ export function isCasualIntent(text="") {
   if(!hasClearWorkCue(text) && CONVERSATION_KEYS.some(pattern=>pattern.test(String(text||"")))) return true;
   if(getCasualReply(text)) return true;
   return /^(?:khana\s+(?:kha|khaya)\s+liya(?:\s+hai)?|kha\s+liya|chai\s+(?:pi|pili)\s+liya|so\s+gaye|so\s+rahe\s+ho|kahan\s+ho|kya\s+kar\s+rahe\s+ho|busy\s+ho|free\s+ho)$/i.test(key);
+}
+
+export function isStoryScriptIntent(text="") {
+  const raw=String(text||"").trim();
+  if(!raw||detectMediaIntent(raw).type)return false;
+  return STORY_WORDS.test(raw) && STORY_CREATE_CUES.test(raw);
 }
 
 export function detectMediaIntent(text="") {

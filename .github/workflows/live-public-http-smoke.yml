@@ -41,7 +41,7 @@ jobs:
             const fs = require("fs");
             const d = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
             if (d.ok !== true) throw new Error("health ok flag is not true");
-            if (d.service !== "BHAI X") throw new Error("unexpected service: " + d.service);
+            if (d.service !== "BHAI AI") throw new Error("unexpected service: " + d.service);
             console.log(JSON.stringify({
               verified: true,
               httpStatus: 200,

@@ -207,12 +207,13 @@ async function claimJobs(){
       ORDER BY updated_at ASC
       FOR UPDATE SKIP LOCKED LIMIT $1`,[limit]);
     const claimed=[];
+    const exhausted=[];
     for(const row of q.rows){
       const job=row.data||{};
       if(Number(job.attempts||0)>=Number(job.maxAttempts||DEFAULT_MAX_ATTEMPTS)){
         const failed={...job,status:"failed",leaseUntil:null,progress:100,events:appendEvent(job,{state:"failed",message:"Maximum attempts exhausted before execution."}),updatedAt:now()};
         await client.query("UPDATE bhai_jobs SET data=$2,updated_at=NOW() WHERE id=$1",[row.id,failed]);
-        setTimeout(()=>void recordHistory(failed),0);
+        exhausted.push(failed);
         continue;
       }
       const attempts=Number(job.attempts||0)+1;
@@ -222,6 +223,7 @@ async function claimJobs(){
       claimed.push(next);
     }
     await client.query("COMMIT");
+    for(const failed of exhausted)await recordHistory(failed);
     return claimed;
   }catch(e){
     await client.query("ROLLBACK").catch(()=>{});

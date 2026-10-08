@@ -208,7 +208,21 @@ export default async function handler(req,res){
   const action=String(req.body?.action||"status");
   if(action==="connect")return res.status(200).json({ok:true,...await beginYouTubeOAuth(account.id)});
   if(action==="disconnect")return res.status(200).json({ok:true,...await revokeYouTubeConnection(account.id)});
-  if(action==="upload")return res.status(200).json(await uploadToYouTube(account.id,req.body||{}));
+  if(action==="upload"){
+   const input={...(req.body||{})};
+   if(!input.videoData&&!input.data){
+    const row=await tokenRow(db,account.id);
+    if(!row)throw new Error("YouTube account is not connected.");
+    const media=await db.query("SELECT mime_type,data FROM bhai_media_assets WHERE account_id=$1 AND type='video' ORDER BY id DESC LIMIT 1",[account.id]);
+    const latest=media.rows[0];
+    if(!latest)throw new Error("No saved verified final video is available. Render a final MP4 before publishing.");
+    input.videoData=latest.data;input.mimeType=latest.mime_type;
+    const pkg=await db.query("SELECT youtube FROM bhai_video_packages WHERE account_id=$1",[account.id]).catch(()=>({rows:[]}));
+    const meta=pkg.rows[0]?.youtube||{};
+    input.title=input.title||meta.title;input.description=input.description||meta.description;input.tags=input.tags||meta.tags;
+   }
+   return res.status(200).json(await uploadToYouTube(account.id,input));
+  }
   return res.status(400).json({error:"Unsupported YouTube action."});
  }catch(e){return res.status(502).json({ok:false,error:String(e?.message||e)});}
 }

@@ -1,5 +1,6 @@
 import { selectSkillsForTask, getSkillPromptContext } from "../src/skillsRouter.js";
 import fs from "node:fs/promises";
+import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { ownerState, ownerReady } from "./owner.js";
@@ -11,6 +12,7 @@ import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, asse
 import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpleColdQuestion } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isGeneralChatIntent} from "../src/intentRouter.js";
+import {normalizeVisualRequest,buildCharacterVisualPrompt,verifyCharacterVisualContract,pickCharacterForPrompt} from "../src/characterVisualEngine.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
@@ -69,6 +71,44 @@ async function runReadOnlyGithubAudit(text=""){
  return {text:summary,owner:target.owner,repo:target.repo,branch:String(repoMeta?.default_branch||""),risks,workflows,lockfiles,buildScript,testScript};
 }
 
+
+async function ensureCharacterVisualAssetsTable(db){
+ await db.query(`CREATE TABLE IF NOT EXISTS bhai_character_visual_assets (
+   asset_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, character_id TEXT NOT NULL,
+   identity_fingerprint TEXT NOT NULL, identity_version INTEGER NOT NULL DEFAULT 1,
+   prompt TEXT NOT NULL, request_json JSONB NOT NULL, mime_type TEXT NOT NULL,
+   data TEXT NOT NULL, provider TEXT, verification_mode TEXT NOT NULL,
+   verification_score NUMERIC NOT NULL DEFAULT 0, visual_pixel_verified BOOLEAN NOT NULL DEFAULT FALSE,
+   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ )`);
+ await db.query("CREATE INDEX IF NOT EXISTS idx_bhai_character_visual_assets_lookup ON bhai_character_visual_assets(account_id,character_id,created_at DESC)");
+}
+
+async function findCharacterForVisual(db,accountId,text){
+ await db.query(`CREATE TABLE IF NOT EXISTS bhai_character_identities (
+   id TEXT PRIMARY KEY, account_id TEXT NOT NULL, character_id TEXT NOT NULL, name TEXT NOT NULL,
+   identity_version INTEGER NOT NULL DEFAULT 1, identity_fingerprint TEXT NOT NULL, identity_json JSONB NOT NULL,
+   canonical_prompt TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   UNIQUE(account_id,character_id), UNIQUE(account_id,identity_fingerprint)
+ )`);
+ const q=await db.query("SELECT character_id,name,identity_version,identity_fingerprint,identity_json,canonical_prompt FROM bhai_character_identities WHERE account_id=$1 ORDER BY created_at DESC LIMIT 100",[accountId]);
+ return pickCharacterForPrompt(q.rows,text);
+}
+
+async function saveCharacterVisualAsset(db,accountId,character,request,media,verification){
+ await ensureCharacterVisualAssetsTable(db);
+ const hash=crypto.createHash("sha256").update(character.character_id+"|"+character.identity_fingerprint+"|"+JSON.stringify(request)+"|"+media.data).digest("hex").slice(0,24);
+ const assetId="charimg_"+character.character_id+"_"+hash;
+ await db.query(`INSERT INTO bhai_character_visual_assets
+   (asset_id,account_id,character_id,identity_fingerprint,identity_version,prompt,request_json,mime_type,data,provider,verification_mode,verification_score,visual_pixel_verified)
+   VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13)
+   ON CONFLICT(asset_id) DO UPDATE SET data=EXCLUDED.data,provider=EXCLUDED.provider,created_at=NOW()`,
+   [assetId,accountId,character.character_id,character.identity_fingerprint,Number(character.identity_version||1),request.prompt,JSON.stringify(request),media.mimeType,media.data,media.provider||null,verification.mode,Number(verification.score||0),Boolean(verification.visualPixelVerification)]);
+ await db.query(`DELETE FROM bhai_character_visual_assets WHERE account_id=$1 AND character_id=$2 AND asset_id IN (
+   SELECT asset_id FROM bhai_character_visual_assets WHERE account_id=$1 AND character_id=$2 ORDER BY created_at DESC OFFSET 20
+ )`,[accountId,character.character_id]);
+ return assetId;
+}
 
 async function generateImage(prompt,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
@@ -636,8 +676,9 @@ export default async function handler(req,res){
    try{
     await reserveMedia(db,account.id,"image",10);
     try{
-     const media=await generateImage(prompt,aspectRatio); await saveMediaAsset(db,account.id,"image",media);
-     return json(res,200,{ok:true,text:"## 🖼️ Image generated\\n\\nBHAI X ne direct media pipeline se image banayi aur output validate kiya.",activity:[{tool:"generate_image",state:"done",details:"Dedicated media endpoint generated and validated the image."}],images:[{mimeType:media.mimeType,data:media.data}],usage:await getMediaUsage(db,account.id)});
+     const visual=await generateCharacterVisual(db,account.id,prompt,aspectRatio); const media=visual.media; await saveMediaAsset(db,account.id,"image",media);
+     const imageMeta={mimeType:media.mimeType,data:media.data,...(visual.character?{characterId:visual.character.character_id,identityFingerprint:visual.character.identity_fingerprint,visualAssetId:visual.assetId,identityLock:true,verificationMode:visual.verification?.mode||"generation-contract",verificationScore:visual.verification?.score||0}:{} )};
+     return json(res,200,{ok:true,text:visual.character?"## 🖼️ Character image generated\\n\\nBHAI X ne permanent Character ID ke locked visual contract ke saath image banayi aur asset ko Character ID se bind kiya.":"## 🖼️ Image generated\\n\\nBHAI X ne direct media pipeline se image banayi aur output validate kiya.",activity:[{tool:"generate_image",state:"done",details:visual.character?"Character identity lock + asset lineage verified before saving the image.":"Dedicated media endpoint generated and validated the image."}],images:[imageMeta],character:visual.character?{characterId:visual.character.character_id,name:visual.character.name,identityFingerprint:visual.character.identity_fingerprint,visualAssetId:visual.assetId,verification:visual.verification}:null,usage:await getMediaUsage(db,account.id)});
     }catch(e){await releaseMedia(db,account.id,"image");return json(res,502,{error:"Image generation failed: "+String(e?.message||e),activity:[{tool:"generate_image",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});}
    }catch(e){return json(res,502,{error:"Image generation pre-flight failed: "+String(e?.message||e)});}
   }
@@ -750,9 +791,11 @@ if(directImageRequest){
    const cleanPrompt=latestUserMessage
     .replace(/^\s*(?:create|generate|make|draw|design|render|visualize|banao|bana|banado|ban[aā]o)\s+(?:an?\s+)?(?:image|picture|photo|poster|illustration|artwork|tasveer|scene)\s*(?:of|for)?\s*/i,"")
     .trim()||latestUserMessage;
-   const media=await generateImage(cleanPrompt,"16:9");
+   const visual=await generateCharacterVisual(db,account.id,cleanPrompt,"16:9");
+   const media=visual.media;
    await saveMediaAsset(db,account.id,"image",media);
-   return json(res,200,{ok:true,text:"## 🖼️ Image generated\n\nBHAI X ne request ko direct image pipeline par route kiya — GitHub/Mission execution bypass kiya gaya.",activity:[{tool:"generate_image",state:"done",details:"Direct image request routed to the media generator."}],images:[{mimeType:media.mimeType,data:media.data}],usage:await getMediaUsage(db,account.id)});
+   const imageMeta={mimeType:media.mimeType,data:media.data,...(visual.character?{characterId:visual.character.character_id,identityFingerprint:visual.character.identity_fingerprint,visualAssetId:visual.assetId,identityLock:true,verificationMode:visual.verification?.mode||"generation-contract",verificationScore:visual.verification?.score||0}:{} )};
+   return json(res,200,{ok:true,text:visual.character?"## 🖼️ Character image generated\n\nBHAI X ne permanent Character ID ke locked visual contract ke saath image banayi aur asset ko Character ID se bind kiya.":"## 🖼️ Image generated\n\nBHAI X ne request ko direct image pipeline par route kiya — GitHub/Mission execution bypass kiya gaya.",activity:[{tool:"generate_image",state:"done",details:visual.character?"Character identity lock + asset lineage verified before saving the image.":"Direct image request routed to the media generator."}],images:[imageMeta],character:visual.character?{characterId:visual.character.character_id,name:visual.character.name,identityFingerprint:visual.character.identity_fingerprint,visualAssetId:visual.assetId,verification:visual.verification}:null,usage:await getMediaUsage(db,account.id)});
   }catch(e){
    await releaseMedia(db,account.id,"image");
    return json(res,502,{error:"Image generation failed: "+String(e?.message||e),activity:[{tool:"generate_image",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});

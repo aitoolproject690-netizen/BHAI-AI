@@ -80,9 +80,9 @@ function appendEvent(job,event){
 function canonicalStepKey(tool=""){
   const t=String(tool||"").toLowerCase().replace(/[^a-z0-9:_-]+/g,"-");
   if(/^story(?:-|:)|story-engine/.test(t))return "story";
-  if(/^(?:characters?|character-identity|character:)/.test(t))return "characters";
   if(/(?:visuals?|image|generate-image|character-visual)/.test(t))return "visuals";
   if(/(?:videos?|generate-video|character-video)/.test(t))return "videos";
+  if(/^(?:characters?|character-identity)(?:$|[:_-])/.test(t))return "characters";
   if(/(?:post-production|scene-post-production|procedural-audio|vfx|music|sfx)/.test(t))return "post-production";
   if(/(?:render|ffmpeg|scene-editor)/.test(t))return "render";
   if(/(?:youtube|publisher)/.test(t))return "youtube";

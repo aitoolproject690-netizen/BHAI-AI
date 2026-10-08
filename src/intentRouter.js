@@ -22,6 +22,22 @@ const CREATE_WORDS = /\b(?:generate|create|make|draw|design|render|visualize|pro
 const INSULT_WORDS = /\b(?:chutiya|chutiye|bewakoof|bewkoof|gadha|gadhi|pagal|kamine|kamina|nalayak|ullu|saala|sala)\b/i;
 const MEDICAL_WORDS = /\b(?:sardi|shardi|cold|runny nose|naak se pani|naak bah|khansi|cough|bukhar|fever|dard|pain|headache|medicine|dawai|dava|doctor|hospital|symptom|tabiyat|health|sehat|pregnan|baby|baccha|infant|vomit|diarrhea|dast|blood|bleeding|saans|breathing|chest|seene|allergy|rash|swelling|infection|thakan|weakness|chakkar|dizziness|bp|blood pressure|sugar|diabetes|nutrition|diet|fiber|fibre|vitamin|protein|supplement|constipation)\b/i;
 
+// Natural conversational phrases that are clearly social/check-in chatter,
+// not a request to search, code, execute, or generate media.
+const CONVERSATION_KEYS = [
+  /\b(?:bas|aise|waise)\s+hi\b.{0,80}\b(?:test|check|try|dekh|dekhta|dekhna)\b/i,
+  /\b(?:test|check|try)\s+(?:kar|kr)\s+(?:raha|rha|rahi|rhi)\b.{0,80}\b(?:reply|jawab|response)\b/i,
+  /\b(?:kya|kaisa)\s+(?:reply|jawab|response)\s+(?:dega|deta|deti|aayega|aata|milega|milta)\b/i,
+  /\b(?:mazak|mazaak|masti|timepass)\b.{0,50}(?:kar|tha|thi|hai|hoon|hun)?\b/i,
+  /\b(?:sun bhai|bhai sun|oye bhai|arre bhai)\b/i,
+  /\b(?:haan bhai|han bhai|nahi bhai|nahin bhai|bas bhai|acha bhai|accha bhai)\b/i,
+  /\b(?:ready ho|online ho|jag rahe ho|zinda ho|free ho)\b/i
+];
+
+function hasClearWorkCue(text=""){
+  return /\b(?:github|git\s*hub|repo(?:sitory)?|code|coding|python|javascript|typescript|bug|error|debug|fix|deploy|build|commit|push|pull\s+request|app|project|website|apk|image|picture|photo|video|clip|animation|generate|create|draw|design|render|medical|medicine|dawai|doctor|symptom|fever|cough|pain|blood|bp|research|search|latest|current|today|news|price|weather)\b/i.test(String(text||""));
+}
+
 export function normalizeIntent(text="") {
   return String(text)
     .toLowerCase()
@@ -38,6 +54,15 @@ export function normalizeIntent(text="") {
 export function getCasualReply(text=""){
   const key=normalizeIntent(text);
   if(!key)return null;
+  if(!hasClearWorkCue(text) && CONVERSATION_KEYS.some(pattern=>pattern.test(String(text||"")))){
+    if(/\b(?:kya|kaisa)\s+(?:reply|jawab|response)\s+(?:dega|deta|deti|aayega|aata|milega|milta)\b/i.test(text)){
+      return "😂 Haan bhai, samajh gaya — tu bas test kar raha tha ki main kya reply deta hoon. Main yahin hoon, bol kya scene hai! 🚀";
+    }
+    if(/\b(?:mazak|mazaak|masti|timepass)\b/i.test(text)){
+      return "😂 Samajh gaya bhai, thodi masti chal rahi thi. Main ready hoon — bol, ab kya karna hai? 😄";
+    }
+    return "Haan bhai 😄 Samajh gaya. Main yahin hoon — bol kya scene hai? 🚀";
+  }
   if(/\bkya\s+kar\s+(?:raha|rahi)\s+hai\b/i.test(key)||/\bkya\s+kar\s+rahe\s+ho\b/i.test(key)){
     return "Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tu bata, kya scene hai?";
   }
@@ -56,6 +81,7 @@ export function getCasualReply(text=""){
 export function isCasualIntent(text="") {
   const key=normalizeIntent(text);
   if(CASUAL_KEYS.has(key)) return true;
+  if(!hasClearWorkCue(text) && CONVERSATION_KEYS.some(pattern=>pattern.test(String(text||"")))) return true;
   if(getCasualReply(text)) return true;
   return /^(?:khana\s+(?:kha|khaya)\s+liya(?:\s+hai)?|kha\s+liya|chai\s+(?:pi|pili)\s+liya|so\s+gaye|so\s+rahe\s+ho|kahan\s+ho|kya\s+kar\s+rahe\s+ho|busy\s+ho|free\s+ho)$/i.test(key);
 }

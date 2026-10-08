@@ -1,5 +1,5 @@
 import {requireSession} from "./_utils.js";
-import {cancelJob,createJob,getJobForOwner,listJobsForOwner} from "./jobRunner.js";
+import {cancelJob,createJob,getJobForOwner,listHistoryForOwner,listJobsForOwner,resumeJob} from "./jobRunner.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
 
@@ -52,13 +52,19 @@ export default async function handler(req,res){
   const account=await requireSession(req,res);if(!account)return;
   const id=String(req.body?.id||"").trim();
   if(!id)return json(res,400,{ok:false,error:"id is required"});
+  if(req.body?.action==="resume"){
+   try{
+    const job=await resumeJob(id,account);
+    return job?json(res,202,{ok:true,job}):json(res,404,{ok:false,error:"Job not found"});
+   }catch(e){return json(res,409,{ok:false,error:String(e?.message||e)})}
+  }
   if(req.body?.action==="cancel"){
    try{
     const job=await cancelJob(id,account);
     return job?json(res,200,{ok:true,job}):json(res,404,{ok:false,error:"Job not found"});
    }catch(e){return json(res,409,{ok:false,error:String(e?.message||e)})}
   }
-  return json(res,400,{ok:false,error:"Only action=cancel is supported. Job state is worker-controlled."});
+  return json(res,400,{ok:false,error:"Only action=resume or action=cancel is supported. Job state is worker-controlled."});
  }
  return json(res,405,{ok:false,error:"Method not allowed"});
 }

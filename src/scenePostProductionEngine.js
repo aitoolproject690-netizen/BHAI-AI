@@ -74,7 +74,7 @@ export function buildScenePostProductionManifest(input={}){
     volume:0.55
   }));
   const music={
-    enabled:true,
+    enabled:input.includeMusic!==false,
     mood:r.mood,
     durationMs:Math.round(r.duration*1000),
     volume:0.32,

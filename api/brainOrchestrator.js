@@ -83,6 +83,7 @@ export function brainSummary(plan){
     "lane="+String(p.lane||"unknown"),
     "tools="+(Array.isArray(p.tools)?p.tools.join(" → "):"none"),
     "context="+String(p.context?.mode||"none"),
+    "mobilePreferred="+String(Boolean(p.signals?.mobilePreferred)),
     "autoExecute="+String(Boolean(p.signals?.autoExecute)),
     "proofRequired="+String(Boolean(p.signals?.proofRequired))
   ].join(" | ");

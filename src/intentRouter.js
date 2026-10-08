@@ -113,7 +113,17 @@ export function detectMediaIntent(text="") {
   return {type:null,imageToVideo:false};
 }
 
-export function isMedicalChatIntent(text="") { return MEDICAL_WORDS.test(String(text||"")); }
+export function isMedicalChatIntent(text="") {
+  const raw=String(text||"");
+  // "cold", "temperature", and similar words can describe weather rather than
+  // a health issue. Current-weather requests must not enter the medical lane
+  // unless a clear health symptom is also present.
+  if(isCurrentContextIntent(raw)){
+    const medicalWithoutWeather=/\\b(?:sardi|shardi|runny nose|naak se pani|naak bah|khansi|cough|bukhar|fever|dard|pain|headache|medicine|dawai|dava|doctor|hospital|symptom|tabiyat|health|sehat|pregnan|baby|baccha|infant|vomit|diarrhea|dast|blood|bleeding|saans|breathing|chest|seene|allergy|rash|swelling|infection|thakan|weakness|chakkar|dizziness|bp|blood pressure|sugar|diabetes|nutrition|diet|fiber|fibre|vitamin|protein|supplement|constipation)\\b/i;
+    return medicalWithoutWeather.test(raw);
+  }
+  return MEDICAL_WORDS.test(raw);
+}
 
 /**
  * Detects indirect current-context questions that need fresh external evidence

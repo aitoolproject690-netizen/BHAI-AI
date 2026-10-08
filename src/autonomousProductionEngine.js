@@ -41,11 +41,15 @@ export function buildAutonomousPlan(input={}){
  const r=normalizeAutonomousRequest(input);
  const steps=[
   {id:"story",name:"Story + Script",lane:"story",required:true,state:"pending"},
-  {id:"characters",name:"Permanent Character Identity",lane:"character",required:true,state:"pending"},
+  {id:"characters",name:"Permanent Character Identity + Bible",lane:"character",required:true,state:"pending"},
+  {id:"camera",name:"Camera Director",lane:"camera",required:true,state:"pending"},
   {id:"visuals",name:"Character Visuals",lane:"image",required:true,state:"pending"},
   {id:"videos",name:"Character-aware Scene Videos",lane:"video",required:true,state:"pending"},
   {id:"post",name:"VFX + Music + SFX",lane:"post-production",required:true,state:"pending"},
-  {id:"render",name:"Final MP4 Renderer",lane:"ffmpeg-renderer",required:true,state:r.render?"pending":"skipped"},
+  {id:"audio",name:"Audio Master Contract",lane:"audio",required:true,state:"pending"},
+  {id:"render",name:"Final MP4 Renderer",lane:"ffmpeg-renderer",required:r.render,state:r.render?"pending":"skipped"},
+  {id:"youtubePackage",name:"YouTube Package + Thumbnail Set",lane:"youtube-package",required:true,state:"pending"},
+  {id:"shorts",name:"Shorts/Reels 9:16 Plan",lane:"shorts",required:true,state:"pending"},
   {id:"youtube",name:"YouTube Publishing",lane:"youtube",required:r.autoPublish,state:r.autoPublish?"pending":"skipped"}
  ];
  return {

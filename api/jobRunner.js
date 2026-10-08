@@ -103,11 +103,19 @@ async function readJob(id,owner){
   return job&&job.owner===owner?job:null;
 }
 
+export function buildHistoryRecord(job){
+  return {id:String(job.id),owner:job.owner,jobId:String(job.id),type:job.type,goal:job.goal,status:job.status,attempts:job.attempts,maxAttempts:job.maxAttempts,createdAt:job.createdAt,finishedAt:job.finishedAt||null,verificationSummary:job.verificationSummary||null,error:job.error||null,result:job.result||null,resumedFrom:job.payload?.resumedFrom||null,events:Array.isArray(job.events)?job.events.slice(-MAX_EVENTS):[]};
+}
+
 async function writeHistory(job){
   const db=await getDb();
   if(!db)return;
-  const history={id:crypto.randomUUID(),owner:job.owner,jobId:job.id,type:job.type,goal:job.goal,status:job.status,attempts:job.attempts,maxAttempts:job.maxAttempts,createdAt:job.createdAt,finishedAt:job.finishedAt||null,verificationSummary:job.verificationSummary||null,error:job.error||null,result:job.result||null,events:Array.isArray(job.events)?job.events.slice(-MAX_EVENTS):[]};
-  await db.query("INSERT INTO bhai_history(id,data,created_at) VALUES($1,$2,NOW())",[history.id,history]);
+  const history=buildHistoryRecord(job);
+  await db.query("INSERT INTO bhai_history(id,data,created_at) VALUES($1,$2,NOW()) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data",[history.id,history]);
+}
+
+async function recordHistory(job){
+  try{await writeHistory(job)}catch(e){console.error("[JobRunner] history write failed:",String(e?.message||e))}
 }
 
 async function writeJob(job){
@@ -130,7 +138,7 @@ export async function createJob({account,type="agent",payload={},goal="",maxAtte
     payload:payload&&typeof payload==="object"?payload:{},status,attempts:0,
     maxAttempts:Math.min(Math.max(Number(maxAttempts)||DEFAULT_MAX_ATTEMPTS,1),10),
     runAt:runAt?new Date(runAt).toISOString():null,leaseUntil:null,progress:0,
-    events:[{at:now(),state,status,message:"Job created."}],createdAt:now(),updatedAt:now()
+    events:[{at:now(),state:status,message:payload?.resumedFrom?"Job created as a recovery run from "+payload.resumedFrom+".":"Job created."}],createdAt:now(),updatedAt:now()
   };
   await writeJob(job);
   return job;
@@ -153,14 +161,15 @@ export async function resumeJob(id,account){
   const source=await getJobForOwner(id,account);
   if(!source) return null;
   if(!["failed","cancelled"].includes(source.status)) throw new Error("Only failed or cancelled jobs can be resumed.");
-  return createJob({account,type:source.type,payload:{...(source.payload||{}),resumedFrom:source.id},goal:source.goal,maxAttempts:source.maxAttempts});
+  return createJob({account,type:source.type,payload:{...(source.payload||{}),resumedFrom:source.id,recovery:{previousStatus:source.status,previousAttempts:Number(source.attempts||0),lastProgress:Number(source.progress||0),lastEvent:source.events?.at(-1)?.message||null}},goal:source.goal,maxAttempts:source.maxAttempts});
 }
 
 export async function listHistoryForOwner(account,{limit=50}={}){
   const db=await getDb();
   if(!db)return [];
-  const r=await db.query("SELECT data FROM bhai_history ORDER BY created_at DESC LIMIT $1",[Math.min(Math.max(Number(limit)||50,1),100)]);
-  return r.rows.map(x=>x.data).filter(x=>x?.owner===ownerKey(account));
+  await initDb();
+  const r=await db.query("SELECT data FROM bhai_history WHERE data->>'owner'=$1 ORDER BY created_at DESC LIMIT $2",[ownerKey(account),Math.min(Math.max(Number(limit)||50,1),100)]);
+  return r.rows.map(x=>x.data);
 }
 
 export async function cancelJob(id,account){
@@ -168,7 +177,9 @@ export async function cancelJob(id,account){
   if(!job) return null;
   if(TERMINAL.has(job.status)) return job;
   if(!canTransition(job.status,"cancelled")) throw new Error("Job cannot be cancelled from state "+job.status+".");
-  return writeJob({...job,status:"cancelled",progress:Math.min(100,Number(job.progress)||0),leaseUntil:null,events:appendEvent(job,{state:"cancelled",message:"Job cancelled by the owner."})});
+  const next=await writeJob({...job,status:"cancelled",progress:Math.min(100,Number(job.progress)||0),leaseUntil:null,events:appendEvent(job,{state:"cancelled",message:"Job cancelled by the owner."})});
+  await recordHistory(next);
+  return next;
 }
 
 async function claimJobs(){
@@ -201,6 +212,7 @@ async function claimJobs(){
       if(Number(job.attempts||0)>=Number(job.maxAttempts||DEFAULT_MAX_ATTEMPTS)){
         const failed={...job,status:"failed",leaseUntil:null,progress:100,events:appendEvent(job,{state:"failed",message:"Maximum attempts exhausted before execution."}),updatedAt:now()};
         await client.query("UPDATE bhai_jobs SET data=$2,updated_at=NOW() WHERE id=$1",[row.id,failed]);
+        setTimeout(()=>void recordHistory(failed),0);
         continue;
       }
       const attempts=Number(job.attempts||0)+1;
@@ -331,10 +343,12 @@ async function processJob(initial){
     if(verification.ok){
       job={...job,status:"completed",progress:100,leaseUntil:null,finishedAt:now(),verificationSummary:verification.reason,events:appendEvent(job,{state:"completed",progress:100,message:verification.reason})};
       await writeJob(job);
+      await recordHistory(job);
     }else{
       const retry=Number(job.attempts||1)<Number(job.maxAttempts||DEFAULT_MAX_ATTEMPTS);
       job={...job,status:retry?"queued":"failed",progress:retry?35:100,leaseUntil:null,backoffUntil:retry?new Date(Date.now()+retryDelayMs(job.attempts)).toISOString():null,error:verification.reason,events:appendEvent(job,{state:retry?"queued":"failed",progress:retry?35:100,message:retry?"Verification failed; bounded retry scheduled.":verification.reason})};
       await writeJob(job);
+      if(!retry)await recordHistory(job);
     }
   }catch(error){
     const fresh=await readJob(job.id,job.owner);
@@ -342,6 +356,7 @@ async function processJob(initial){
       const retry=Number(fresh.attempts||1)<Number(fresh.maxAttempts||DEFAULT_MAX_ATTEMPTS);
       const next={...fresh,status:retry?"queued":"failed",progress:retry?25:100,leaseUntil:null,backoffUntil:retry?new Date(Date.now()+retryDelayMs(fresh.attempts)).toISOString():null,error:String(error?.message||error).slice(0,1200),events:appendEvent(fresh,{state:retry?"queued":"failed",progress:retry?25:100,message:retry?"Executor error; bounded retry scheduled.":"Executor failed; max attempts reached.",error:String(error?.message||error).slice(0,600)})};
       await writeJob(next);
+      if(!retry)await recordHistory(next);
     }
   }finally{active--;}
 }

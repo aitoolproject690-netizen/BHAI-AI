@@ -77,6 +77,11 @@ function appendEvent(job,event){
   return next;
 }
 
+function buildCheckpoint(job,result=null,{message="",progress=null,phase=null,tool=null}={}){
+  const activity=Array.isArray(result?.activity)?result.activity.at(-1):null;
+  return {phase:String(phase||activity?.state||job.type||"execution").slice(0,80),tool:String(tool||activity?.tool||job.type||"executor").slice(0,120),progress:Math.min(95,Math.max(0,Number(progress??job.progress)||0)),message:String(message||activity?.details||"Execution checkpoint").slice(0,600),at:now(),attempt:Number(job.attempts||0),proofRequired:Boolean(job.type==="mission"||job.type==="agent"||job.type==="build"||job.type==="deploy")};
+}
+
 function compactResult(result){
   if(!result||typeof result!=="object")return {value:String(result??"")};
   const out={};
@@ -104,7 +109,7 @@ async function readJob(id,owner){
 }
 
 export function buildHistoryRecord(job){
-  return {id:String(job.id),owner:job.owner,jobId:String(job.id),type:job.type,goal:job.goal,status:job.status,attempts:job.attempts,maxAttempts:job.maxAttempts,createdAt:job.createdAt,finishedAt:job.finishedAt||null,verificationSummary:job.verificationSummary||null,error:job.error||null,result:job.result||null,resumedFrom:job.payload?.resumedFrom||null,events:Array.isArray(job.events)?job.events.slice(-MAX_EVENTS):[]};
+  return {id:String(job.id),owner:job.owner,jobId:String(job.id),type:job.type,goal:job.goal,status:job.status,attempts:job.attempts,maxAttempts:job.maxAttempts,createdAt:job.createdAt,finishedAt:job.finishedAt||null,verificationSummary:job.verificationSummary||null,error:job.error||null,result:job.result||null,resumedFrom:job.payload?.resumedFrom||null,checkpoint:job.checkpoint||null,recovery:job.payload?.recovery||null,events:Array.isArray(job.events)?job.events.slice(-MAX_EVENTS):[]};
 }
 
 async function writeHistory(job){
@@ -137,7 +142,7 @@ export async function createJob({account,type="agent",payload={},goal="",maxAtte
     id,owner:ownerKey(account),type:normalizedType,goal:String(goal||payload?.goal||"").trim(),
     payload:payload&&typeof payload==="object"?payload:{},status,attempts:0,
     maxAttempts:Math.min(Math.max(Number(maxAttempts)||DEFAULT_MAX_ATTEMPTS,1),10),
-    runAt:runAt?new Date(runAt).toISOString():null,leaseUntil:null,progress:0,
+    runAt:runAt?new Date(runAt).toISOString():null,leaseUntil:null,progress:0,checkpoint:payload?.recovery?.checkpoint||null,
     events:[{at:now(),state:status,message:payload?.resumedFrom?"Job created as a recovery run from "+payload.resumedFrom+".":"Job created."}],createdAt:now(),updatedAt:now()
   };
   await writeJob(job);
@@ -161,7 +166,7 @@ export async function resumeJob(id,account){
   const source=await getJobForOwner(id,account);
   if(!source) return null;
   if(!["failed","cancelled"].includes(source.status)) throw new Error("Only failed or cancelled jobs can be resumed.");
-  return createJob({account,type:source.type,payload:{...(source.payload||{}),resumedFrom:source.id,recovery:{previousStatus:source.status,previousAttempts:Number(source.attempts||0),lastProgress:Number(source.progress||0),lastEvent:source.events?.at(-1)?.message||null}},goal:source.goal,maxAttempts:source.maxAttempts});
+  return createJob({account,type:source.type,payload:{...(source.payload||{}),resumedFrom:source.id,recovery:{previousStatus:source.status,previousAttempts:Number(source.attempts||0),lastProgress:Number(source.progress||0),lastEvent:source.events?.at(-1)?.message||null,checkpoint:source.checkpoint||null}},goal:source.goal,maxAttempts:source.maxAttempts});
 }
 
 export async function listHistoryForOwner(account,{limit=50}={}){
@@ -328,10 +333,10 @@ async function execute(job,report){
 async function processJob(initial){
   active++;
   let job=initial;
-  const report=async(progress,message)=>{
+  const report=async(progress,message,meta={})=>{
     const fresh=await readJob(job.id,job.owner);
     if(!fresh||fresh.status==="cancelled")return;
-    job={...fresh,progress:Math.min(95,Math.max(0,Number(progress)||0)),leaseUntil:new Date(Date.now()+DEFAULT_LEASE_SECONDS*1000).toISOString(),events:appendEvent(fresh,{state:"running",progress:Math.min(95,Math.max(0,Number(progress)||0)),message})};
+    job={...fresh,progress:Math.min(95,Math.max(0,Number(progress)||0)),checkpoint:buildCheckpoint(fresh,null,{progress,message,phase:meta.phase,tool:meta.tool}),leaseUntil:new Date(Date.now()+DEFAULT_LEASE_SECONDS*1000).toISOString(),events:appendEvent(fresh,{state:"running",progress:Math.min(95,Math.max(0,Number(progress)||0)),message,checkpoint:meta.phase||null})};
     await writeJob(job);
   };
   try{
@@ -339,16 +344,16 @@ async function processJob(initial){
     const result=await execute(job,report);
     const fresh=await readJob(job.id,job.owner);
     if(!fresh||fresh.status==="cancelled")return;
-    job={...fresh,status:"verifying",progress:90,leaseUntil:new Date(Date.now()+DEFAULT_LEASE_SECONDS*1000).toISOString(),result:compactResult(result),events:appendEvent(fresh,{state:"verifying",progress:90,message:"Execution finished; applying the completion-proof gate."})};
+    job={...fresh,status:"verifying",progress:90,checkpoint:buildCheckpoint(fresh,result,{progress:90,message:"Execution finished; entering verification."}),leaseUntil:new Date(Date.now()+DEFAULT_LEASE_SECONDS*1000).toISOString(),result:compactResult(result),events:appendEvent(fresh,{state:"verifying",progress:90,message:"Execution finished; applying the completion-proof gate."})};
     await writeJob(job);
     const verification=verifyJobResult(job.type,result);
     if(verification.ok){
-      job={...job,status:"completed",progress:100,leaseUntil:null,finishedAt:now(),verificationSummary:verification.reason,events:appendEvent(job,{state:"completed",progress:100,message:verification.reason})};
+      job={...job,status:"completed",progress:100,checkpoint:{...buildCheckpoint(job,result,{progress:100,message:verification.reason,phase:"proof",tool:"completion-proof"}),proof:verification.reason},leaseUntil:null,finishedAt:now(),verificationSummary:verification.reason,events:appendEvent(job,{state:"completed",progress:100,message:verification.reason})};
       await writeJob(job);
       await recordHistory(job);
     }else{
       const retry=Number(job.attempts||1)<Number(job.maxAttempts||DEFAULT_MAX_ATTEMPTS);
-      job={...job,status:retry?"queued":"failed",progress:retry?35:100,leaseUntil:null,backoffUntil:retry?new Date(Date.now()+retryDelayMs(job.attempts)).toISOString():null,error:verification.reason,events:appendEvent(job,{state:retry?"queued":"failed",progress:retry?35:100,message:retry?"Verification failed; bounded retry scheduled.":verification.reason})};
+      job={...job,status:retry?"queued":"failed",progress:retry?35:100,checkpoint:{...buildCheckpoint(job,result,{progress:retry?35:100,message:retry?"Verification failed; checkpoint retained for recovery.":verification.reason,phase:"proof",tool:"completion-proof"}),recoveryReady:retry},leaseUntil:null,backoffUntil:retry?new Date(Date.now()+retryDelayMs(job.attempts)).toISOString():null,error:verification.reason,events:appendEvent(job,{state:retry?"queued":"failed",progress:retry?35:100,message:retry?"Verification failed; bounded retry scheduled.":verification.reason})};
       await writeJob(job);
       if(!retry)await recordHistory(job);
     }
@@ -356,7 +361,7 @@ async function processJob(initial){
     const fresh=await readJob(job.id,job.owner);
     if(fresh&&!TERMINAL.has(fresh.status)){
       const retry=Number(fresh.attempts||1)<Number(fresh.maxAttempts||DEFAULT_MAX_ATTEMPTS);
-      const next={...fresh,status:retry?"queued":"failed",progress:retry?25:100,leaseUntil:null,backoffUntil:retry?new Date(Date.now()+retryDelayMs(fresh.attempts)).toISOString():null,error:String(error?.message||error).slice(0,1200),events:appendEvent(fresh,{state:retry?"queued":"failed",progress:retry?25:100,message:retry?"Executor error; bounded retry scheduled.":"Executor failed; max attempts reached.",error:String(error?.message||error).slice(0,600)})};
+      const next={...fresh,status:retry?"queued":"failed",progress:retry?25:100,checkpoint:{...buildCheckpoint(fresh,null,{progress:retry?25:100,message:retry?"Executor error; checkpoint retained for recovery.":"Executor failed; max attempts reached.",phase:"recovery",tool:"executor"}),recoveryReady:retry},leaseUntil:null,backoffUntil:retry?new Date(Date.now()+retryDelayMs(fresh.attempts)).toISOString():null,error:String(error?.message||error).slice(0,1200),events:appendEvent(fresh,{state:retry?"queued":"failed",progress:retry?25:100,message:retry?"Executor error; bounded retry scheduled.":"Executor failed; max attempts reached.",error:String(error?.message||error).slice(0,600)})};
       await writeJob(next);
       if(!retry)await recordHistory(next);
     }

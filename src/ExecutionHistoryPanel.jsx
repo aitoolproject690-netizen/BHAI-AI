@@ -73,12 +73,13 @@ export default function ExecutionHistoryPanel({onClose}){
    <div className="execGoal">{job.goal||"Untitled execution"}</div>
    <div className="execMeta"><span>Attempts {job.attempts??0}/{job.maxAttempts??"—"}</span><span>{fmt(job.finishedAt||job.updatedAt||job.createdAt)}</span></div>
    {job.resumedFrom&&<div className="execResumeNote">↩ Recovery run from {String(job.resumedFrom).slice(0,8)}</div>}
+   {job.checkpoint&&<div className="execCheckpoint">📍 Checkpoint: <b>{job.checkpoint.phase||"execution"}</b> · {job.checkpoint.tool||"executor"} · {Math.round(Number(job.checkpoint.progress)||0)}%<br/><span>{job.checkpoint.message||"Last known execution point saved."}</span></div>}
    {job.verificationSummary&&<div className="execProof">✅ {job.verificationSummary}</div>}
    {job.error&&<div className="execError">⚠️ {job.error}</div>}
    {latest?.message&&<div className="execLatest">{latest.message}</div>}
    <div className="execActions">
     <button onClick={()=>setExpanded(open?"":expandedKey)}><ChevronDown size={13} className={open?"rot180":""}/> {open?"Hide events":"Events"}</button>
-    {source==="history"&&resumable&&<button disabled={busy} onClick={()=>resume(job.jobId||job.id)}><RotateCcw size={13}/> Resume / Retry</button>}
+    {source==="history"&&resumable&&<button disabled={busy} onClick={()=>resume(job.jobId||job.id)}><RotateCcw size={13}/> Resume from checkpoint</button>}
     {source==="active"&&!terminal.has(job.status)&&<button disabled={busy} onClick={()=>cancel(job.id)}><XCircle size={13}/> Cancel</button>}
    </div>
    {open&&<div className="execEvents">{(job.events||[]).slice(-8).map((ev,i)=><div key={i}><b>{ev.state||"event"}</b><span>{fmt(ev.at)}</span><p>{ev.message||ev.error||""}</p></div>)}</div>}

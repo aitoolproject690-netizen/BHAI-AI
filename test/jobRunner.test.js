@@ -45,3 +45,11 @@ test("history record is terminal, owner-scoped, and event-bounded",async()=>{
  assert.equal(h.events.length,60);
  assert.equal("secret" in h,false);
 });
+
+
+test("checkpoint survives recovery history snapshot",async()=>{
+ const {buildHistoryRecord}=await import("../api/jobRunner.js");
+ const job={id:"job-cp",owner:"owner-cp",type:"mission",goal:"long mission",status:"failed",attempts:2,maxAttempts:3,createdAt:"2026-01-01T00:00:00Z",finishedAt:"2026-01-01T00:02:00Z",progress:42,checkpoint:{phase:"build",tool:"github-actions",progress:42,message:"Build dispatched; waiting for verification.",proofRequired:true},payload:{recovery:{checkpoint:{phase:"build"}}},events:[]};
+ const h=buildHistoryRecord(job);
+ assert.equal(h.checkpoint.phase,"build"); assert.equal(h.checkpoint.tool,"github-actions"); assert.equal(h.checkpoint.progress,42); assert.equal(h.recovery.checkpoint.phase,"build");
+});

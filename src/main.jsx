@@ -252,7 +252,7 @@ function App(){
    try{
     const d=await requestJson('/api/youtube',{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'upload',privacy:'private'})},{label:'/api/youtube',retrySafe:false,retries:0});
     setActivity(a=>a.map(x=>({...x,state:'done'})));
-    upd(m=>m.map(x=>x.id===replyId?{...x,text:'## ✅ YouTube publish verified\n\n**Title:** '+(d.title||'BHAI X Video')+'\n\n**Video ID:** '+d.videoId+'\n\n🔗 '+d.url+'\n\n**Privacy:** '+(d.privacyStatus||'private')}:x}));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'## ✅ YouTube publish verified\n\n**Title:** '+(d.title||'BHAI X Video')+'\n\n**Video ID:** '+d.videoId+'\n\n🔗 '+d.url+'\n\n**Privacy:** '+(d.privacyStatus||'private')}:x));
    }catch(e){
     setActivity(a=>a.map(x=>({...x,state:'failed'})));
     upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ YouTube publish failed\n\n'+e.message+'\n\nBHAI X ne upload ko verified DONE nahi maana.'}:x));

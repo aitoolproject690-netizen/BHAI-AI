@@ -113,18 +113,18 @@ export function routeAI({ task="", preferred="", role="chat", exclude=[] }={}) {
 
   const lower = String(task).toLowerCase();
   const order = role === "reviewer"
-    ? ["openai", "anthropic", "huggingface", "gemini", "core"]
+    ? ["openai", "anthropic", "pollinations", "huggingface", "gemini", "core"]
     : role === "researcher" || role === "web-research"
       ? ["gemini", "openai", "anthropic", "pollinations", "huggingface", "core"]
       : role === "medical"
-        ? ["gemini", "openai", "anthropic", "huggingface", "core"]
+        ? ["gemini", "openai", "anthropic", "pollinations", "huggingface", "core"]
         : role === "chat-general" || role === "conversation"
           ? ["gemini", "openai", "pollinations", "huggingface", "anthropic", "core"]
           : /github|repo|repository|build|test|engineering/.test(lower)
             ? ["core", "gemini", "openai", "pollinations", "anthropic", "huggingface"]
             : /code|debug/.test(lower)
-              ? ["gemini", "openai", "huggingface", "anthropic", "core"]
-            : ["gemini", "openai", "huggingface", "anthropic", "core"]; // strong general provider first; weak local Core is last-resort
+              ? ["gemini", "openai", "pollinations", "huggingface", "anthropic", "core"]
+            : ["gemini", "openai", "pollinations", "huggingface", "anthropic", "core"]; // strong general provider first; weak local Core is last-resort
 
   return order.find(id => available.includes(id)) || available[0];
 }

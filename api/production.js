@@ -138,7 +138,7 @@ function scenePrimaryCharacter(scene,characters){
 }
 
 async function buildStory(request){
- const generated=await generateWithRouter({
+ let generated=await generateWithRouter({
   task:"autonomous story production: "+request.prompt,
   system:buildStoryPrompt(request),
   messages:[{role:"user",text:request.prompt}],

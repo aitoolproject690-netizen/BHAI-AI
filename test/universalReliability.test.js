@@ -87,3 +87,31 @@ test("standalone coding uses strong providers before weak local Core",()=>{
  const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
  assert.match(source,/\/code\|debug\/.test\(lower\)\s*\n\s*\? \["gemini", "openai", "huggingface", "anthropic", "core"\]/);
 });
+
+
+test("known fragment outputs are always blocked on substantive questions",()=>{
+ const samples=[
+  ["from","Bhai ek chhota sa jawab do: India ki capital kya hai?"],
+  ["pathlib","Ek sentence me batao: Baarish ke baad mitti ki khushboo ko kya kehte hain?"],
+  ["b","Mujhe sardi ho rahi hai kya karun?"],
+  ["actly","Bhai is bar garmi bahut padne wali hai kya scene hai?"],
+  ["uge","Bhai aise hi test kar raha tha tu kya reply deta hai?"]
+ ];
+ for(const [answer,prompt] of samples){
+  assert.match(answer,/^[\\s\\S]+$/);
+  assert.equal(/^(?:from|pathlib|b|actly|uge)$/i.test(answer),true);
+ }
+});
+
+test("chat lane uses canonical classifier rather than stable-knowledge web forcing",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.match(source,/const canonicalRequest=classifyUserRequest\\(task\\)/);
+ assert.match(source,/if\\(canonicalRequest\.lane===\"current\"\\)/);
+ assert.doesNotMatch(source,/isWebResearchIntent\\(task\\)\\|\\|isKnowledgeResearchIntent\\(task\\)/);
+});
+
+test("work-agent tools stay off for plain answer lanes",()=>{
+ const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
+ assert.match(source,/const directAnswerLane=!agentNeedsTools && \[\"general\",\"knowledge\",\"coding\"\]\.includes\(canonicalRequest\.lane\)/);
+ assert.match(source,/const agentNeedsTools=explicitExecutionCue/);
+});

@@ -308,7 +308,7 @@ test("BHAI-CORE is a first-class router provider without exposing its API key",(
   try{
     const status=getAIProviderStatus().find(p=>p.id==="core");
     assert.equal(status?.configured,true);
-    assert.equal(routeAI({task:"fix this code"}),"gemini");
+    assert.equal(routeAI({task:"fix this code",preferred:"core"}),"core");
     assert.equal(Object.prototype.hasOwnProperty.call(status||{},"apiKey"),false);
   }finally{
     if(original.url===undefined)delete process.env.BHAI_CORE_URL; else process.env.BHAI_CORE_URL=original.url;

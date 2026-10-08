@@ -834,7 +834,7 @@ export default async function handler(req,res){
 const scenePostIntent=detectScenePostIntent(latestUserMessage);
 if(scenePostIntent.type==="scene-post"){
   const postRequest=normalizeScenePostRequest({prompt:latestUserMessage,duration:8,style:"cinematic"});
-  const manifest=buildScenePostProductionManifest(postRequest);
+  const manifest=buildScenePostProductionManifest({...postRequest,includeMusic:scenePostIntent.music});
   const manifestVerification=verifyScenePostManifest(manifest);
   if(!manifestVerification.ok){
     return json(res,502,{

@@ -506,7 +506,7 @@ export default async function handler(req,res){
     }
    }
 
-   if(isWebResearchIntent(task)||isKnowledgeResearchIntent(task)){
+   // Stable knowledge questions must not be forced into web research.\n   // Only explicitly current/online requests enter the evidence lane; ordinary\n   // facts/explainers use the strongest general provider route instead.\n   if(isWebResearchIntent(task)){
     try{
      const results=await webSearch(task);
      const researchResults=filterResearchSources(task,results);

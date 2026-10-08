@@ -11,7 +11,7 @@ test("autonomous plan requires proof before DONE",()=>{
  const p=buildAutonomousPlan({prompt:"A story bana kar YouTube pe upload karo"});
  const r=productionCompletionProof({plan:p,evidence:{story:true,characters:true,visuals:true,videos:true,post:true},finalVideo:{rendered:true,verified:true},youTube:null});
  assert.equal(r.ok,false);
- const r2=productionCompletionProof({plan:p,evidence:{story:true,characters:true,visuals:true,videos:true,post:true},finalVideo:{rendered:true,verified:true},youTube:{verified:true,url:"https://www.youtube.com/watch?v=abc"}});
+ const r2=productionCompletionProof({plan:p,evidence:{story:true,characters:true,visuals:true,videos:true,post:true,render:true},finalVideo:{rendered:true,verified:true},youTube:{verified:true,url:"https://www.youtube.com/watch?v=abc"}});
  assert.equal(r2.ok,true);
 });
 test("autonomous request normalizes a bounded render plan",()=>{

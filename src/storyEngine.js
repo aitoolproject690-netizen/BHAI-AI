@@ -104,8 +104,12 @@ export function parseAndValidateStoryPlan(text,request={}){
   const plan=normalizeStoryPlan(extractJson(text),request),errors=[];
   if(!plan)errors.push("invalid_json");
   else{
+    const charIds=plan.characters.map(c=>c.id),locationIds=plan.locations.map(l=>l.id),sceneIds=plan.scenes.map(x=>x.id);
     if(!plan.title)errors.push("missing_title");
     if(!plan.scenes.length)errors.push("missing_scenes");
+    if(new Set(charIds).size!==charIds.length)errors.push("duplicate_character_ids");
+    if(new Set(locationIds).size!==locationIds.length)errors.push("duplicate_location_ids");
+    if(new Set(sceneIds).size!==sceneIds.length)errors.push("duplicate_scene_ids");
     if(plan.scenes.some(s=>!s.action&&!s.dialogue.length&&!s.narration))errors.push("scene_without_content");
     if(plan.scenes.some(s=>!s.visualPrompt))errors.push("scene_without_visual_prompt");
   }

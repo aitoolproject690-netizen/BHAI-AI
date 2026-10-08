@@ -660,33 +660,7 @@ export default async function handler(req,res){
  const {messages=[]}=req.body||{},activity=[];
   // Automatic execution: no user-facing DO IT switch is required.
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
- const canonicalRequest=classifyUserRequest(latestUserMessage);
- if(isReadOnlyGithubAuditRequest(latestUserMessage)){
-  try{
-   const audit=await runReadOnlyGithubAudit(githubTaskText);
-   if(audit){
-    return json(res,200,{ok:true,text:audit.text,provider:"deterministic",backend_provider:"github-readonly-audit",model:"bhai-github-audit-v1",verified:true,activity:[{tool:"github-audit",state:"done",details:"Read-only repository metadata inspected; no changes were made."}]});
-   }
-  }catch(e){
-   if(!/GitHub access is not configured/i.test(String(e?.message||e))){
-    return json(res,502,{error:"Read-only GitHub audit failed: "+String(e?.message||e),activity:[{tool:"github-audit",state:"failed",details:String(e?.message||e)}]});
-   }
-  }
- }
- // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
- // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
- const normalizedCasual=normalizeIntent(latestUserMessage);
- const conversationalReply=getCasualReply(latestUserMessage);
- const serverCasual=isCasualIntent(latestUserMessage);
-   const deterministicMath=solveSimpleMath(latestUserMessage);
- if(deterministicMath!==null){
-  return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true,activity:[]});
- }
- const deterministicTime=solveSimpleTime(latestUserMessage);
- if(deterministicTime){
-  return json(res,200,{ok:true,text:deterministicTime,provider:"deterministic",backend_provider:"reasoning",model:"bhai-reasoning-v1",verified:true,activity:[]});
- }
- if(serverCasual){
+ const canonicalRequest=classifyUserRequest(latestUserMessage); if(serverCasual){
   const casualReplies={
    "kya chal raha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
    "kya chal raha hai":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
@@ -782,6 +756,18 @@ if(directImageRequest){
  const githubTaskText=hasUniqueContextRepo
   ? "GitHub repository: "+contextRepoKeys[0]+"\n"+latestUserMessage
   : latestUserMessage;
+ if(isReadOnlyGithubAuditRequest(githubTaskText)){
+  try{
+   const audit=await runReadOnlyGithubAudit(githubTaskText);
+   if(audit){
+    return json(res,200,{ok:true,text:audit.text,provider:"deterministic",backend_provider:"github-readonly-audit",model:"bhai-github-audit-v1",verified:true,activity:[{tool:"github-audit",state:"done",details:"Read-only repository metadata inspected; no changes were made."}]});
+   }
+  }catch(e){
+   if(!/GitHub access is not configured/i.test(String(e?.message||e))){
+    return json(res,502,{error:"Read-only GitHub audit failed: "+String(e?.message||e),activity:[{tool:"github-audit",state:"failed",details:String(e?.message||e)}]});
+   }
+  }
+ }
   const latestHasExplicitGithub=/(?:github|git hub|repository|repo\b|\bcreate\s+(?:a\s+)?repo|\bgithub\s+repo)/i.test(latestUserMessage);
   const latestRequestsProjectExecution=/(?:\bapp\b|\bproject\b|\bwebsite\b|\bapk\b|\bcode\b|\bbuild\b|\bdeploy\b|\bcreate\b|\bmake\b|\bbana\b|\bban[a-z]*\b|\bfix\b|\bupdate\b|\bpublish\b|\bcommit\b|\bpush\b)/i.test(latestUserMessage);
   const freshTaskIsolation=contextRoute.mode==="fresh_task";

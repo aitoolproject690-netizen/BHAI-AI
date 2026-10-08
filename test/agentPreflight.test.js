@@ -54,3 +54,8 @@ test("all api/src/test JavaScript files pass Node syntax validation",()=>{
   }
   assert.deepEqual(failures,[]);
 });
+
+test("agent server guard uses the shared natural conversational reply helper",()=>{
+  assert.match(agentSource,/const conversationalReply=getCasualReply\(latestUserMessage\);/);
+  assert.match(agentSource,/text:conversationalReply\|\|casualReplies\[normalizedCasual\]/);
+});

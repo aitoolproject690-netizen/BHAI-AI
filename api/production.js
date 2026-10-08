@@ -252,9 +252,11 @@ async function runProduction(account,rawInput){
 
    let visualMedia=null;
    let visualAssetId=previousScene?.visualAssetId||null;
+   let visualReused=false;
    const storedVisual=visualAssetId?await loadCharacterVisualAssetById(db,account.id,visualAssetId):null;
    if(previousScene?.visualVerified&&storedVisual?.data){
     visualMedia={mimeType:storedVisual.mime_type,data:storedVisual.data,provider:storedVisual.provider||"character-visual"};
+    visualReused=true;
     activity.push({tool:"character-visual",state:"skipped",details:"Scene "+(i+1)+" verified visual asset reused from checkpoint."});
    }else{
     await reserveMedia(db,account.id,"image",10);
@@ -270,7 +272,8 @@ async function runProduction(account,rawInput){
     activity.push({tool:"character-visual",state:"done",details:"Scene "+(i+1)+" visual generated with account-scoped identity lineage."});
    }
    let state=sceneStates.find(x=>String(x.sceneId)===sceneId)||{sceneId,index:i};
-   state={...state,index:i,sceneId,visualAssetId,visualVerified:Boolean(visualAssetId&&visualMedia?.data)};
+   state={...state,index:i,sceneId,visualAssetId,visualVerified:Boolean(visualAssetId&&visualMedia?.data),
+     ...(visualReused?{}:{videoAssetId:null,videoVerified:false,postProduction:null,postVerified:false,verified:false})};
    sceneStates=sceneStates.filter(x=>String(x.sceneId)!==sceneId).concat(state);
    evidence.visuals=selectedScenes.every(scene=>{
     const row=sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(selectedScenes.indexOf(scene)+1))));
@@ -281,10 +284,12 @@ async function runProduction(account,rawInput){
 
    let videoMedia=null;
    let videoAssetId=state.videoAssetId||null;
+   let videoReused=false;
    const storedVideo=videoAssetId?await loadCharacterVideoAssetById(db,account.id,videoAssetId):null;
-   const storedVideoOk=Boolean(state.videoVerified&&storedVideo?.data);
+   const storedVideoOk=Boolean(visualReused&&state.videoVerified&&storedVideo?.data);
    if(storedVideoOk){
     videoMedia={mimeType:storedVideo.mime_type,data:storedVideo.data,provider:storedVideo.provider||"character-video"};
+    videoReused=true;
     activity.push({tool:"character-video",state:"skipped",details:"Scene "+(i+1)+" verified video asset reused from checkpoint; generation was not repeated."});
    }else{
     await reserveMedia(db,account.id,"video",3);
@@ -303,7 +308,7 @@ async function runProduction(account,rawInput){
    }
 
    const durationSeconds=Math.min(5,Math.max(1,Number(videoMedia?.duration||s.durationSeconds)||5));
-   const storedPost=state.postProduction&&state.postVerified ? state.postProduction : null;
+   const storedPost=videoReused&&state.postProduction&&state.postVerified ? state.postProduction : null;
    let post=storedPost;
    if(post){
     activity.push({tool:"scene-post-production",state:"skipped",details:"Scene "+(i+1)+" verified VFX/Music/SFX manifest reused from checkpoint."});

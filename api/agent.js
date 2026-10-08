@@ -10,6 +10,7 @@ import { resolveGithubTarget, extractGithubRepoReference, classifyEngineeringErr
 import { generateWithRouter, generateVerifiedAnswer, reviewWithMultiAI, getConfiguredAIProviders } from "./aiRouter.js";
 import { githubConfigured, githubApiFetch, githubApiJson, assertGithubName, assertGithubPath, assertGithubRef, encodeGithubPath, githubRepoUrl } from "./githubExecutor.js";
 import { routeConversationContext } from "./contextRouter.js";
+import { buildBrainPlan, brainSummary } from "./brainOrchestrator.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpleColdQuestion } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isGeneralChatIntent} from "../src/intentRouter.js";
 import {normalizeVisualRequest,buildCharacterVisualPrompt,verifyCharacterVisualContract,pickCharacterForPrompt} from "../src/characterVisualEngine.js";
@@ -1149,7 +1150,8 @@ if(directImageRequest){
  }
 }
  if(!getConfiguredAIProviders().length) return json(res,503,{error:"No AI provider is configured. Configure BHAI-CORE or another supported AI provider in Render Environment."});
- const contextRoute=routeConversationContext(messages,latestUserMessage);
+ const brainPlan=buildBrainPlan({messages,task:latestUserMessage});
+ const contextRoute=brainPlan.context;
  const routedMessages=contextRoute.messages;
  const userTaskMessages=routedMessages.filter(m=>m&&m.role==="user").map(m=>String(m.text||"")).filter(Boolean);
  const latestTarget=resolveGithubTarget(latestUserMessage);
@@ -1177,11 +1179,12 @@ if(directImageRequest){
 
  const selectedSkills=selectSkillsForTask(latestUserMessage);
  const skillContext=getSkillPromptContext(selectedSkills);
+ const brainNote=brainSummary(brainPlan)+" | "+brainPlan.directive;
  const contextNote=`CONTEXT ROUTER: ${contextRoute.mode}. ${contextRoute.reason} Never revive an older Mission, repository, file, commit, or build unless the current user message explicitly refers to that existing task.`;
  const medicalMode=isMedicalIntent(latestUserMessage);
  const medicalSafety=medicalMode?getMedicalSafetyPrompt(latestUserMessage):"";
  const safeResponseText=(text)=>medicalMode?applyMedicalSafetyFooter(text,latestUserMessage):String(text||"");
- const system=`You are BHAI AI, a practical personal work agent. ${contextNote} ${skillContext} ${medicalSafety}
+ const system=`You are BHAI AI, a practical personal work agent. ${brainNote} ${contextNote} ${skillContext} ${medicalSafety}
 Reply in Hinglish when the user does. Talk naturally like a helpful project partner and friend: explain what you are doing, why it matters, what is already complete, what is still pending, and what should be added or fixed next.
 
 RESPONSE STYLE / MARKDOWN:

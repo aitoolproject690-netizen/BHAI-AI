@@ -12,8 +12,10 @@ import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpleColdQuestion } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isGeneralChatIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
+import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
+import {buildSimpleCodingFallback} from "../src/codingFallback.js";
 import { webSearch, filterResearchSources } from "../src/webSearch.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
@@ -452,6 +454,11 @@ export default async function handler(req,res){
     return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true});
    }
 
+   const deterministicTime=solveSimpleTime(task);
+   if(deterministicTime){
+    return json(res,200,{ok:true,text:deterministicTime,provider:"deterministic",backend_provider:"reasoning",model:"bhai-reasoning-v1",verified:true});
+   }
+
    // High-risk medical triage and simple cold advice stay deterministic and
    // never wait for a language model.
    if(canonicalRequest.lane==="medical"){
@@ -503,6 +510,10 @@ export default async function handler(req,res){
      });
      return json(res,200,{ok:true,text:String(coding?.text||"I could not generate a coding answer."),provider:coding.provider,backend_provider:coding.backend_provider||null,model:coding.model||null,verified:true});
     }catch(e){
+     const fallback=buildSimpleCodingFallback(task);
+     if(fallback){
+      return json(res,200,{ok:true,text:fallback,provider:"deterministic",backend_provider:"coding-fallback",model:"bhai-coding-v1",verified:true});
+     }
      return json(res,502,{error:"Coding provider failed: "+String(e?.message||e)});
     }
    }
@@ -608,6 +619,10 @@ export default async function handler(req,res){
    const deterministicMath=solveSimpleMath(latestUserMessage);
  if(deterministicMath!==null){
   return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true,activity:[]});
+ }
+ const deterministicTime=solveSimpleTime(latestUserMessage);
+ if(deterministicTime){
+  return json(res,200,{ok:true,text:deterministicTime,provider:"deterministic",backend_provider:"reasoning",model:"bhai-reasoning-v1",verified:true,activity:[]});
  }
  if(serverCasual){
   const casualReplies={
@@ -839,6 +854,10 @@ if(localCodingRequest){
   });
   return json(res,200,{ok:true,text:String(routed?.text||"I could not generate a coding answer."),provider:routed?.provider||null,backend_provider:routed?.backend_provider||null,model:routed?.model||null,activity:[{tool:"coding-chat",state:"done",details:"Standalone coding request kept out of engineering execution and web research."}],images:[],usage:await getMediaUsage(db,account.id),verified:true});
  }catch(e){
+  const fallback=buildSimpleCodingFallback(latestText);
+  if(fallback){
+   return json(res,200,{ok:true,text:fallback,provider:"deterministic",backend_provider:"coding-fallback",model:"bhai-coding-v1",activity:[{tool:"coding-chat",state:"done",details:"Deterministic coding fallback used after all configured providers failed."}],images:[],usage:await getMediaUsage(db,account.id),verified:true});
+  }
   return json(res,502,{error:"Coding chat provider failed: "+String(e?.message||e),activity:[{tool:"coding-chat",state:"failed",details:String(e?.message||e)}]});
  }
 }

@@ -287,6 +287,20 @@ test("provider cooldown skips an exhausted provider on the next request",async()
 });
 
 
+test("chat provider ordering prefers conversational providers over local Core",()=>{
+ const old={...process.env};
+ try{
+  process.env.GEMINI_API_KEY="test-gemini";
+  process.env.OPENAI_API_KEY="test-openai";
+  process.env.BHAI_CORE_URL="https://core.test";
+  process.env.BHAI_CORE_API_KEY="test-core";
+  assert.equal(routeAI({task:"bhai kya haal hai",role:"chat-general"}),"gemini");
+ }finally{
+  for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+  Object.assign(process.env,old);
+ }
+});
+
 test("BHAI-CORE is a first-class router provider without exposing its API key",()=>{
   const original={url:process.env.BHAI_CORE_URL,key:process.env.BHAI_CORE_API_KEY};
   process.env.BHAI_CORE_URL="https://core.test";

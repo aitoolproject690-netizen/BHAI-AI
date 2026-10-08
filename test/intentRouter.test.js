@@ -95,6 +95,11 @@ test("routes generic explanatory questions to evidence-backed research",()=>{
  assert.equal(isKnowledgeResearchIntent("What are you doing?"),false);
 });
 
+test("local model and AI runtime explanations are recognized as informational research",()=>{
+ assert.equal(isKnowledgeResearchIntent("Bhai phone mein AI local model chalane ka simple scene samjha"),true);
+ assert.equal(isKnowledgeResearchIntent("Llama.cpp aur Vulkan ka simple scene samjha"),true);
+});
+
 test("routes technical factual questions to evidence-backed research",()=>{
  assert.equal(isKnowledgeResearchIntent("Petrol mein kya hota hai?"),true);
  assert.equal(isKnowledgeResearchIntent("How does a car battery work?"),true);

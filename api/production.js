@@ -190,12 +190,18 @@ async function runProduction(account,rawInput){
  let rendered=null;
  let youtube=previous?.youtube||null;
  let youtubeAuthUrl=null;
+ let characterBible=previous?.characterBible||null;
+ let cameraPlan=previous?.cameraPlan||null;
+ let audioMaster=previous?.audioMaster||null;
+ let youtubePackage=previous?.youtubePackage||null;
+ let shortsPlan=previous?.shortsPlan||null;
  let checkpoint=null;
 
  const snapshot=({currentStep=null,message="",renderProof=null}={})=>{
   checkpoint=buildProductionCheckpoint({
    plan,request,story,characters:characterRows,sceneStates,evidence,
-   completedStepIds:[...completed],currentStep,renderProof,youtube,activity
+   completedStepIds:[...completed],currentStep,renderProof,youtube,
+   characterBible,cameraPlan,audioMaster,youtubePackage,shortsPlan,activity
   });
   return checkpoint;
  };
@@ -363,6 +369,13 @@ async function runProduction(account,rawInput){
   }
 
   const timeline=buildEditTimeline({scenes:sceneClips,aspectRatio:request.aspectRatio,fps:30});
+  audioMaster=audioMaster||buildAudioMasterContract(timeline.audioMix);
+  timeline.audioMix={...timeline.audioMix,...audioMaster};
+  evidence.audio=Boolean(audioMaster.verified);
+  if(evidence.audio)completed.add("audio");
+  shortsPlan=shortsPlan||buildShortsPlan(story,timeline);
+  evidence.shorts=Boolean(shortsPlan.verified);
+  if(evidence.shorts)completed.add("shorts");
   const timelineCheck=verifyEditTimeline(timeline);
   if(!timelineCheck.ok) await fail(new Error("Final timeline verification failed."),"render");
 

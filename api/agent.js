@@ -133,13 +133,15 @@ async function generateCharacterVisual(db,accountId,prompt,aspectRatio="16:9"){
 async function generateImageViaBhAiCore(prompt,aspectRatio="16:9"){
  const coreUrl=String(process.env.BHAI_CORE_URL||"https://bhai-core.onrender.com").replace(/\/$/,"");
  const coreKey=String(process.env.BHAI_CORE_API_KEY||process.env.BHAI_API_KEY||process.env.BHAI_CORE_KEY||"").trim();
+ const internalKey=String(process.env.BHAI_CORE_INTERNAL_IMAGE_KEY||"").trim();
  const enabled=String(process.env.BHAI_LOCAL_IMAGE_FIRST||"true").toLowerCase()!=="false";
  if(!enabled||!coreKey) return null;
  const width=aspectRatio==="9:16"?576:aspectRatio==="1:1"?768:aspectRatio==="4:5"?640:768;
  const height=aspectRatio==="9:16"?1024:aspectRatio==="1:1"?768:aspectRatio==="4:5"?800:432;
- const r=await fetch(coreUrl+"/v1/image/generate",{
+ if(!internalKey && !coreKey) return null;
+ const r=await fetch(coreUrl+(internalKey?"/v1/internal/image/generate":"/v1/image/generate"),{
   method:"POST",
-  headers:{"content-type":"application/json","x-bhai-key":coreKey},
+  headers:{...{"content-type":"application/json"},...(internalKey?{"x-bhai-internal-key":internalKey}:{"x-bhai-key":coreKey})},
   body:JSON.stringify({
    provider:"mobile",
    prompt:String(prompt||"").trim().slice(0,4000),

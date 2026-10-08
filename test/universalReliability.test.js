@@ -81,3 +81,9 @@ test("default AI route keeps BHAI-CORE as last-resort for unclassified chat",()=
  const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
  assert.match(source,/\["gemini", "openai", "huggingface", "anthropic", "core"\]/);
 });
+
+
+test("standalone coding uses strong providers before weak local Core",()=>{
+ const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
+ assert.match(source,/\/code\|debug\/.test\(lower\)\s*\n\s*\? \["gemini", "openai", "huggingface", "anthropic", "core"\]/);
+});

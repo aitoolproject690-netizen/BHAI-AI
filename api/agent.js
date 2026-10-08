@@ -545,6 +545,28 @@ async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=nu
    }catch(e){errors.push("Hugging Face "+space+": "+String(e?.message||e).slice(0,500));}
   }
  }catch(e){errors.push("Hugging Face fallback unavailable: "+String(e?.message||e).slice(0,350));}
+ if(sourceImage?.data){
+  try{
+   const localPost=buildScenePostProductionManifest({prompt:String(prompt||"").slice(0,9000),duration:seconds,style:"cinematic"});
+   const localTimeline={
+    schemaVersion:"1.0",
+    timelineId:"local_image_to_video_"+Date.now(),
+    scenes:[{
+     sceneId:"local_image_to_video",
+     durationSeconds:seconds,
+     sourceImage:{mimeType:sourceImage.mimeType||"image/png",data:sourceImage.data,provider:sourceImage.provider||"image-source"},
+     postProduction:localPost,
+     verified:true
+    }],
+    totalDurationSeconds:seconds,
+    output:{format:"mp4",aspectRatio,fps:30},
+    audioMix:{voiceDb:0,musicDb:-8,sfxDb:-6,ducking:true}
+   };
+   const rendered=await renderTimeline(localTimeline,{aspectRatio,fps:30});
+   if(!rendered?.media?.data)throw new Error("Local FFmpeg image-to-video fallback returned no media.");
+   return {...rendered.media,duration:seconds,provider:"bhai-local-ffmpeg-image-video",fallback:true};
+  }catch(e){errors.push("Local FFmpeg image-to-video fallback: "+String(e?.message||e).slice(0,500));}
+ }
  throw new Error("Video generation failed: all configured providers were unavailable. "+errors.join(" | "));
 }
 async function github(action,a){

@@ -122,7 +122,7 @@ function App(){
   const webResearchMessage=isWebResearchIntent(userIntentText);
   const autonomousProductionMessage=isAutonomousProductionRequest(userIntentText);
   const youtubePublishMessage=!autonomousProductionMessage&&isYouTubePublishRequest(userIntentText);
-  const youtubeConnectMessage=/\\byoutube\\b[\\s\\S]{0,80}\\b(?:connect|link|jod|jodo|channel)\\b/i.test(userIntentText);
+  const youtubeConnectMessage=/\byoutube\b[\s\S]{0,80}\b(?:connect|link|jod|jodo|channel)\b/i.test(userIntentText);
   const casualSocial=isCasualIntent(userIntentText);
   const casualChat=Object.prototype.hasOwnProperty.call(instantCasual,casualKey)||casualSocial;
   const fastLocal={
@@ -221,11 +221,11 @@ function App(){
     const d=await rr.json().catch(()=>({}));
     if(!rr.ok||d.error)throw new Error(d.error||('Production backend HTTP '+rr.status));
     setActivity(a=>a.map(x=>({...x,state:'done'})));if(d.usage)setUsage(d.usage);
-    upd(m=>m.map(x=>x.id===replyId?{...x,text:(d.text||'✅ Autonomous production result ready.')+(d.youtubeAuthUrl?'\\n\\n🔐 [YouTube connect karo]('+d.youtubeAuthUrl+')':''),images:d.images||[],providerMeta:{provider:'bhai-self-hosted',backend_provider:'autonomous-production',model:'bhai-production-v1'}}:x));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:(d.text||'✅ Autonomous production result ready.')+(d.youtubeAuthUrl?'\n\n🔐 [YouTube connect karo]('+d.youtubeAuthUrl+')':''),images:d.images||[],providerMeta:{provider:'bhai-self-hosted',backend_provider:'autonomous-production',model:'bhai-production-v1'}}:x));
     if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Production',text:x.details||x.state||'',state:x.state||'done'}))]);
    }catch(e){
     setActivity(a=>a.map(x=>({...x,state:'failed'})));
-    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ AUTONOMOUS PRODUCTION STOPPED\\n\\n'+e.message+'\\n\\nBHAI X ne unverified final output ko DONE nahi maana.'}:x));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ AUTONOMOUS PRODUCTION STOPPED\n\n'+e.message+'\n\nBHAI X ne unverified final output ko DONE nahi maana.'}:x));
    }finally{setRunning(false);clearInterval(workTicker.current);workTicker.current=null;}
    return;
   }
@@ -237,10 +237,10 @@ function App(){
    try{
     const d=await requestJson('/api/youtube',{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'connect'})},{label:'/api/youtube',retrySafe:false,retries:0});
     setActivity(a=>a.map(x=>({...x,state:'done'})));
-    upd(m=>m.map(x=>x.id===replyId?{...x,text:'## 🔐 YouTube Connect\\n\\nBHAI X ka secure Google authorization link ready hai.\\n\\n[Open YouTube connection]('+d.authUrl+')\\n\\nAuthorization complete hone ke baad wapas BHAI X par aakar publish command de sakte ho.'}:x));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'## 🔐 YouTube Connect\n\nBHAI X ka secure Google authorization link ready hai.\n\n[Open YouTube connection]('+d.authUrl+')\n\nAuthorization complete hone ke baad wapas BHAI X par aakar publish command de sakte ho.'}:x));
    }catch(e){
     setActivity(a=>a.map(x=>({...x,state:'failed'})));
-    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ YouTube connect failed\\n\\n'+e.message}:x));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ YouTube connect failed\n\n'+e.message}:x));
    }finally{setRunning(false);}
    return;
   }
@@ -252,10 +252,10 @@ function App(){
    try{
     const d=await requestJson('/api/youtube',{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'upload',privacy:'private'})},{label:'/api/youtube',retrySafe:false,retries:0});
     setActivity(a=>a.map(x=>({...x,state:'done'})));
-    upd(m=>m.map(x=>x.id===replyId?{...x,text:'## ✅ YouTube publish verified\\n\\n**Title:** '+(d.title||'BHAI X Video')+'\\n\\n**Video ID:** '+d.videoId+'\\n\\n🔗 '+d.url+'\\n\\n**Privacy:** '+(d.privacyStatus||'private')}:x}));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'## ✅ YouTube publish verified\n\n**Title:** '+(d.title||'BHAI X Video')+'\n\n**Video ID:** '+d.videoId+'\n\n🔗 '+d.url+'\n\n**Privacy:** '+(d.privacyStatus||'private')}:x}));
    }catch(e){
     setActivity(a=>a.map(x=>({...x,state:'failed'})));
-    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ YouTube publish failed\\n\\n'+e.message+'\\n\\nBHAI X ne upload ko verified DONE nahi maana.'}:x));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ YouTube publish failed\n\n'+e.message+'\n\nBHAI X ne upload ko verified DONE nahi maana.'}:x));
    }finally{setRunning(false);}
    return;
   }

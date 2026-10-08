@@ -110,9 +110,11 @@ export function routeAI({ task="", preferred="", role="chat", exclude=[] }={}) {
       ? ["gemini", "openai", "anthropic", "huggingface", "core"]
       : role === "medical"
         ? ["gemini", "openai", "anthropic", "huggingface", "core"]
-        : /code|debug|github|repo|repository|build|test|engineering/.test(lower)
-          ? ["core", "gemini", "openai", "anthropic", "huggingface"]
-          : ["core", "gemini", "openai", "huggingface", "anthropic"];
+        : role === "chat-general" || role === "conversation"
+          ? ["gemini", "openai", "huggingface", "anthropic", "core"]
+          : /code|debug|github|repo|repository|build|test|engineering/.test(lower)
+            ? ["core", "gemini", "openai", "anthropic", "huggingface"]
+            : ["core", "gemini", "openai", "huggingface", "anthropic"];
 
   return order.find(id => available.includes(id)) || available[0];
 }

@@ -103,6 +103,13 @@ async function readJob(id,owner){
   return job&&job.owner===owner?job:null;
 }
 
+async function writeHistory(job){
+  const db=await getDb();
+  if(!db)return;
+  const history={id:crypto.randomUUID(),owner:job.owner,jobId:job.id,type:job.type,goal:job.goal,status:job.status,attempts:job.attempts,maxAttempts:job.maxAttempts,createdAt:job.createdAt,finishedAt:job.finishedAt||null,verificationSummary:job.verificationSummary||null,error:job.error||null,result:job.result||null,events:Array.isArray(job.events)?job.events.slice(-MAX_EVENTS):[]};
+  await db.query("INSERT INTO bhai_history(id,data,created_at) VALUES($1,$2,NOW())",[history.id,history]);
+}
+
 async function writeJob(job){
   const db=await getDb();
   if(!db)throw new Error("DATABASE_URL is required for persistent jobs.");
@@ -140,6 +147,20 @@ export async function listJobsForOwner(account,{limit=50}={}){
 export async function getJobForOwner(id,account){
   await initDb();
   return readJob(id,ownerKey(account));
+}
+
+export async function resumeJob(id,account){
+  const source=await getJobForOwner(id,account);
+  if(!source) return null;
+  if(!["failed","cancelled"].includes(source.status)) throw new Error("Only failed or cancelled jobs can be resumed.");
+  return createJob({account,type:source.type,payload:{...(source.payload||{}),resumedFrom:source.id},goal:source.goal,maxAttempts:source.maxAttempts});
+}
+
+export async function listHistoryForOwner(account,{limit=50}={}){
+  const db=await getDb();
+  if(!db)return [];
+  const r=await db.query("SELECT data FROM bhai_history ORDER BY created_at DESC LIMIT $1",[Math.min(Math.max(Number(limit)||50,1),100)]);
+  return r.rows.map(x=>x.data).filter(x=>x?.owner===ownerKey(account));
 }
 
 export async function cancelJob(id,account){

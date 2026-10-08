@@ -78,12 +78,11 @@ test("provider boundary has a malformed-output recovery gate",()=>{
 
 test("stable knowledge questions do not enter the web-research gate",()=>{
  const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
- assert.match(source,/if\(isWebResearchIntent\(task\)\)/);
+ assert.ok(source.includes('const canonicalRequest=classifyUserRequest(task);'));
+ assert.ok(source.includes('if(canonicalRequest.lane==="current"){'));
  assert.doesNotMatch(source,/isWebResearchIntent\(task\)\|\|isKnowledgeResearchIntent\(task\)/);
  assert.doesNotMatch(source,/import[^;]*isKnowledgeResearchIntent/);
-});
-
-test("default AI route keeps BHAI-CORE as last-resort for unclassified chat",()=>{
+});test("default AI route keeps BHAI-CORE as last-resort for unclassified chat",()=>{
  const source=fs.readFileSync(new URL("../api/aiRouter.js",import.meta.url),"utf8");
  assert.match(source,/\["gemini", "openai", "huggingface", "anthropic", "core"\]/);
 });
@@ -110,12 +109,10 @@ test("known fragment outputs are always blocked on substantive questions",()=>{
 
 test("chat lane uses canonical classifier rather than stable-knowledge web forcing",()=>{
  const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
- assert.match(source,/const canonicalRequest=classifyUserRequest\\(task\\)/);
- assert.match(source,/if\\(canonicalRequest\.lane===\"current\"\\)/);
- assert.doesNotMatch(source,/isWebResearchIntent\\(task\\)\\|\\|isKnowledgeResearchIntent\\(task\\)/);
-});
-
-test("work-agent tools stay off for plain answer lanes",()=>{
+ assert.ok(source.includes('const canonicalRequest=classifyUserRequest(task);'));
+ assert.ok(source.includes('if(canonicalRequest.lane==="current"){'));
+ assert.doesNotMatch(source,/isWebResearchIntent\(task\)\|\|isKnowledgeResearchIntent/);
+});test("work-agent tools stay off for plain answer lanes",()=>{
  const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
  assert.match(source,/const directAnswerLane=!agentNeedsTools && \[\"general\",\"knowledge\",\"coding\"\]\.includes\(canonicalRequest\.lane\)/);
  assert.match(source,/const agentNeedsTools=explicitExecutionCue/);

@@ -50,7 +50,7 @@ export function buildProductionCheckpoint({
       index:Number.isFinite(Number(s?.index))?Number(s.index):0,
       visualAssetId:s?.visualAssetId||null,
       videoAssetId:s?.videoAssetId||null,
-      postProduction:s?.postProduction||null,
+      postProduction:s?.postProduction||null,\n      cameraDirection:s?.cameraDirection||"",
       durationSeconds:Number(s?.durationSeconds||0),
       verified:Boolean(s?.verified),
       visualVerified:Boolean(s?.visualVerified),

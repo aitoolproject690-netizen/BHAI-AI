@@ -573,6 +573,7 @@ function App(){
     <button className="headerIconBtn" aria-label="Settings" title="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button>
    </header>
    {resumeMission?.jobId&&<div className="resumeBar"><span>🧭 Previous mission checkpoint saved: <b>{String(resumeMission.goal||resumeMission.name||"Interrupted task").slice(0,90)}</b></span><button onClick={()=>setHistoryOpen(true)}>Open History</button><button onClick={()=>setHistoryOpen(true)}>Resume / Retry</button></div>}
+   {resumeProduction?.pipelineId&&<div className="resumeBar"><span>🎬 Production checkpoint saved: <b>{String(resumeProduction.currentStep||resumeProduction.pipelineId||"Interrupted production").slice(0,90)}</b></span><button onClick={resumeProductionRun} disabled={running}>Resume production</button><button onClick={()=>{localStorage.removeItem('bhai_x_production_checkpoint');setResumeProduction(null)}}>Dismiss</button></div>}
    <section className="messages">
     {chat?.messages.map(m=><div className={m.role==='user'?'row user':'row'} key={m.id}>
       <div className={m.role==='user'?'bubble userBubble':'bubble'}>

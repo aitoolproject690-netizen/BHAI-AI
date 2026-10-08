@@ -17,6 +17,7 @@ import {normalizeVideoRequest,buildCharacterVideoPrompt,verifyCharacterVideoCont
 import {normalizeVoiceRequest,makeCharacterVoiceProfile,buildCharacterVoiceContract,verifyCharacterVoiceContract,extractSpokenText,buildLipSyncManifest,isLikelyCharacterVoiceRequest} from "../src/characterVoiceEngine.js";
 import {normalizeScenePostRequest,detectScenePostIntent,buildScenePostProductionManifest,renderProceduralAudio,verifyScenePostManifest} from "../src/scenePostProductionEngine.js";
 import {normalizeSceneClip,buildEditTimeline,verifyEditTimeline,isLikelyEditRequest} from "../src/sceneEditorEngine.js";
+import {renderTimeline,rendererSupports} from "../src/videoRenderer.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
@@ -259,6 +260,45 @@ async function getLatestMediaAsset(db,accountId,type){
  await db.query("CREATE TABLE IF NOT EXISTS bhai_media_assets (id BIGSERIAL PRIMARY KEY, account_id TEXT NOT NULL, type TEXT NOT NULL, mime_type TEXT NOT NULL, data TEXT NOT NULL, provider TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
  const q=await db.query("SELECT mime_type,data,provider,created_at FROM bhai_media_assets WHERE account_id=$1 AND type=$2 ORDER BY id DESC LIMIT 1",[accountId,type]);
  return q.rows[0]||null;
+}
+
+async function resolveRenderAsset(db,accountId,assetId,kind){
+ const id=String(assetId||"").trim();
+ if(!id)return null;
+ if(kind==="video"){
+  try{
+   await ensureCharacterVideoAssetsTable(db);
+   const q=await db.query("SELECT asset_id,mime_type,data,provider FROM bhai_character_video_assets WHERE account_id=$1 AND asset_id=$2 LIMIT 1",[accountId,id]);
+   if(q.rows[0])return {mimeType:q.rows[0].mime_type,data:q.rows[0].data,provider:q.rows[0].provider||"character-video"};
+  }catch{}
+ }
+ if(kind==="image"){
+  try{
+   await ensureCharacterVisualAssetsTable(db);
+   const q=await db.query("SELECT asset_id,mime_type,data,provider FROM bhai_character_visual_assets WHERE account_id=$1 AND asset_id=$2 LIMIT 1",[accountId,id]);
+   if(q.rows[0])return {mimeType:q.rows[0].mime_type,data:q.rows[0].data,provider:q.rows[0].provider||"character-visual"};
+  }catch{}
+ }
+ try{
+  await db.query("CREATE TABLE IF NOT EXISTS bhai_media_assets (id BIGSERIAL PRIMARY KEY, account_id TEXT NOT NULL, type TEXT NOT NULL, mime_type TEXT NOT NULL, data TEXT NOT NULL, provider TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+  const q=await db.query("SELECT mime_type,data,provider FROM bhai_media_assets WHERE account_id=$1 AND type=$2 AND id::text=$3 LIMIT 1",[accountId,kind,id]);
+  if(q.rows[0])return {mimeType:q.rows[0].mime_type,data:q.rows[0].data,provider:q.rows[0].provider||"media-asset"};
+ }catch{}
+ return null;
+}
+
+async function hydrateRenderScene(db,accountId,input={},index=0){
+ const scene={...input};
+ if(!scene.sourceVideo && (scene.videoAssetId||scene.assetId)){
+  scene.sourceVideo=await resolveRenderAsset(db,accountId,scene.videoAssetId||scene.assetId,"video");
+ }
+ if(!scene.sourceImage && (scene.imageAssetId||scene.visualAssetId)){
+  scene.sourceImage=await resolveRenderAsset(db,accountId,scene.imageAssetId||scene.visualAssetId,"image");
+ }
+ if(!scene.voiceAudio && scene.voiceAssetId){
+  scene.voiceAudio=await resolveRenderAsset(db,accountId,scene.voiceAssetId,"audio");
+ }
+ return normalizeSceneClip({...scene,sourceVideo:scene.sourceVideo||null},index);
 }
 
 async function getMediaUsage(db,accountId){
@@ -735,7 +775,21 @@ export default async function handler(req,res){
  if(endpoint==="/api/media"){
   const type=String(body.type||"").toLowerCase(),prompt=String(body.prompt||"").trim();
   const aspectRatio=/^(?:9:16|1:1|4:5|16:9)$/.test(String(body.aspectRatio||""))?String(body.aspectRatio):"16:9";
-  if(!prompt)return json(res,400,{error:"Media prompt is required."});
+  if(!prompt && type!=="render")return json(res,400,{error:"Media prompt is required."});
+  if(type==="render"){
+   const sceneInputs=Array.isArray(body.scenes)?body.scenes:[];
+   const hydratedScenes=[];
+   for(let i=0;i<sceneInputs.length;i++) hydratedScenes.push(await hydrateRenderScene(db,account.id,sceneInputs[i],i));
+   const timeline=buildEditTimeline({scenes:hydratedScenes,aspectRatio,fps:body.fps||30});
+   const verification=verifyEditTimeline(timeline);
+   if(!verification.ok)return json(res,422,{ok:false,error:"Final render blocked: timeline verification failed.",verified:false,renderReady:false,editor:timeline,verification,renderer:rendererSupports(),images:[],audio:[],usage:await getMediaUsage(db,account.id)});
+   try{
+    const rendered=await renderTimeline(timeline,{title:body.title,description:body.description,tags:body.tags});
+    return json(res,200,{ok:true,text:"## 🎬 Final MP4 ready\\n\\nSelf-hosted FFmpeg renderer ne final scene composition complete ki aur encoded MP4 verify hua.",verified:true,renderReady:true,rendered:true,renderer:rendered,editor:timeline,verification,images:[{mimeType:rendered.media.mimeType,data:rendered.media.data,video:true,duration:rendered.media.duration,name:rendered.youtube.filename}],thumbnail:rendered.thumbnail,youtube:rendered.youtube,usage:await getMediaUsage(db,account.id),activity:[{tool:"ffmpeg-renderer",state:"done",details:"Final MP4 + thumbnail encoded and verified."}]});
+   }catch(e){
+    return json(res,502,{ok:false,error:"Final MP4 render failed: "+String(e?.message||e),verified:false,renderReady:true,rendered:false,renderer:rendererSupports(),editor:timeline,verification,images:[],audio:[],usage:await getMediaUsage(db,account.id),activity:[{tool:"ffmpeg-renderer",state:"failed",details:String(e?.message||e)}]});
+   }
+  }
   if(type==="image"){
    try{
     await reserveMedia(db,account.id,"image",10);
@@ -829,12 +883,15 @@ export default async function handler(req,res){
   return json(res,200,{ok:true,text:conversationalReply||casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
  }
 
-// Deterministic scene editor lane. It builds and verifies the final timeline but
-// never claims an MP4 render unless every source scene is verified.
+// Deterministic scene editor + real renderer lane.
+// Asset IDs are resolved account-safely before rendering. A verified timeline is
+// automatically rendered unless the caller explicitly sets render:false.
 if(isLikelyEditRequest(latestUserMessage)){
   const sceneInputs=Array.isArray(body.scenes)?body.scenes:[];
+  const hydratedScenes=[];
+  for(let i=0;i<sceneInputs.length;i++) hydratedScenes.push(await hydrateRenderScene(db,account.id,sceneInputs[i],i));
   const timeline=buildEditTimeline({
-    scenes:sceneInputs.map((s,i)=>normalizeSceneClip(s,i)),
+    scenes:hydratedScenes,
     aspectRatio:body.aspectRatio||"16:9",
     fps:body.fps||30
   });
@@ -842,30 +899,76 @@ if(isLikelyEditRequest(latestUserMessage)){
   if(!verification.ok){
     return json(res,422,{
       ok:false,
-      text:"## ⚠️ Final video abhi render-ready nahi hai\\n\\nBHAI X ne timeline ko fail-closed block kiya hai kyunki har scene ka verified source video/timing proof available nahi hai.",
+      text:"## ⚠️ Final video abhi render-ready nahi hai\\n\\nBHAI X ne timeline ko fail-closed block kiya hai kyunki har scene ka verified source video/image ya timing proof available nahi hai.",
       verified:false,
       renderReady:false,
       editor:timeline,
       verification,
+      renderer:rendererSupports(),
       images:[],
       audio:[],
       usage:await getMediaUsage(db,account.id)
     });
   }
+  if(body.render!==false){
+    try{
+      const rendered=await renderTimeline(timeline,{title:body.title,description:body.description,tags:body.tags});
+      return json(res,200,{
+        ok:true,
+        text:"## 🎬 Final MP4 ready\\n\\nBHAI X ne verified scene timeline ko self-hosted FFmpeg renderer se compose karke actual MP4 banaya. Thumbnail aur YouTube-ready metadata bhi package ho gaye.",
+        verified:true,
+        renderReady:true,
+        rendered:true,
+        provider:"bhai-self-hosted",
+        backend_provider:"ffmpeg-renderer",
+        model:"bhai-video-renderer-v1",
+        editor:timeline,
+        verification,
+        renderer:rendered,
+        images:[{mimeType:rendered.media.mimeType,data:rendered.media.data,video:true,duration:rendered.media.duration,name:rendered.youtube.filename}],
+        thumbnail:rendered.thumbnail,
+        youtube:rendered.youtube,
+        usage:await getMediaUsage(db,account.id),
+        activity:[
+          {tool:"scene-editor",state:"done",details:"Final timeline verified."},
+          {tool:"ffmpeg-renderer",state:"done",details:"Actual MP4 encoded and output contract verified."},
+          {tool:"youtube-package",state:"done",details:"Thumbnail + title + description metadata prepared."}
+        ]
+      });
+    }catch(e){
+      return json(res,502,{
+        ok:false,
+        text:"## ⚠️ Renderer fail-closed\\n\\nTimeline verified thi, lekin actual MP4 encode successfully complete nahi hua. BHAI X ne unverified final video claim nahi kiya.",
+        verified:false,
+        renderReady:true,
+        rendered:false,
+        editor:timeline,
+        verification,
+        renderer:rendererSupports(),
+        rendererError:String(e?.message||e),
+        images:[],
+        audio:[],
+        usage:await getMediaUsage(db,account.id),
+        activity:[{tool:"ffmpeg-renderer",state:"failed",details:String(e?.message||e)}]
+      });
+    }
+  }
   return json(res,200,{
     ok:true,
-    text:"## 🎬 Final timeline ready\\n\\nScene order, duration, voice/lip-sync timing aur post-production contracts verify ho gaye. Ab renderer is timeline ko final MP4 mein compose kar sakta hai.",
+    text:"## 🎬 Final timeline ready\\n\\nTimeline verify ho gayi; MP4 rendering caller ne disable ki hai.",
     verified:true,
     renderReady:true,
+    rendered:false,
     provider:"deterministic",
     backend_provider:"scene-editor",
     model:"bhai-scene-editor-v1",
     editor:timeline,
     verification,
+    renderer:rendererSupports(),
     images:[],
     audio:[],
     usage:await getMediaUsage(db,account.id),
-    activity:[{tool:"scene-editor",state:"done",details:"Final timeline verified and render-ready."}]
+    activity:[{tool:"scene-editor",state:"done",details:"Final timeline verified; rendering skipped by request."}]
   });
 }
 

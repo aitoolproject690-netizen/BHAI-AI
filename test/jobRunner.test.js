@@ -25,3 +25,10 @@ test("completion proof blocks unverified executor output",()=>{
  assert.equal(verifyJobResult("build",{ok:true,conclusion:"success",artifactVerified:false}).ok,false);
  assert.equal(verifyJobResult("deploy",{ok:true,status:"complete",healthVerified:true}).ok,true);
 });
+
+
+test("terminal states cannot transition back into execution",()=>{
+ assert.equal(canTransition("completed","running"),false);
+ assert.equal(canTransition("cancelled","running"),false);
+ assert.equal(canTransition("failed","verifying"),false);
+});

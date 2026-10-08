@@ -838,9 +838,26 @@ export default async function handler(req,res){
   return json(res,400,{error:"Media type must be image or video."});
  }
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
- const {messages=[],executionPlan=null,recoveryCheckpoint=null}=req.body||{},activity=[];
+ const {messages=[],executionPlan=null,recoveryCheckpoint=null,executionResume=null}=req.body||{},activity=[];
   // Automatic execution: no user-facing DO IT switch is required.
- const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
+  // Recovered jobs carry verified step state. This boundary enforces hard-skip so a model
+  // cannot accidentally rerun a completed verified stage.
+ const canonicalResumeTool=(name="")=>{
+  const t=String(name||"").toLowerCase().replace(/[^a-z0-9:_-]+/g,"-");
+  if(/^story(?:-|:)|story-engine/.test(t))return "story";
+  if(/(?:character-identity|characters?)/.test(t))return "characters";
+  if(/(?:generate-image|character-visual|image)/.test(t))return "visuals";
+  if(/(?:generate-video|character-video|video)/.test(t))return "videos";
+  if(/(?:post-production|scene-post-production|procedural-audio|vfx|music|sfx)/.test(t))return "post-production";
+  if(/(?:ffmpeg|scene-editor|render)/.test(t))return "render";
+  if(/(?:youtube|publisher)/.test(t))return "youtube";
+  if(/^github(?:[:_-]|$)|github-/.test(t))return "github";
+  if(/preflight/.test(t))return "preflight";
+  if(/verify|verification|completion-proof/.test(t))return "verify";
+  return t;
+};
+const resumeSkipTools=new Set(Array.isArray(executionResume?.skipTools)?executionResume.skipTools.map(String):[]);
+const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
  const canonicalRequest=classifyUserRequest(latestUserMessage);
 
  // Canonical deterministic lanes must be identical in /api/chat and /api/agent.
@@ -1182,11 +1199,14 @@ if(directImageRequest){
  const skillContext=getSkillPromptContext(selectedSkills);
  const brainNote=brainSummary(brainPlan)+" | "+brainPlan.directive;
  const executionNote=executionPlan&&Array.isArray(executionPlan.tools) ? "JOB EXECUTION PLAN: "+executionPlan.tools.join(" → ")+". Complete tools in this order; use recovery checkpoint state to avoid repeating already verified work." : "JOB EXECUTION PLAN: none supplied.";
+ const recoveryNote=executionResume&&Array.isArray(executionResume.completedTools)
+  ? "EXECUTION RESUME: verified completed stages = "+executionResume.completedTools.join(", ")+"; resumeFromStepIndex="+String(executionResume.resumeFromStepIndex??0)+". Completed stages are hard-skipped at the tool boundary."
+  : "EXECUTION RESUME: none supplied.";
  const contextNote=`CONTEXT ROUTER: ${contextRoute.mode}. ${contextRoute.reason} Never revive an older Mission, repository, file, commit, or build unless the current user message explicitly refers to that existing task.`;
  const medicalMode=isMedicalIntent(latestUserMessage);
  const medicalSafety=medicalMode?getMedicalSafetyPrompt(latestUserMessage):"";
  const safeResponseText=(text)=>medicalMode?applyMedicalSafetyFooter(text,latestUserMessage):String(text||"");
- const system=`You are BHAI AI, a practical personal work agent. ${brainNote} ${executionNote} ${contextNote} ${skillContext} ${medicalSafety}
+ const system=`You are BHAI AI, a practical personal work agent. ${brainNote} ${executionNote} ${recoveryNote} ${contextNote} ${skillContext} ${medicalSafety}
 Reply in Hinglish when the user does. Talk naturally like a helpful project partner and friend: explain what you are doing, why it matters, what is already complete, what is still pending, and what should be added or fixed next.
 
 RESPONSE STYLE / MARKDOWN:
@@ -1703,6 +1723,12 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   for(const call of allowedCalls){
    if(totalToolCalls>=maxToolCalls) break;
    const name=call.name,a={...(call.args||{}),doIt:autoDoIt};
+   const canonicalCall=canonicalResumeTool(name);
+   if(resumeSkipTools.has(canonicalCall)){
+    activity.push({tool:name,state:"skipped",details:"Verified recovery checkpoint already completed the "+canonicalCall+" stage; tool call hard-skipped on resume."});
+    responseParts.push({functionResponse:{name,response:{result:{skipped:true,resumed:true,checkpointStepCompleted:true,step:canonicalCall}}}});
+    continue;
+   }
    // Deterministic GitHub target override: only the current request (or one unambiguous contextual repo) may select a repository.
    const explicitToolTarget=resolveGithubTarget(githubTaskText);
    const explicitToolRepo=explicitToolTarget.owner&&explicitToolTarget.repo

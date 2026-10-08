@@ -86,6 +86,7 @@ function canonicalStepKey(tool=""){
   if(/(?:post-production|scene-post-production|procedural-audio|vfx|music|sfx)/.test(t))return "post-production";
   if(/(?:render|ffmpeg|scene-editor)/.test(t))return "render";
   if(/(?:youtube|publisher)/.test(t))return "youtube";
+  if(/github[-_:].*(?:read|verify|patch-and-verify)|(?:github[-_:]?(?:read|info))|mission[-_:]evidence/.test(t))return "verify";
   if(/^github(?:[:_-]|$)|github-/.test(t))return "github";
   if(/preflight/.test(t))return "preflight";
   if(/verify|verification|completion-proof|evidence/.test(t))return "verify";

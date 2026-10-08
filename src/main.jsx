@@ -535,7 +535,7 @@ function App(){
   </aside>
   <main>
    <header>
-    {!sidebar&&<button className="openSide" onClick={()=>setSidebar(true)}><PanelLeftOpen size={19}/></button>
+    {!sidebar&&<button className="openSide" onClick={()=>setSidebar(true)}><PanelLeftOpen size={19}/></button>}
     <div className="topTitle"><b>BHAI X</b></div>
     <button className="headerIconBtn" aria-label="Settings" title="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button>
    </header>
@@ -567,7 +567,7 @@ function App(){
     <div className="composerHint">🧠 BHAI X khud samjhega request ka intent — chat, research, coding, GitHub, image, video, app ya doosra kaam. Koi tool select karne ki zarurat nahi.</div>
    </div>
   </main>
- {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false}/>} {brainOpen&&<ProjectBrainPanel onClose={()=>setBrainOpen(false)}/>} {historyOpen&&<ExecutionHistoryPanel onClose={()=>setHistoryOpen(false)} />} 
+ {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false)}/>} {brainOpen&&<ProjectBrainPanel onClose={()=>setBrainOpen(false)}/>} {historyOpen&&<ExecutionHistoryPanel onClose={()=>setHistoryOpen(false)} />} 
  </div>
 }
 createRoot(document.getElementById('root')).render(<App/>);

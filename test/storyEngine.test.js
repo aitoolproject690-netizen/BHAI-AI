@@ -9,3 +9,10 @@ test("prompt exposes downstream contract",()=>{const p=buildStoryPrompt({prompt:
 test("valid plan parses and derives scene duration",()=>{const out=parseAndValidateStoryPlan(JSON.stringify(sample),sample);assert.equal(out.ok,true);assert.equal(out.plan.characters[0].id,"aarav");assert.equal(out.plan.actualDurationSeconds,10);});
 test("invalid plan is blocked",()=>{const out=parseAndValidateStoryPlan(JSON.stringify({title:"Broken",scenes:[]}),{prompt:"x"});assert.equal(out.ok,false);assert.ok(out.errors.includes("missing_scenes"));});
 test("markdown keeps production continuity",()=>{const out=parseAndValidateStoryPlan(JSON.stringify(sample),sample);const md=buildStoryMarkdown(out.plan);assert.match(md,/Aarav Aur Rahasya/);assert.match(md,/The Signal/);assert.match(md,/blue hoodie unchanged/);});
+test("duplicate character IDs are blocked",()=>{
+  const dup=JSON.parse(JSON.stringify(sample));
+  dup.characters.push({...dup.characters[0],name:"Second Character"});
+  const out=parseAndValidateStoryPlan(JSON.stringify(dup),sample);
+  assert.equal(out.ok,false);
+  assert.ok(out.errors.includes("duplicate_character_ids"));
+});

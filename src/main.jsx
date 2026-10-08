@@ -247,7 +247,8 @@ function App(){
    try{
     const rr=await fetch(apiUrl('/api/production'),{method:'POST',headers:authHeaders(),body:JSON.stringify({
      prompt:userIntentText,durationSeconds:15,language:'Hindi',genre:'suspense',visualStyle:'3D anime cinematic cartoon',
-     aspectRatio:'16:9',autoPublish:true,privacy:/\bpublic\b/i.test(userIntentText)?'public':/\bunlisted\b/i.test(userIntentText)?'unlisted':'private',render:true,maxScenes:3,\n     ...(resumeProduction?.pipelineId?{productionPipelineId:resumeProduction.pipelineId,recoveryCheckpoint:resumeProduction}:{})
+     aspectRatio:'16:9',autoPublish:true,privacy:/\bpublic\b/i.test(userIntentText)?'public':/\bunlisted\b/i.test(userIntentText)?'unlisted':'private',render:true,maxScenes:3,
+     ...(resumeProduction?.pipelineId?{productionPipelineId:resumeProduction.pipelineId,recoveryCheckpoint:resumeProduction}:{})
     })});
     const d=await rr.json().catch(()=>({}));
     if(d.productionCheckpoint&&!d.verified){localStorage.setItem('bhai_x_production_checkpoint',JSON.stringify(d.productionCheckpoint));setResumeProduction(d.productionCheckpoint);}

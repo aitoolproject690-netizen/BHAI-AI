@@ -838,7 +838,7 @@ export default async function handler(req,res){
   return json(res,400,{error:"Media type must be image or video."});
  }
  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
- const {messages=[]}=req.body||{},activity=[];
+ const {messages=[],executionPlan=null,recoveryCheckpoint=null}=req.body||{},activity=[];
   // Automatic execution: no user-facing DO IT switch is required.
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
  const canonicalRequest=classifyUserRequest(latestUserMessage);
@@ -1181,11 +1181,12 @@ if(directImageRequest){
  const selectedSkills=selectSkillsForTask(latestUserMessage);
  const skillContext=getSkillPromptContext(selectedSkills);
  const brainNote=brainSummary(brainPlan)+" | "+brainPlan.directive;
+ const executionNote=executionPlan&&Array.isArray(executionPlan.tools) ? "JOB EXECUTION PLAN: "+executionPlan.tools.join(" → ")+". Complete tools in this order; use recovery checkpoint state to avoid repeating already verified work." : "JOB EXECUTION PLAN: none supplied.";
  const contextNote=`CONTEXT ROUTER: ${contextRoute.mode}. ${contextRoute.reason} Never revive an older Mission, repository, file, commit, or build unless the current user message explicitly refers to that existing task.`;
  const medicalMode=isMedicalIntent(latestUserMessage);
  const medicalSafety=medicalMode?getMedicalSafetyPrompt(latestUserMessage):"";
  const safeResponseText=(text)=>medicalMode?applyMedicalSafetyFooter(text,latestUserMessage):String(text||"");
- const system=`You are BHAI AI, a practical personal work agent. ${brainNote} ${contextNote} ${skillContext} ${medicalSafety}
+ const system=`You are BHAI AI, a practical personal work agent. ${brainNote} ${executionNote} ${contextNote} ${skillContext} ${medicalSafety}
 Reply in Hinglish when the user does. Talk naturally like a helpful project partner and friend: explain what you are doing, why it matters, what is already complete, what is still pending, and what should be added or fixed next.
 
 RESPONSE STYLE / MARKDOWN:
@@ -1218,7 +1219,7 @@ TROUBLESHOOTING:
 - For "something broke", first identify the exact symptom/error, then give the shortest safe diagnostic path and step-by-step fix. Prefer phone-friendly instructions when the user is on mobile.
 - Never claim a repair, test, diagnosis, commit, deployment, or other real-world action happened unless a tool result confirms it.
 
-Never invent completed work, progress percentages, files, commits, tests, or deployments. If exact progress is not measurable, describe it as a checklist (completed / remaining / next). At the end of a meaningful project task, include a short '📊 Project status' section with: Completed, Remaining, Next recommended step. Execution mode is AUTOMATIC. The agent selects only the tools required for the current task.
+Never invent completed work, progress percentages, files, commits, tests, or deployments. If JOB EXECUTION PLAN is supplied, treat it as the durable job contract. RECOVERY CHECKPOINT may contain completed/running/planned steps; do not repeat a completed verified step unless current evidence shows it must be rerun. If exact progress is not measurable, describe it as a checklist (completed / remaining / next). At the end of a meaningful project task, include a short '📊 Project status' section with: Completed, Remaining, Next recommended step. Execution mode is AUTOMATIC. The agent selects only the tools required for the current task.
 
 EXECUTION POLICY:
 - First make a compact internal plan: desired outcome, required skills, minimum tools/files. Before execution, perform a pre-flight risk check for API/model availability, credentials, required files, dependencies and target service health whenever relevant. Prevent predictable failures instead of waiting for them.

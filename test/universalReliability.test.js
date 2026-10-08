@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {isCasualIntent,isGeneralChatIntent,isKnowledgeResearchIntent,isWebResearchIntent,isCurrentContextIntent,isMedicalChatIntent,isLocalCodingIntent,detectMediaIntent} from "../src/intentRouter.js";
 import {selectSkillForTask,selectSkillsForTask} from "../src/skillsRouter.js";
+import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
 
 const cases=[
 ["conversation",isCasualIntent,"Bhai aise hi dekh raha tha tu kya reply deta hai"],
@@ -98,8 +99,7 @@ test("known fragment outputs are always blocked on substantive questions",()=>{
   ["uge","Bhai aise hi test kar raha tha tu kya reply deta hai?"]
  ];
  for(const [answer,prompt] of samples){
-  assert.match(answer,/^[\\s\\S]+$/);
-  assert.equal(/^(?:from|pathlib|b|actly|uge)$/i.test(answer),true);
+  assert.equal(isObviouslyGarbledResponse(answer,prompt),true,prompt+" -> "+answer);
  }
 });
 

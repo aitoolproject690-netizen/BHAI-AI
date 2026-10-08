@@ -17,6 +17,11 @@ export function buildProductionCheckpoint({
   currentStep=null,
   renderProof=null,
   youtube=null,
+  characterBible=null,
+  cameraPlan=null,
+  audioMaster=null,
+  youtubePackage=null,
+  shortsPlan=null,
   activity=[]
 }={}) {
   return {
@@ -32,7 +37,11 @@ export function buildProductionCheckpoint({
       visuals:Boolean(evidence?.visuals),
       videos:Boolean(evidence?.videos),
       post:Boolean(evidence?.post),
+      audio:Boolean(evidence?.audio),
+      camera:Boolean(evidence?.camera),
       render:Boolean(evidence?.render),
+      youtubePackage:Boolean(evidence?.youtubePackage),
+      shorts:Boolean(evidence?.shorts),
       youtube:Boolean(evidence?.youtube)
     },
     story:story||null,
@@ -58,6 +67,11 @@ export function buildProductionCheckpoint({
       videoVerified:Boolean(s?.videoVerified),
       postVerified:Boolean(s?.postVerified)
     })).filter(s=>s.sceneId),
+    characterBible:characterBible||null,
+    cameraPlan:cameraPlan||null,
+    audioMaster:audioMaster||null,
+    youtubePackage:youtubePackage||null,
+    shortsPlan:shortsPlan||null,
     renderProof:renderProof||null,
     youtube:youtube&&typeof youtube==="object"?{
       verified:Boolean(youtube.verified),

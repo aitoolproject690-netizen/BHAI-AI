@@ -30,7 +30,7 @@ export function normalizeAutonomousRequest(input={}){
   schemaVersion:AUTONOMOUS_PRODUCTION_SCHEMA_VERSION,
   prompt:story.prompt,story,
   autoPublish:Boolean(input.autoPublish||isYouTubePublishRequest(prompt)),
-  privacy:["public","unlisted","private"].includes(input.privacy)?input.privacy:"private",
+  privacy:["public","unlisted","private"].includes(input.privacy)?input.privacy:(/\bpublic\b/i.test(prompt)?"public":/\bunlisted\b/i.test(prompt)?"unlisted":"private"),
   render:Boolean(input.render!==false),
   maxScenes:clamp(input.maxScenes,1,3,3),
   aspectRatio:/^(?:9:16|1:1|4:5|16:9)$/.test(String(input.aspectRatio||""))?String(input.aspectRatio):"16:9"

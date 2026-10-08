@@ -13,6 +13,18 @@ test("casual chat catches common Hinglish forms",()=>{
  }
 });
 
+test("natural conversational testing and banter stay out of the AI provider lane",()=>{
+ const text="Bhai aise hi test kar rha tha kya reply deta hai tu 😅";
+ assert.equal(isCasualIntent(text),true);
+ assert.match(getCasualReply(text),/bas test kar raha tha.*kya reply deta/i);
+});
+
+test("natural conversation does not swallow real work requests",()=>{
+ assert.equal(isCasualIntent("Bhai aise hi test kar raha hoon is Python code me bug hai"),false);
+ assert.equal(isCasualIntent("Bhai mazaak nahi, GitHub repo me bug fix karo"),false);
+ assert.equal(isCasualIntent("Bhai test kar raha hoon, baby ko fever hai"),false);
+});
+
 
 
 test("abusive casual input gets a calm deterministic reply",()=>{

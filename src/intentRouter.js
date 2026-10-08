@@ -140,7 +140,7 @@ export function isKnowledgeResearchIntent(text="") {
   const broadInformational=/(?:^|\s)(?:what|why|how|when|where|which|who)\b/i.test(normalized)
     || /\b(?:kya|kaise|kyu|kyon|kisliye)\b.{0,120}\b(?:hai|hota|hoti|hote|kaam|kar(?:ta|ti|te)?|samjha|samjhao|batao|bata|explain|meaning|matlab)\b/i.test(raw)
     || /\b(?:simple scene|samjha de|samjha do|easy language|simple language)\b/i.test(raw);
-  const question=/(?:\?|\bwhat\b|\bwhat is\b|\bwhat are\b|\bhow does\b|\bhow do\b|\bwhy does\b|\bwhy do\b|\bexplain\b|\bmeaning\b|\bdefine\b|\bkaise\b|\bkyu\b|\bkyon\b|\bkya hota\b|\bkya hai\b|\bkya kya\b|\bmein kya\b|\bme kya\b|\bmatlab\b|\bkaise kaam\b)/i.test(raw);
+  const question=/(?:\?|\bwhat\b|\bwhat is\b|\bwhat are\b|\bhow does\b|\bhow do\b|\bwhy does\b|\bwhy do\b|\bexplain\b|\bmeaning\b|\bdefine\b|\bkaise\b|\bkyu\b|\bkyon\b|\bkya hota\b|\bkya hai\b|\bkya kya\b|\bmein kya\b|\bme kya\b|\bmatlab\b|\bkaise kaam\b)/i.test(raw) || broadInformational;
   const conversational=/(?:^|\s)(?:who are you|what are you|what can you do|what are you doing|how are you doing|can you help me|tell me about yourself)(?:$|\s)/i.test(normalized);
   if(conversational) return false;
 

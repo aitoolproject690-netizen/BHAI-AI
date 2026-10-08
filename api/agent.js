@@ -13,6 +13,7 @@ import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpleColdQuestion } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isGeneralChatIntent} from "../src/intentRouter.js";
 import {normalizeVisualRequest,buildCharacterVisualPrompt,verifyCharacterVisualContract,pickCharacterForPrompt} from "../src/characterVisualEngine.js";
+import {normalizeVideoRequest,buildCharacterVideoPrompt,verifyCharacterVideoContract} from "../src/characterVideoEngine.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
@@ -265,6 +266,53 @@ async function getMediaUsage(db,accountId){
 }
 
 // CI verification marker: hardened free video fallback
+async function getLatestCharacterVisualAsset(db,accountId,characterId,fingerprint){
+ await ensureCharacterVisualAssetsTable(db);
+ const q=await db.query("SELECT asset_id,mime_type,data,provider,created_at FROM bhai_character_visual_assets WHERE account_id=$1 AND character_id=$2 AND identity_fingerprint=$3 ORDER BY created_at DESC LIMIT 1",[accountId,characterId,fingerprint]);
+ return q.rows[0]||null;
+}
+
+async function ensureCharacterVideoAssetsTable(db){
+ await db.query(`CREATE TABLE IF NOT EXISTS bhai_character_video_assets (
+   asset_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, character_id TEXT NOT NULL,
+   identity_fingerprint TEXT NOT NULL, identity_version INTEGER NOT NULL DEFAULT 1,
+   source_visual_asset_id TEXT, prompt TEXT NOT NULL, request_json JSONB NOT NULL,
+   mime_type TEXT NOT NULL, data TEXT NOT NULL, provider TEXT,
+   verification_mode TEXT NOT NULL, verification_score NUMERIC NOT NULL DEFAULT 0,
+   frame_identity_verified BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ )`);
+ await db.query("CREATE INDEX IF NOT EXISTS idx_bhai_character_video_assets_lookup ON bhai_character_video_assets(account_id,character_id,created_at DESC)");
+}
+
+async function saveCharacterVideoAsset(db,accountId,character,request,media,verification,sourceVisualAssetId=null){
+ await ensureCharacterVideoAssetsTable(db);
+ const hash=crypto.createHash("sha256").update(character.character_id+"|"+character.identity_fingerprint+"|"+JSON.stringify(request)+"|"+media.data).digest("hex").slice(0,24);
+ const assetId="charvid_"+character.character_id+"_"+hash;
+ await db.query(`INSERT INTO bhai_character_video_assets
+   (asset_id,account_id,character_id,identity_fingerprint,identity_version,source_visual_asset_id,prompt,request_json,mime_type,data,provider,verification_mode,verification_score,frame_identity_verified)
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14)
+   ON CONFLICT(asset_id) DO UPDATE SET data=EXCLUDED.data,provider=EXCLUDED.provider,created_at=NOW()`,
+   [assetId,accountId,character.character_id,character.identity_fingerprint,Number(character.identity_version||1),sourceVisualAssetId,request.prompt,JSON.stringify(request),media.mimeType,media.data,media.provider||null,verification.mode,Number(verification.score||0),Boolean(verification.frameIdentityVerification)]);
+ await db.query(`DELETE FROM bhai_character_video_assets WHERE account_id=$1 AND character_id=$2 AND asset_id IN (
+   SELECT asset_id FROM bhai_character_video_assets WHERE account_id=$1 AND character_id=$2 ORDER BY created_at DESC OFFSET 10
+ )`,[accountId,character.character_id]);
+ return assetId;
+}
+
+async function generateCharacterVideo(db,accountId,prompt,duration=5,aspectRatio="16:9",fallbackSourceImage=null){
+ const character=await findCharacterForVisual(db,accountId,prompt);
+ if(!character) return {media:await generateVideo(prompt,duration,aspectRatio,fallbackSourceImage),character:null,request:normalizeVideoRequest({prompt,duration,aspectRatio}),verification:null,sourceVisualAsset:null};
+ const request=normalizeVideoRequest({prompt,duration,aspectRatio});
+ const lockedPrompt=buildCharacterVideoPrompt(character,request);
+ const verification=verifyCharacterVideoContract(character,lockedPrompt);
+ if(!verification.ok) throw new Error("Character video contract failed closed; locked identity was not embedded completely.");
+ const sourceVisualAsset=await getLatestCharacterVisualAsset(db,accountId,character.character_id,character.identity_fingerprint);
+ const sourceImage=sourceVisualAsset?.data ? {mimeType:sourceVisualAsset.mime_type,data:sourceVisualAsset.data,provider:sourceVisualAsset.provider||"character-visual"} : fallbackSourceImage;
+ const media=await generateVideo(lockedPrompt,request.duration,request.aspectRatio,sourceImage);
+ const assetId=await saveCharacterVideoAsset(db,accountId,character,request,media,verification,sourceVisualAsset?.asset_id||null);
+ return {media,character,request,verification,sourceVisualAsset,assetId,lockedPrompt};
+}
+
 async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=null){
  const timeout=(ms)=>AbortSignal.timeout(ms);
  const seconds=Math.min(5,Math.max(1,Number(duration)||5));
@@ -699,10 +747,12 @@ export default async function handler(req,res){
     await reserveMedia(db,account.id,"video",3);
     try{
      const wantsImage=body.imageToVideo===true;
-     const sourceImage=wantsImage?await getLatestMediaAsset(db,account.id,"image"):null;
-     const videoPrompt=wantsImage&&!sourceImage?"Create a cinematic video based on this visual request: "+prompt:prompt;
-     const media=await generateVideo(videoPrompt,Math.min(5,Math.max(1,Number(body.duration)||5)),aspectRatio,sourceImage);
-     return json(res,200,{ok:true,text:"## 🎬 Video generated\\n\\nBHAI X ne dedicated video pipeline, provider fallback aur output validation complete ki.",activity:[{tool:"generate_video",state:"done",details:"Dedicated media endpoint generated and validated the video."}],images:[{mimeType:media.mimeType,data:media.data,video:true,duration:media.duration}],usage:await getMediaUsage(db,account.id)});
+     const fallbackSourceImage=wantsImage?await getLatestMediaAsset(db,account.id,"image"):null;
+     const videoPrompt=wantsImage&&!fallbackSourceImage?"Create a cinematic video based on this visual request: "+prompt:prompt;
+     const visual=await generateCharacterVideo(db,account.id,videoPrompt,Math.min(5,Math.max(1,Number(body.duration)||5)),aspectRatio,fallbackSourceImage);
+     const media=visual.media;
+     const videoMeta={mimeType:media.mimeType,data:media.data,video:true,duration:media.duration,...(visual.character?{characterId:visual.character.character_id,identityFingerprint:visual.character.identity_fingerprint,visualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,identityLock:true,verificationMode:visual.verification?.mode||"generation-contract",verificationScore:visual.verification?.score||0}:{} )};
+     return json(res,200,{ok:true,text:visual.character?"## 🎬 Character video generated\\n\\nBHAI X ne permanent Character ID ke locked video contract ke saath animation generate ki aur visual lineage preserve ki.":"## 🎬 Video generated\\n\\nBHAI X ne dedicated video pipeline, provider fallback aur output validation complete kiya.",activity:[{tool:"generate_video",state:"done",details:visual.character?"Character identity lock + source visual lineage verified before video generation.":"Dedicated media endpoint generated and validated the video."}],images:[videoMeta],character:visual.character?{characterId:visual.character.character_id,name:visual.character.name,identityFingerprint:visual.character.identity_fingerprint,sourceVisualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,verification:visual.verification}:null,usage:await getMediaUsage(db,account.id)});
     }catch(e){await releaseMedia(db,account.id,"video");return json(res,502,{error:"Video generation failed: "+String(e?.message||e),activity:[{tool:"generate_video",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});}
    }catch(e){return json(res,502,{error:"Video generation pre-flight failed: "+String(e?.message||e)});
    }
@@ -781,8 +831,10 @@ if(directVideoRequest){
     activity.push({tool:"media:recovery",state:"done",details:"Previous image asset was unavailable; recovered the latest visual prompt and switched to compatible text-to-video generation."});
     sourceImage=null;
    }
-   const media=await generateVideo(videoPrompt,5,"16:9",sourceImage);
-   return json(res,200,{ok:true,text:"## 🎬 Video generated\\n\\nBHAI X ne request ko verified video pipeline par route kiya — capability match + fallback + output validation complete.",activity:[{tool:"generate_video",state:"done",details:"Direct video request routed to the video generator."}],images:[{mimeType:media.mimeType,data:media.data,video:true,duration:media.duration}],usage:await getMediaUsage(db,account.id)});
+   const visual=await generateCharacterVideo(db,account.id,videoPrompt,5,"16:9",sourceImage);
+   const media=visual.media;
+   const videoMeta={mimeType:media.mimeType,data:media.data,video:true,duration:media.duration,...(visual.character?{characterId:visual.character.character_id,identityFingerprint:visual.character.identity_fingerprint,visualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,identityLock:true,verificationMode:visual.verification?.mode||"generation-contract",verificationScore:visual.verification?.score||0}:{} )};
+   return json(res,200,{ok:true,text:visual.character?"## 🎬 Character video generated\\n\\nBHAI X ne permanent Character ID ke locked video contract ke saath animation generate ki aur visual lineage preserve ki.":"## 🎬 Video generated\\n\\nBHAI X ne request ko verified video pipeline par route kiya — capability match + fallback + output validation complete.",activity:[{tool:"generate_video",state:"done",details:visual.character?"Character identity lock + source visual lineage verified before video generation.":"Direct video request routed to the video generator."}],images:[videoMeta],character:visual.character?{characterId:visual.character.character_id,name:visual.character.name,identityFingerprint:visual.character.identity_fingerprint,sourceVisualAssetId:visual.sourceVisualAsset?.asset_id||null,videoAssetId:visual.assetId,verification:visual.verification}:null,usage:await getMediaUsage(db,account.id)});
   }catch(e){
    await releaseMedia(db,account.id,"video");
    return json(res,502,{error:"Video generation failed: "+String(e?.message||e),activity:[{tool:"generate_video",state:"failed",details:String(e?.message||e)}],usage:await getMediaUsage(db,account.id)});

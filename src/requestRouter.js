@@ -12,6 +12,7 @@ import {
   isKnowledgeResearchIntent,
   isLocalCodingIntent,
   isMedicalChatIntent,
+  isStoryScriptIntent,
   isWebResearchIntent,
   detectMediaIntent
 } from "./intentRouter.js";
@@ -52,6 +53,10 @@ export function classifyUserRequest(text="") {
 
   if(isMedicalChatIntent(task)){
     return {lane:"medical",type:"medical",media};
+  }
+
+  if(isStoryScriptIntent(task)){
+    return {lane:"story",type:"story",media};
   }
 
   // Standalone coding must beat research so code questions are not hijacked

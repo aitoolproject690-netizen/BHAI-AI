@@ -19,6 +19,56 @@ import {buildSimpleCodingFallback} from "../src/codingFallback.js";
 import { webSearch, filterResearchSources } from "../src/webSearch.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
+function isReadOnlyGithubAuditRequest(text=""){
+ const raw=String(text||"");
+ return /\b(?:github|git\s*hub|repo(?:sitory)?)\b/i.test(raw)
+   && /\b(?:inspect|check|audit|review|obvious\s+build|build\s+problem|status)\b/i.test(raw)
+   && !/\b(?:fix|change|modify|update|edit|commit|push|delete|remove|create|deploy)\b/i.test(raw);
+}
+
+async function runReadOnlyGithubAudit(text=""){
+ const target=resolveGithubTarget(text);
+ if(!target.owner||!target.repo) return null;
+ if(!githubConfigured()) throw Object.assign(new Error("GitHub access is not configured on the server."),{status:503});
+ const base=githubRepoUrl(target.owner,target.repo);
+ const repoMeta=await githubApiJson(base,{timeoutMs:12000});
+ const root=await githubApiJson(base+"/contents",{timeoutMs:12000});
+ const entries=Array.isArray(root)?root:[];
+ const names=new Set(entries.map(x=>String(x?.name||"")));
+ let packageJson=null;
+ const pkg=entries.find(x=>String(x?.name||"").toLowerCase()==="package.json");
+ if(pkg?.path){
+   const raw=await githubApiJson(base+"/contents/"+encodeGithubPath(pkg.path),{timeoutMs:12000});
+   if(raw?.content&&raw?.encoding==="base64"){
+     try{ packageJson=JSON.parse(Buffer.from(String(raw.content).replace(/\s+/g,""),"base64").toString("utf8")); }catch{}
+   }
+ }
+ let workflows=[];
+ try{
+   const workflowDir=await githubApiJson(base+"/contents/.github/workflows",{timeoutMs:12000});
+   workflows=Array.isArray(workflowDir)?workflowDir.map(x=>String(x?.name||"")).filter(Boolean):[];
+ }catch{}
+ const buildScript=String(packageJson?.scripts?.build||"").trim();
+ const testScript=String(packageJson?.scripts?.test||"").trim();
+ const risks=[];
+ if(pkg && !buildScript) risks.push("package.json exists but has no build script");
+ if(!pkg && !entries.some(x=>/^(?:vite\.config\.|next\.config\.|angular\.json|pyproject\.toml|requirements\.txt|Cargo\.toml)$/i.test(String(x?.name||"")))) risks.push("no obvious project build manifest found at repository root");
+ const lockfiles=["package-lock.json","npm-shrinkwrap.json","pnpm-lock.yaml","yarn.lock","bun.lockb"].filter(name=>names.has(name));
+ const summary=[
+   "## 🔍 Read-only GitHub audit",
+   "**Repository:** `"+target.owner+"/"+target.repo+"`",
+   "**Default branch:** `"+String(repoMeta?.default_branch||"unknown")+"`",
+   "**Language:** "+String(repoMeta?.language||"not reported"),
+   "**Build script:** "+(buildScript?"✅ `"+buildScript+"`":"⚠️ missing"),
+   "**Test script:** "+(testScript?"✅ `"+testScript+"`":"ℹ️ not defined"),
+   "**Lockfile:** "+(lockfiles.length?"✅ "+lockfiles.join(", "):"ℹ️ none detected (not automatically a build failure)"),
+   "**CI workflows:** "+(workflows.length?"✅ "+workflows.join(", "):"ℹ️ none detected"),
+   risks.length?"":"**Result:** ✅ No obvious build blocker found from read-only repository metadata.",
+   ...risks.map(x=>"**Potential issue:** ⚠️ "+x+".")
+ ].filter(Boolean).join("\n");
+ return {text:summary,owner:target.owner,repo:target.repo,branch:String(repoMeta?.default_branch||""),risks,workflows,lockfiles,buildScript,testScript};
+}
+
 
 async function generateImage(prompt,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
@@ -611,6 +661,18 @@ export default async function handler(req,res){
   // Automatic execution: no user-facing DO IT switch is required.
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
  const canonicalRequest=classifyUserRequest(latestUserMessage);
+ if(isReadOnlyGithubAuditRequest(latestUserMessage)){
+  try{
+   const audit=await runReadOnlyGithubAudit(githubTaskText);
+   if(audit){
+    return json(res,200,{ok:true,text:audit.text,provider:"deterministic",backend_provider:"github-readonly-audit",model:"bhai-github-audit-v1",verified:true,activity:[{tool:"github-audit",state:"done",details:"Read-only repository metadata inspected; no changes were made."}]});
+   }
+  }catch(e){
+   if(!/GitHub access is not configured/i.test(String(e?.message||e))){
+    return json(res,502,{error:"Read-only GitHub audit failed: "+String(e?.message||e),activity:[{tool:"github-audit",state:"failed",details:String(e?.message||e)}]});
+   }
+  }
+ }
  // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
  const normalizedCasual=normalizeIntent(latestUserMessage);

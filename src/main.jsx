@@ -11,7 +11,7 @@ import GeneratorPanel from'./GeneratorPanel.jsx';
 import SystemPanel from'./SystemPanel.jsx';
 import ResellerPanel from'./ResellerPanel.jsx';
 import ProjectBrainPanel from'./ProjectBrainPanel.jsx';
-import {normalizeIntent,isCasualIntent,detectMediaIntent,isGeneralChatIntent,isLocalCodingIntent,isWebResearchIntent} from './intentRouter.js';
+import {normalizeIntent,isCasualIntent,detectMediaIntent,isStoryScriptIntent,isGeneralChatIntent,isLocalCodingIntent,isWebResearchIntent} from './intentRouter.js';
 import {apiUrl,readJsonResponse,requestJson} from './apiClient.js';
 
 const authToken=()=>localStorage.getItem('bhai_user_session')||sessionStorage.getItem('bhai_user_session')||'';
@@ -160,7 +160,8 @@ function App(){
   const githubMutationRequest=/\b(?:fix|repair|update|modify|change|write|commit|push|delete|create|build|deploy|publish)\b/i.test(userIntentText);
   const githubReadIntent=/\b(?:check|inspect|read|open|verify|dekh|dekho)\b/i.test(userIntentText);
   const directGithubRead=Boolean(explicitGithubRepo&&githubReadIntent&&!githubMutationRequest&&(githubFilePath||/\b(?:repo|repository)\b/i.test(userIntentText)));
-  const generalChatMessage=!instantMessage&&!mediaMessage&&!directGithubRead&&!webResearchMessage&&(isGeneralChatIntent(userIntentText)||isLocalCodingIntent(userIntentText));
+  const storyScriptMessage=!instantMessage&&!mediaMessage&&!directGithubRead&&!webResearchMessage&&isStoryScriptIntent(userIntentText);
+  const generalChatMessage=!instantMessage&&!mediaMessage&&!directGithubRead&&!storyScriptMessage&&!webResearchMessage&&(isGeneralChatIntent(userIntentText)||isLocalCodingIntent(userIntentText));
   if(instantMessage){
    const id=crypto.randomUUID();
    setInput('');setFileInfo(null);setToolsOpen(false);
@@ -197,6 +198,28 @@ function App(){
     setActivity(a=>a.map(x=>({...x,state:x.state==='running'?'failed':x.state})));
     upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ GitHub check failed\\n\\n'+e.message}:x));
    }finally{setRunning(false)}
+   return;
+  }
+  if(storyScriptMessage){
+   setInput('');setFileInfo(null);setToolsOpen(false);setRunning(true);setActivityOpen(true);
+   const id=crypto.randomUUID();const replyId=id+'-story-reply';
+   const next=[...chat.messages,{id:crypto.randomUUID(),role:'user',text:t},{id:replyId,role:'assistant',text:'📝 BHAI X Story + Script Engine chala raha hai...'}];
+   upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
+   setActivity([
+    {id:id+'0',step:'Story',text:'🧠 Story structure aur YouTube hook tayyar ho raha hai...',state:'done'},
+    {id:id+'1',step:'Script',text:'🎞️ Scenes, dialogue, visuals aur continuity build ho rahi hai...',state:'running'},
+    {id:id+'2',step:'Verify',text:'✅ Structured script schema validate kiya jayega...',state:'pending'}
+   ]);
+   try{
+    const rr=await fetch(apiUrl('/api/story'),{method:'POST',headers:authHeaders(),body:JSON.stringify({prompt:userIntentText,language:'Hindi',durationSeconds:300,genre:'suspense',visualStyle:'3D anime cinematic cartoon'})});
+    const d=await rr.json().catch(()=>({}));
+    if(!rr.ok||d.error)throw new Error(d.error||('Story backend HTTP '+rr.status));
+    setActivity(a=>a.map(x=>x.id===id+'1'||x.id===id+'2'?{...x,state:'done'}:x));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:d.text||'✅ Story ready.',providerMeta:d.provider?{provider:d.provider,backend_provider:d.backend_provider||null,model:d.model||null}:null}:x));
+   }catch(e){
+    setActivity(a=>a.map(x=>({...x,state:'failed'})));
+    upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ STORY ENGINE ERROR\n\n'+e.message+'\n\nIncomplete script ko BHAI X ne DONE nahi maana.'}:x));
+   }finally{setRunning(false);clearInterval(workTicker.current);workTicker.current=null;}
    return;
   }
   if(generalChatMessage){

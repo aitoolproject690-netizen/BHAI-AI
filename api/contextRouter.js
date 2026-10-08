@@ -1,14 +1,17 @@
 const normalize=(value="")=>String(value).toLowerCase().replace(/[!?.,]+/g," ").replace(/\s+/g," ").trim();
 
 const freshTask=/\b(?:new|naya|nayi|ek)\s+(?:app|project|repo|repository|website|file)\b|\b(?:create|make|build|start)\s+(?:a\s+)?(?:new\s+)?(?:app|project|repo|repository|website)\b|\bapp\s+bana(?:\s+de)?\b/i;
-const followup=/\b(?:same|that|this|it|us|isko|isse|usse|upar|previous|last|continue|resume|retry|again|phir|wahi|jo\s+(?:app|repo|repository|file|project))\b|\b(?:is|us|ye|woh)\s+(?:app|repo|repository|file|project)\b/i;
+const followup=/\b(?:same|that|this|it|us|isko|isse|usse|upar|previous|last|continue|resume|retry|again|phir|wahi|next|iske\s+baad|uske\s+baad|jo\s+(?:app|repo|repository|file|project))\b|\b(?:is|us|ye|woh)\s+(?:app|repo|repository|file|project)\b/i;
 const shortAction=/^(?:bhai\s+)?(?:build|deploy|fix|check|verify|test|run|resume|continue|open|update|push|commit|publish)\b.{0,120}$/i;
+const nextStep=/^(?:bhai\s+)?(?:ab|aage|next|iske\s+baad|uske\s+baad|abhi)\b/i;
+const workAnchor=/\b(?:app|project|repo(?:sitory)?|website|apk|code|bug|error|github|render|video|image|story|build|deploy|commit|publish|mission|task)\b/i;
 
 export function routeConversationContext(messages=[],latestUserMessage=""){
  const latest=String(latestUserMessage||"").trim();
  const normalized=normalize(latest);
- const contextual=!freshTask.test(normalized)&&((followup.test(normalized)||shortAction.test(normalized)));
  const clean=(Array.isArray(messages)?messages:[]).filter(m=>m&&["user","assistant"].includes(m.role)&&String(m.text||"").trim());
+ const hasPriorWork=clean.some(m=>m.role==="user"&&workAnchor.test(String(m.text||"")));
+ const contextual=hasPriorWork&&!freshTask.test(normalized)&&((followup.test(normalized)||shortAction.test(normalized)||nextStep.test(normalized)));
  const selected=contextual?clean.slice(-10):clean.filter(m=>m.role==="user").slice(-1);
  return {
   mode:contextual?"contextual_followup":"fresh_task",

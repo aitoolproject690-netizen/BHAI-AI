@@ -1,6 +1,7 @@
 import { isMedicalIntent, getMedicalRiskSignals, sanitizeMedicalResponse } from "../src/medicalSafety.js";
 import { isCasualIntent, getCasualReply } from "../src/intentRouter.js";
 import { rendererSupports } from "../src/videoRenderer.js";
+import { youtubeConfigured } from "./youtube.js";
 
 function runConversationRoutingSelfCheck(){
   const task="Bhai aise hi test kar rha tha kya reply deta hai tu 😅";
@@ -68,6 +69,7 @@ export default async function handler(req,res){
   const medicalSafety=runMedicalSafetySelfCheck();
   const conversationRouting=runConversationRoutingSelfCheck();
   const videoRenderer=rendererSupports();
+  const youtubePublisher={configured:youtubeConfigured(),oauthRequired:true};
   return res.status(200).json({
     ok:true,
     service:"BHAI AI",
@@ -78,6 +80,7 @@ export default async function handler(req,res){
     provider:"gemini",
     medicalSafety,
     conversationRouting,
+    videoRenderer,youtubePublisher,
     deployment:{verified,commit,branch,url,status:verified?"live":"unknown"},
     time:new Date().toISOString()
   });

@@ -11,6 +11,14 @@ async function verifyPassword(password,stored){
 
 function ownerOk(req){const expected=process.env.OWNER_ACCESS_KEY,supplied=req.headers?.["x-owner-key"]||"";if(!expected||!supplied)return false;const a=Buffer.from(String(expected)),b=Buffer.from(String(supplied));return a.length===b.length&&crypto.timingSafeEqual(a,b);}
 async function schema(db){await db.query("CREATE TABLE IF NOT EXISTS bhai_accounts (id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'user',credits INTEGER NOT NULL DEFAULT 0,blocked BOOLEAN NOT NULL DEFAULT FALSE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");await db.query("CREATE TABLE IF NOT EXISTS bhai_credit_ledger (id TEXT PRIMARY KEY,account_id TEXT NOT NULL,amount INTEGER NOT NULL,reason TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");await db.query("CREATE TABLE IF NOT EXISTS bhai_sessions (token_hash TEXT PRIMARY KEY,account_id TEXT NOT NULL,expires_at TIMESTAMPTZ NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");}
+export async function getAccountById(accountId,db){
+ const id=String(accountId||"").trim();
+ if(!id)return null;
+ const r=await db.query("SELECT id,email,role,credits,blocked FROM bhai_accounts WHERE id=$1",[id]);
+ const a=r.rows[0];
+ return a&&!a.blocked?a:null;
+}
+
 export async function getSession(req,db){const t=String(req.headers?.authorization||"").replace(/^Bearer\s+/i,"").trim();if(!t)return null;const h=hash(t);const r=await db.query("SELECT a.id,a.email,a.role,a.credits,a.blocked FROM bhai_sessions s JOIN bhai_accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>NOW()",[h]);const a=r.rows[0];if(!a||a.blocked)return null;return a;}
 export default async function handler(req,res){
  await initDb().catch(()=>false);const db=await getDb();if(!db)return json(res,503,{error:"DATABASE_URL is required"});await schema(db);

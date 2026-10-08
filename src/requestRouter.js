@@ -6,6 +6,7 @@
  */
 import { solveSimpleMath } from "./simpleMath.js";
 import { solveSimpleTime } from "./simpleReasoning.js";
+import { isAutonomousProductionRequest, isYouTubePublishRequest } from "./autonomousProductionEngine.js";
 import {
   getCasualReply,
   isCasualIntent,
@@ -23,6 +24,15 @@ export function classifyUserRequest(text="") {
   const media=detectMediaIntent(task);
 
   if(!task) return {lane:"empty",type:"empty",media};
+
+  // Autonomous media production and YouTube publishing must win over the
+  // generic story/media lanes so every entrypoint sees the same intent.
+  if(isAutonomousProductionRequest(task)){
+    return {lane:"autonomous",type:"autonomous",media,needsFreshWeb:false};
+  }
+  if(isYouTubePublishRequest(task)){
+    return {lane:"youtube",type:"youtube",media,needsFreshWeb:false};
+  }
 
   if(solveSimpleMath(task)!==null){
     return {lane:"math",type:"math",media};

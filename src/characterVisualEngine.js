@@ -31,6 +31,7 @@ export function normalizeVisualRequest(input={}){
     styleKey==="anime"||styleKey==="anime style"?"anime":
     styleKey==="3d"||styleKey==="3d cartoon"||styleKey==="3d anime"?"3d":"";
   const text=raw.toLowerCase();
+  const explicitAspect=/^(?:9:16|4:5|1:1|16:9)$/.test(String(input.aspectRatio||""))?String(input.aspectRatio):"";
   const detectedStyle=/\b(?:2d|2-d|2 d|flat cartoon|hand drawn|hand-drawn)\b/i.test(text)?"2d":
     /\b(?:anime|manga)\b/i.test(text)?"anime":
     /\b(?:3d|3-d|three dimensional|cinematic 3d)\b/i.test(text)?"3d":"";
@@ -121,18 +122,10 @@ export function buildCharacterVisualPrompt(character={},request={}){
 export function verifyCharacterVisualContract(character={},prompt=""){
   const identity=character?.identity_json||character?.identity||character||{};
   const text=String(prompt||"");
-  const required=[
-    identity.name,
-    identity.face,
-    identity.hair,
-    identity.eyes,
-    identity.skin,
-    identity.body,
-    identity.clothing,
-  ].filter(Boolean);
-
-  const missing=required.filter(value=>!text.includes(String(value)));
-  const ok=required.length>=7&&missing.length===0&&/PERMANENT IDENTITY LOCK/.test(text)&&/IDENTITY DRIFT BLOCK/.test(text);
+  const required=[identity.name,identity.face,identity.hair,identity.clothing].filter(Boolean);
+  const presentOptional=[identity.eyes,identity.skin,identity.body].filter(Boolean);
+  const missing=[...required,...presentOptional].filter(value=>!text.includes(String(value)));
+  const ok=required.length===4&&missing.length===0&&/PERMANENT IDENTITY LOCK/.test(text)&&/IDENTITY DRIFT BLOCK/.test(text);
 
   return {
     ok,

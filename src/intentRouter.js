@@ -26,7 +26,7 @@ const MEDICAL_WORDS = /\b(?:sardi|shardi|cold|runny nose|naak se pani|naak bah|k
 // situation without writing "latest", "today", or "current" explicitly.
 const WEATHER_CLIMATE_WORDS = /\b(?:garmi|garmee|heat|heatwave|loo|baarish|barish|rain|rainfall|monsoon|mausam|weather|temperature|temp|tapman|humidity|nami|drought|sukha|sukha padna|sukha pada|thand|cold wave|flood|baadh|pani|water level|water shortage|rainy season|summer|winter|season)\b/i;
 const CURRENT_CONTEXT_CUES = /\b(?:is\s+bar|iss\s+bar|is\s+bhaar|iss\s+bhaar|is\s+baar|iss\s+baar|this\s+year|this\s+season|this\s+summer|this\s+winter|is\s+saal|iss\s+saal|is\s+season|iss\s+season|aajkal|in\s+dino|in\s+dinon|these\s+days|lately|recently|abhi|filhaal|filhal|is\s+waqt|right\s+now|aane\s+wala|aane\s+wali|padne\s+wala|padne\s+wali|hone\s+wala|hone\s+wali|expected|forecast|prediction|kitni\s+garmi|bahut\s+garmi|kam\s+baarish|kam\s+pani|kam\s+paanee|zyada\s+garmi|zyada\s+baarish|pani\s+kam|paanee\s+kam)\b/i;
-const CURRENT_STATUS_CUES = /(?:\?\s*$|\b(?:kya\s+scene|kaisa\s+weather|mausam\s+kaisa|weather\s+kaisa|kaisi\s+garmi|kaisa\s+mausam|haalat\s+kya|situation\s+kya|padegi|padega|hogi|hoga|rahegi|rahega|kitni\s+garmi|kitna\s+temperature|temperature\s+kya|tapman\s+kya)\b)/i;
+const CURRENT_STATUS_CUES = /(?:\b(?:kya\s+scene|haalat\s+kya|situation\s+kya|kaisa\s+weather|weather\s+kaisa|mausam\s+kaisa|kaisa\s+mausam|garmi\s+kaisi|garmi\s+kitni|baarish\s+kaisi|baarish\s+kitni|temperature\s+kya|temperature\s+kitna|tapman\s+kya|tapman\s+kitna|padegi|padega|hogi|hoga|rahegi|rahega)\b)/i;
 
 // Natural conversational phrases that are clearly social/check-in chatter,
 // not a request to search, code, execute, or generate media.
@@ -65,7 +65,7 @@ export function getCasualReply(text=""){
   if(!key)return null;
   if(!hasClearWorkCue(text) && CONVERSATION_KEYS.some(pattern=>pattern.test(String(text||"")))){
     if(/\b(?:kya|kaisa)\s+(?:reply|jawab|response)\s+(?:dega|deta|deti|aayega|aata|milega|milta)\b/i.test(text)){
-      return "😂 Haan bhai, samajh gaya — tu bas test kar raha tha ki main kya reply deta hoon. Main yahin hoon, bol kya scene hai! 🚀";
+      return "😂 Haan bhai, samajh gaya — tu bas test kar raha tha ki main kya reply deta hai. Main yahin hoon, bol kya scene hai! 🚀";
     }
     if(/\b(?:mazak|mazaak|masti|timepass)\b/i.test(text)){
       return "😂 Samajh gaya bhai, thodi masti chal rahi thi. Main ready hoon — bol, ab kya karna hai? 😄";

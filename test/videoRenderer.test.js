@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {spawn} from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
-import {rendererSupports,renderTimeline,verifyRenderedVideo} from "../src/videoRenderer.js";
+import {rendererSupports,renderShortsFromVideo,renderTimeline,verifyRenderedVideo} from "../src/videoRenderer.js";
 
 function runFfmpeg(args,cwd){
   return new Promise((resolve,reject)=>{
@@ -59,4 +59,26 @@ test("real renderer composes a verified MP4 and thumbnail",async()=>{
   }finally{
     await fs.rm(dir,{recursive:true,force:true}).catch(()=>{});
   }
+});
+
+test("shorts renderer creates a verified vertical MP4 from final output",async()=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),"bhai-x-shorts-test-"));
+ try{
+  const source=path.join(dir,"source.mp4");
+  await runFfmpeg([
+   "-y","-hide_banner","-loglevel","error",
+   "-f","lavfi","-i","testsrc2=size=640x360:rate=24",
+   "-f","lavfi","-i","sine=frequency=440:sample_rate=48000",
+   "-t","6","-c:v","libx264","-preset","ultrafast","-pix_fmt","yuv420p",
+   "-c:a","aac","-shortest",source
+  ],dir);
+  const data=(await fs.readFile(source)).toString("base64");
+  const finalMedia={mimeType:"video/mp4",data,duration:6};
+  const plan={shorts:[{id:"short-1",title:"Test Short",hook:"Hook",startSeconds:0,durationSeconds:5,aspectRatio:"9:16"}],verified:true};
+  const result=await renderShortsFromVideo(finalMedia,plan);
+  assert.equal(result.verified,true);
+  assert.equal(result.shorts.length,1);
+  assert.equal(result.shorts[0].aspectRatio,"9:16");
+  assert.equal(result.shorts[0].verification.ok,true);
+ }finally{await fs.rm(dir,{recursive:true,force:true}).catch(()=>{});}
 });

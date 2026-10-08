@@ -12,6 +12,7 @@ import SystemPanel from'./SystemPanel.jsx';
 import ResellerPanel from'./ResellerPanel.jsx';
 import ProjectBrainPanel from'./ProjectBrainPanel.jsx';
 import ExecutionHistoryPanel from'./ExecutionHistoryPanel.jsx';
+import MediaStudioPanel from'./MediaStudioPanel.jsx';
 import {normalizeIntent,isCasualIntent,detectMediaIntent,isStoryScriptIntent,isCharacterCreationIntent,isGeneralChatIntent,isLocalCodingIntent,isWebResearchIntent} from './intentRouter.js';
 import {apiUrl,readJsonResponse,requestJson} from './apiClient.js';
 
@@ -96,7 +97,7 @@ function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),doIt=true;
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
- const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[historyOpen,setHistoryOpen]=useState(false),[resumeMission,setResumeMission]=useState(null),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3}),[resumeProduction,setResumeProduction]=useState(null);
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[historyOpen,setHistoryOpen]=useState(false),[mediaStudioOpen,setMediaStudioOpen]=useState(false),[resumeMission,setResumeMission]=useState(null),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3}),[resumeProduction,setResumeProduction]=useState(null);
  const end=useRef(null),recognition=useRef(null),workTicker=useRef(null);
  const[authChecked,setAuthChecked]=useState(false);
  useEffect(()=>{let live=true;(async()=>{const t=authToken();if(!t){if(live)setAuthChecked(true);return;}try{const r=await fetch(apiUrl("/api/accounts?me=1"),{headers:authHeaders()});const d=await r.json();if(live&&r.ok&&d.account){setAccount(d.account);setAuthChecked(true);return;}}catch{}localStorage.removeItem("bhai_user_session");sessionStorage.removeItem("bhai_user_session");if(live){setAccount(null);setAuthChecked(true);}})();return()=>{live=false}},[]);
@@ -189,6 +190,8 @@ function App(){
   const instantReply=instantCasual[fastKey]||fastLocal[fastKey];
   const instantMessage=Boolean(instantReply);
   const mediaMessage=!instantMessage&&Boolean(mediaIntent.type);
+  const imagePackMessage=mediaMessage&&mediaIntent.type==="image"&&/\b(?:3|three)\s*(?:image|images|tasveer|tasveeren)\b/i.test(userIntentText);
+  const mediaStyle=/\banime\b/i.test(userIntentText)?"anime":/\b2d\b|hand.?drawn/i.test(userIntentText)?"2d":"3d";
   const explicitGithubRepo=extractExplicitGithubRepo(userIntentText);
   const githubFilePath=extractGithubFilePath(userIntentText);
   const githubMutationRequest=/\b(?:fix|repair|update|modify|change|write|commit|push|delete|create|build|deploy|publish)\b/i.test(userIntentText);
@@ -351,11 +354,11 @@ function App(){
    upd(()=>next);setSessions(a=>a.map(s=>s.id===active&&s.title==='New chat'?{...s,title:t.slice(0,32)}:s));
    setActivity([
     {id:id+'0',step:'Intent',text:mediaIntent.type==='video'?'🎬 Video request samajh liya...':'🖼️ Image request samajh liya...',state:'done'},
-    {id:id+'1',step:'Working',text:mediaIntent.type==='video'?'⚙️ Video provider pipeline execute ho rahi hai...':'⚙️ Image provider pipeline execute ho rahi hai...',state:'running'},
+    {id:id+'1',step:'Working',text:mediaIntent.type==='video'?'⚙️ Video provider pipeline execute ho rahi hai...':imagePackMessage?'⚙️ 3-image continuity pack generate ho raha hai...':'⚙️ Image provider pipeline execute ho rahi hai...',state:'running'},
     {id:id+'2',step:'Verifying',text:'✅ Actual media output validate kiya jayega...',state:'pending'}
    ]);
    try{
-    const rr=await fetch(apiUrl('/api/media'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:mediaIntent.type,prompt:userIntentText,aspectRatio:'16:9',duration:5,imageToVideo:mediaIntent.imageToVideo})});
+    const rr=await fetch(apiUrl('/api/media'),{method:'POST',headers:authHeaders(),body:JSON.stringify({type:imagePackMessage?'image-pack':mediaIntent.type,prompt:userIntentText,style:mediaStyle,aspectRatio:'16:9',duration:5,imageToVideo:mediaIntent.imageToVideo})});
     const d=await rr.json().catch(()=>({}));
     if(!rr.ok||d.error)throw new Error(d.error||('Media backend HTTP '+rr.status));
     setActivity(a=>{const base=a.map(x=>({...x,state:'done'}));if(d.character)return [...base,{id:id+'3',step:'Character ID',text:'🎭 '+(d.character.name||'Character')+' linked to '+(d.character.characterId||'permanent identity')+' · 🔒 identity contract verified.',state:'done'}];return base;});
@@ -564,7 +567,7 @@ function App(){
    <button className="newChat" onClick={newChat}><Plus size={17}/> New chat</button>
    <div className="searchBox"><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search chats"/></div>
    <div className="history">{filtered.map(s=><button className={s.id===active?'chat active':'chat'} onClick={()=>setActive(s.id)} key={s.id}>{s.title}</button>)}</div>
-   <div className="sideBottom"><div className="status"><span/> Agent online</div><button className="accountOpenBtn" onClick={()=>setAccountOpen(true)}>⭐ Upgrade / Account</button><button className="accountOpenBtn" onClick={()=>setBrainOpen(true)}><BrainCircuit size={15}/> Project Brain</button><button className="accountOpenBtn" onClick={()=>setResellerOpen(true)}>🧾 Reseller</button><button className="ownerOpenBtn" onClick={()=>setOwnerOpen(true)}><ShieldCheck size={15}/> Owner Control</button><div className="mediaUsage"><span>🖼️ {usage.images}/{usage.imageLimit}</span><span>🎬 {usage.videos}/{usage.videoLimit}</span></div><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><button className="settingsBtn" aria-label="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={16}/></button></div></div>
+   <div className="sideBottom"><div className="status"><span/> Agent online</div><button className="accountOpenBtn" onClick={()=>setAccountOpen(true)}>⭐ Upgrade / Account</button><button className="accountOpenBtn" onClick={()=>setBrainOpen(true)}><BrainCircuit size={15}/> Project Brain</button><button className="accountOpenBtn" onClick={()=>setMediaStudioOpen(true)}>🎬 Media Studio</button><button className="accountOpenBtn" onClick={()=>setResellerOpen(true)}>🧾 Reseller</button><button className="ownerOpenBtn" onClick={()=>setOwnerOpen(true)}><ShieldCheck size={15}/> Owner Control</button><div className="mediaUsage"><span>🖼️ {usage.images}/{usage.imageLimit}</span><span>🎬 {usage.videos}/{usage.videoLimit}</span></div><div className="sideUser"><div className="miniAvatar">B</div><span>BHAI X</span><button className="settingsBtn" aria-label="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={16}/></button></div></div>
   </aside>
   <main>
    <header>
@@ -601,7 +604,7 @@ function App(){
     <div className="composerHint">🧠 BHAI X khud samjhega request ka intent — chat, research, coding, GitHub, image, video, app ya doosra kaam. Koi tool select karne ki zarurat nahi.</div>
    </div>
   </main>
- {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false)}/>} {brainOpen&&<ProjectBrainPanel onClose={()=>setBrainOpen(false)}/>} {historyOpen&&<ExecutionHistoryPanel onClose={()=>setHistoryOpen(false)} />} 
+ {ownerOpen&&<OwnerPanel onClose={()=>setOwnerOpen(false)}/>}\n {connectOpen&&<ConnectPanel onClose={()=>setConnectOpen(false)}/>}\n {settingsOpen&&<SettingsPanel onClose={()=>setSettingsOpen(false)}/>}\n {codeFixOpen&&<CodeFixPanel onClose={()=>setCodeFixOpen(false)}/>} {generatorOpen&&<GeneratorPanel onClose={()=>setGeneratorOpen(false)}/>} {systemOpen&&<SystemPanel onClose={()=>setSystemOpen(false)}/>} {accountOpen&&<AccountPanel onClose={()=>setAccountOpen(false)} onAccount={setAccount}/>} {resellerOpen&&<ResellerPanel onClose={()=>setResellerOpen(false)}/>} {brainOpen&&<ProjectBrainPanel onClose={()=>setBrainOpen(false)}/>} {historyOpen&&<ExecutionHistoryPanel onClose={()=>setHistoryOpen(false)} />}{mediaStudioOpen&&<MediaStudioPanel onClose={()=>setMediaStudioOpen(false)} />} 
  </div>
 }
 createRoot(document.getElementById('root')).render(<App/>);

@@ -1,4 +1,4 @@
-export const PRODUCTION_CHECKPOINT_SCHEMA_VERSION="2.0";
+export const PRODUCTION_CHECKPOINT_SCHEMA_VERSION="2.1";
 
 const clean=(v,n=160)=>String(v??"").trim().slice(0,n);
 
@@ -17,6 +17,11 @@ export function buildProductionCheckpoint({
   currentStep=null,
   renderProof=null,
   youtube=null,
+  characterBible=null,
+  cameraPlan=null,
+  audioMaster=null,
+  youtubePackage=null,
+  shortsPlan=null,
   activity=[]
 }={}) {
   return {
@@ -32,7 +37,11 @@ export function buildProductionCheckpoint({
       visuals:Boolean(evidence?.visuals),
       videos:Boolean(evidence?.videos),
       post:Boolean(evidence?.post),
+      audio:Boolean(evidence?.audio),
+      camera:Boolean(evidence?.camera),
       render:Boolean(evidence?.render),
+      youtubePackage:Boolean(evidence?.youtubePackage),
+      shorts:Boolean(evidence?.shorts),
       youtube:Boolean(evidence?.youtube)
     },
     story:story||null,
@@ -51,12 +60,18 @@ export function buildProductionCheckpoint({
       visualAssetId:s?.visualAssetId||null,
       videoAssetId:s?.videoAssetId||null,
       postProduction:s?.postProduction||null,
+      cameraDirection:s?.cameraDirection||"",
       durationSeconds:Number(s?.durationSeconds||0),
       verified:Boolean(s?.verified),
       visualVerified:Boolean(s?.visualVerified),
       videoVerified:Boolean(s?.videoVerified),
       postVerified:Boolean(s?.postVerified)
     })).filter(s=>s.sceneId),
+    characterBible:characterBible||null,
+    cameraPlan:cameraPlan||null,
+    audioMaster:audioMaster||null,
+    youtubePackage:youtubePackage||null,
+    shortsPlan:shortsPlan||null,
     renderProof:renderProof||null,
     youtube:youtube&&typeof youtube==="object"?{
       verified:Boolean(youtube.verified),
@@ -74,7 +89,7 @@ export function buildProductionCheckpoint({
 }
 
 export function nextProductionResumeStep(checkpoint){
-  const ids=["story","characters","visuals","videos","post","render","youtube"];
+  const ids=["story","characters","camera","visuals","videos","post","audio","render","youtubePackage","shorts","youtube"];
   const done=new Set((checkpoint?.completedStepIds||[]).map(String));
   return ids.find(id=>!done.has(id)&&checkpoint?.plan?.steps?.find(s=>s.id===id)?.required!==false)||null;
 }

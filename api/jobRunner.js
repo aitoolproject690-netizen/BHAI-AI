@@ -86,7 +86,8 @@ function buildCheckpoint(job,result=null,{message="",progress=null,phase=null,to
   const activity=Array.isArray(result?.activity)?result.activity.at(-1):null;
   const steps=Array.isArray(job.checkpoint?.steps)?job.checkpoint.steps:buildStepPlan(job);
   const activeTool=String(tool||activity?.tool||steps.find(x=>x.status==="running")?.tool||job.type||"executor").slice(0,120);
-  const nextSteps=steps.map(step=>step.tool===activeTool?{...step,status:complete?"completed":"running",startedAt:step.startedAt||now(),completedAt:complete?now():null}:step);
+  const doneTools=(Array.isArray(result?.activity)?result.activity:[]).filter(x=>x?.state==="done").map(x=>String(x?.tool||""));
+  const nextSteps=steps.map(step=>doneTools.includes(step.tool)?{...step,status:"completed",startedAt:step.startedAt||now(),completedAt:step.completedAt||now()}:step.tool===activeTool?{...step,status:complete?"completed":"running",startedAt:step.startedAt||now(),completedAt:complete?now():null}:step);
   return {phase:String(phase||activity?.state||job.type||"execution").slice(0,80),tool:activeTool,progress:Math.min(95,Math.max(0,Number(progress??job.progress)||0)),message:String(message||activity?.details||"Execution checkpoint").slice(0,600),at:now(),attempt:Number(job.attempts||0),proofRequired:Boolean(job.type==="mission"||job.type==="agent"||job.type==="build"||job.type==="deploy"),stepIndex:Math.max(0,nextSteps.findIndex(x=>x.status==="running")),steps:nextSteps};
 }
 

@@ -115,7 +115,7 @@ export function routeAI({ task="", preferred="", role="chat", exclude=[] }={}) {
           ? ["gemini", "openai", "huggingface", "anthropic", "core"]
           : /code|debug|github|repo|repository|build|test|engineering/.test(lower)
             ? ["core", "gemini", "openai", "anthropic", "huggingface"]
-            : ["core", "gemini", "openai", "huggingface", "anthropic"];
+            : ["gemini", "openai", "huggingface", "anthropic", "core"]; // strong general provider first; weak local Core is last-resort
 
   return order.find(id => available.includes(id)) || available[0];
 }

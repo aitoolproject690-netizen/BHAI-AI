@@ -579,6 +579,7 @@ export default async function handler(req,res){
  // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
  // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
  const normalizedCasual=normalizeIntent(latestUserMessage);
+ const conversationalReply=getCasualReply(latestUserMessage);
  const serverCasual=isCasualIntent(latestUserMessage);
    const deterministicMath=solveSimpleMath(latestUserMessage);
  if(deterministicMath!==null){
@@ -609,7 +610,7 @@ export default async function handler(req,res){
    "bye":"Bye bhai! 👋😄",
    "goodbye":"Bye bhai! 👋😄"
   };
-  return json(res,200,{ok:true,text:casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
+  return json(res,200,{ok:true,text:conversationalReply||casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
  }
 
 // Deterministic media routing: explicit video requests always win over image-reference wording in video prompts.

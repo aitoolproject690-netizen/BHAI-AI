@@ -1,12 +1,12 @@
 import {requireSession} from "./_utils.js";
 import {getDb} from "./db.js";
 import {generateWithRouter} from "./aiRouter.js";
-import {generateCharacterVisual,generateCharacterVideo,saveMediaAsset,reserveMedia,releaseMedia,getMediaUsage} from "./agent.js";
+import {generateCharacterVisual,generateCharacterVideo,saveMediaAsset,getLatestMediaAsset,reserveMedia,releaseMedia,getMediaUsage} from "./agent.js";
 import {normalizeStoryRequest,buildStoryPrompt,parseAndValidateStoryPlan} from "../src/storyEngine.js";
 import {makeCharacterIdentity} from "../src/characterIdentity.js";
 import {buildEditTimeline,verifyEditTimeline} from "../src/sceneEditorEngine.js";
 import {normalizeScenePostRequest,buildScenePostProductionManifest,verifyScenePostManifest} from "../src/scenePostProductionEngine.js";
-import {renderTimeline} from "../src/videoRenderer.js";
+import {renderTimeline,verifyRenderedVideo} from "../src/videoRenderer.js";
 import {buildAutonomousPlan,normalizeAutonomousRequest,productionCompletionProof} from "../src/autonomousProductionEngine.js";
 import {buildProductionCheckpoint,productionStepDone} from "../src/productionCheckpoint.js";
 import {beginYouTubeOAuth,getYouTubeStatus,uploadToYouTube} from "./youtube.js";
@@ -351,22 +351,32 @@ async function runProduction(account,rawInput){
   const timelineCheck=verifyEditTimeline(timeline);
   if(!timelineCheck.ok) await fail(new Error("Final timeline verification failed."),"render");
 
-  try{
-   rendered=await renderTimeline(timeline,{
-    title:story.youtube?.titleIdeas?.[0]||("BHAI X | "+story.title),
-    description:story.youtube?.description||("Created by BHAI X from an autonomous production pipeline.\n\n"+(story.youtube?.hook||"")),
-    tags:["BHAI X","Hindi","cartoon","cinematic",story.genre].filter(Boolean)
-   });
-  }catch(e){
-   await fail(new Error("Final MP4 rendering failed: "+String(e?.message||e)),"render");
+  if(productionStepDone(previous,"render")&&previous?.renderProof?.ok){
+   const savedMedia=await getLatestMediaAsset(db,account.id,"video");
+   const packageState=await loadVideoPackage(db,account.id);
+   const savedVerification=verifyRenderedVideo(savedMedia||{});
+   if(savedMedia?.data&&savedVerification.ok){
+    rendered={schemaVersion:"1.0",renderer:packageState?.renderer?.renderer||"ffmpeg-static",media:savedMedia,thumbnail:packageState?.thumbnail||null,youtube:packageState?.youtube||{},verification:savedVerification,stats:packageState?.renderer?.stats||null,applied:packageState?.renderer?.applied||null};
+    activity.push({tool:"ffmpeg-renderer",state:"skipped",details:"Verified final MP4 was reloaded from persisted media/package; rendering was not repeated."});
+   }
   }
-
+  if(!rendered){
+   try{
+    rendered=await renderTimeline(timeline,{
+     title:story.youtube?.titleIdeas?.[0]||("BHAI X | "+story.title),
+     description:story.youtube?.description||("Created by BHAI X from an autonomous production pipeline.\n\n"+(story.youtube?.hook||"")),
+     tags:["BHAI X","Hindi","cartoon","cinematic",story.genre].filter(Boolean)
+    });
+   }catch(e){
+    await fail(new Error("Final MP4 rendering failed: "+String(e?.message||e)),"render");
+   }
+   activity.push({tool:"ffmpeg-renderer",state:"done",details:"Actual final MP4 + thumbnail encoded and output contract verified."});
+  }
   evidence.render=Boolean(rendered?.verification?.ok&&rendered?.media?.data);
   if(evidence.render)completed.add("render"); else completed.delete("render");
-  await saveMediaAsset(db,account.id,"video",rendered.media);
-  await saveVideoPackage(db,account.id,rendered);
-  activity.push({tool:"ffmpeg-renderer",state:evidence.render?"done":"failed",details:evidence.render?"Actual final MP4 + thumbnail encoded and output contract verified.":"Final MP4 was not verified."});
-  await persist({currentStep:request.autoPublish?"youtube":null,message:"Final MP4 checkpoint verified.",renderProof:rendered?.verification||null});
+  if(evidence.render&&!productionStepDone(previous,"render")) await saveMediaAsset(db,account.id,"video",rendered.media);
+  if(evidence.render&&!productionStepDone(previous,"render")) await saveVideoPackage(db,account.id,rendered);
+  await persist({currentStep:request.autoPublish?"youtube":null,message:evidence.render?"Final MP4 checkpoint verified.":"Final MP4 verification failed.",renderProof:rendered?.verification||null});
 
   if(request.autoPublish){
    if(productionStepDone(previous,"youtube")&&youtube?.verified&&youtube?.url){
@@ -429,7 +439,6 @@ async function runProduction(account,rawInput){
    usage:await getMediaUsage(db,account.id)
   };
  }catch(e){
-  if(e?.productionCheckpoint)return e;
   const cp=await persist({currentStep:checkpoint?.currentStep||"recovery",message:String(e?.message||e).slice(0,500)}).catch(()=>checkpoint);
   e.productionActivity=activity;
   e.productionCheckpoint=cp;
@@ -446,6 +455,6 @@ export default async function handler(req,res){
   const result=await runProduction(account,input);
   return json(res,result.verified?200:200,result);
  }catch(e){
-  return json(res,Number(e?.status)||502,{ok:false,verified:false,text:"## ⚠️ Autonomous production stopped\n\n"+String(e?.message||e)+"\n\nDONE claim nahi kiya gaya.",activity:e.productionActivity||[],usage:await getMediaUsage(db,account.id).catch(()=>null)});
+  return json(res,Number(e?.status)||502,{ok:false,verified:false,text:"## ⚠️ Autonomous production stopped\n\n"+String(e?.message||e)+"\n\nDONE claim nahi kiya gaya.",productionPipelineId:e.productionCheckpoint?.pipelineId||null,productionCheckpoint:e.productionCheckpoint||null,activity:e.productionActivity||[],usage:await getMediaUsage(db,account.id).catch(()=>null)});
  }
 }

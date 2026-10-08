@@ -4,6 +4,7 @@ import { classifyUserRequest } from "../src/requestRouter.js";
 
 test("canonical classifier uses one stable precedence across major lanes",()=>{
   assert.equal(classifyUserRequest("2+2").lane,"math");
+  assert.equal(classifyUserRequest("Agar main subah 8 baje niklu aur 3 ghante travel karu to kitne baje pahuchunga?").lane,"deterministic");
   assert.equal(classifyUserRequest("Bhai kya haal hai?").lane,"conversation");
   assert.equal(classifyUserRequest("Mujhe sardi ho rahi hai kya karun?").lane,"medical");
   assert.equal(classifyUserRequest("Is Python code me bug hai, fix karke samjhao").lane,"coding");

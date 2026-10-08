@@ -1,0 +1,52 @@
+name: Live Public HTTP Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Resolve public DNS
+        run: |
+          set -euo pipefail
+          getent hosts bhai-ai-vpna.onrender.com
+
+      - name: Fetch public HTTPS health endpoint
+        env:
+          URL: https://bhai-ai-vpna.onrender.com/api/health
+        run: |
+          set -euo pipefail
+          body=/tmp/bhai-x-health.json
+          headers=/tmp/bhai-x-health.headers
+          http_code="$(curl --silent --show-error --location --connect-timeout 15 --max-time 30             --dump-header "$headers" --output "$body" --write-out '%{http_code}' "$URL")"
+
+          echo "PUBLIC_HTTP_STATUS=$http_code"
+          echo "=== response headers ==="
+          cat "$headers"
+          echo "=== response body ==="
+          cat "$body"
+
+          test "$http_code" = "200"
+
+          node -e '
+            const fs = require("fs");
+            const d = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            if (d.ok !== true) throw new Error("health ok flag is not true");
+            if (d.service !== "BHAI AI") throw new Error("unexpected service: " + d.service);
+            console.log(JSON.stringify({
+              verified: true,
+              httpStatus: 200,
+              ok: d.ok,
+              service: d.service,
+              version: d.version ?? null
+            }));
+          ' "$body"

@@ -59,3 +59,8 @@ test("agent server guard uses the shared natural conversational reply helper",()
   assert.match(agentSource,/const conversationalReply=getCasualReply\(latestUserMessage\);/);
   assert.match(agentSource,/text:conversationalReply\|\|casualReplies\[normalizedCasual\]/);
 });
+
+test("generic agent requests use the general-chat provider lane while work requests keep the engineering lane",()=>{
+  assert.match(agentSource,/isGeneralChatIntent/);
+  assert.match(agentSource,/role:isGeneralChatIntent\(latestText\)\?"chat-general":"engineering"/);
+});

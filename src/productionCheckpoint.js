@@ -1,4 +1,4 @@
-export const PRODUCTION_CHECKPOINT_SCHEMA_VERSION="2.0";
+export const PRODUCTION_CHECKPOINT_SCHEMA_VERSION="2.1";
 
 const clean=(v,n=160)=>String(v??"").trim().slice(0,n);
 
@@ -74,7 +74,7 @@ export function buildProductionCheckpoint({
 }
 
 export function nextProductionResumeStep(checkpoint){
-  const ids=["story","characters","visuals","videos","post","render","youtube"];
+  const ids=["story","characters","camera","visuals","videos","post","audio","render","youtubePackage","shorts","youtube"];
   const done=new Set((checkpoint?.completedStepIds||[]).map(String));
   return ids.find(id=>!done.has(id)&&checkpoint?.plan?.steps?.find(s=>s.id===id)?.required!==false)||null;
 }

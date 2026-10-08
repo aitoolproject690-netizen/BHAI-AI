@@ -13,6 +13,7 @@ import {
   isLocalCodingIntent,
   isMedicalChatIntent,
   isStoryScriptIntent,
+  isCharacterCreationIntent,
   isWebResearchIntent,
   detectMediaIntent
 } from "./intentRouter.js";
@@ -57,6 +58,10 @@ export function classifyUserRequest(text="") {
 
   if(isStoryScriptIntent(task)){
     return {lane:"story",type:"story",media};
+  }
+
+  if(isCharacterCreationIntent(task)){
+    return {lane:"character",type:"character",media};
   }
 
   // Standalone coding must beat research so code questions are not hijacked

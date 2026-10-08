@@ -1115,8 +1115,8 @@ if(githubLinkRequest && githubRequestedRepo && autoDoIt && !githubFileRequest){
 }
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  const explicitExecutionCue=latestHasExplicitGithub ||
-  /\\b(?:repo(?:sitory)?|app|project|website|apk|deploy|commit|push|pull request|build|release|publish)\\b/i.test(latestText) ||
-  /\\b(?:edit|update|fix|debug|implement|refactor|modify)\\b.{0,80}\\b(?:file|repo(?:sitory)?|codebase|project|github|code)\\b/i.test(latestText);
+  /\b(?:repo(?:sitory)?|app|project|website|apk|deploy|commit|push|pull request|build|release|publish)\b/i.test(latestText) ||
+  /\b(?:edit|update|fix|debug|implement|refactor|modify)\b.{0,80}\b(?:file|repo(?:sitory)?|codebase|project|github|code)\b/i.test(latestText);
  const agentNeedsTools=explicitExecutionCue ||
   selectedSkills.some(skill=>["github","file","build","automation"].includes(skill));
  const generateWithFallback=async(useTools=true)=>{

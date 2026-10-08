@@ -5,6 +5,7 @@
  * routing decisions for the same user message.
  */
 import { solveSimpleMath } from "./simpleMath.js";
+import { solveSimpleTime } from "./simpleReasoning.js";
 import {
   getCasualReply,
   isCasualIntent,
@@ -23,6 +24,11 @@ export function classifyUserRequest(text="") {
 
   if(solveSimpleMath(task)!==null){
     return {lane:"math",type:"math",media};
+  }
+
+  const deterministicTime=solveSimpleTime(task);
+  if(deterministicTime){
+    return {lane:"deterministic",type:"time",deterministicReply:deterministicTime,media};
   }
 
   if(media.type){

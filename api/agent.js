@@ -19,7 +19,8 @@ import {normalizeVideoRequest,buildCharacterVideoPrompt,verifyCharacterVideoCont
 import {normalizeVoiceRequest,makeCharacterVoiceProfile,buildCharacterVoiceContract,verifyCharacterVoiceContract,extractSpokenText,buildLipSyncManifest,isLikelyCharacterVoiceRequest} from "../src/characterVoiceEngine.js";
 import {normalizeScenePostRequest,detectScenePostIntent,buildScenePostProductionManifest,renderProceduralAudio,verifyScenePostManifest} from "../src/scenePostProductionEngine.js";
 import {normalizeSceneClip,buildEditTimeline,verifyEditTimeline,isLikelyEditRequest} from "../src/sceneEditorEngine.js";
-import {renderTimeline,rendererSupports} from "../src/videoRenderer.js";
+import {renderTimeline,renderShortsFromVideo,rendererSupports} from "../src/videoRenderer.js";
+import {buildImagePackPrompts,buildShortsPlan} from "../src/mediaProductionEngine.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
@@ -814,6 +815,28 @@ export default async function handler(req,res){
     return json(res,502,{ok:false,error:"Final MP4 render failed: "+String(e?.message||e),verified:false,renderReady:true,rendered:false,renderer:rendererSupports(),editor:timeline,verification,images:[],audio:[],usage:await getMediaUsage(db,account.id),activity:[{tool:"ffmpeg-renderer",state:"failed",details:String(e?.message||e)}]});
    }
   }
+  if(type==="image-pack"){
+   const pack=buildImagePackPrompts({prompt,style:body.style||"3d",aspectRatio});
+   if(!pack.length)return json(res,400,{error:"Image pack could not be planned."});
+   let reserved=0;
+   try{
+    for(let i=0;i<pack.length;i++){await reserveMedia(db,account.id,"image",10);reserved++;}
+    const images=[];
+    for(const item of pack){
+     const visual=await generateCharacterVisual(db,account.id,item.prompt,aspectRatio);
+     images.push({mimeType:visual.media.mimeType,data:visual.media.data,...(visual.character?{
+      characterId:visual.character.character_id,identityFingerprint:visual.character.identity_fingerprint,visualAssetId:visual.assetId,
+      identityLock:true,verificationMode:visual.verification?.mode||"generation-contract",verificationScore:visual.verification?.score||0
+     }:{}),variant:item.index,style:item.style});
+    }
+    const latest=images[images.length-1];
+    await saveMediaAsset(db,account.id,"image",latest);
+    return json(res,200,{ok:true,text:"## 🖼️ 3-Image Pack ready\n\n3 continuous visual variants generate aur validate ho gaye — same character/environment continuity contract ke saath.",verified:true,images,pack,usage:await getMediaUsage(db,account.id),activity:[{tool:"image-pack",state:"done",details:"Three image variants generated with a shared continuity contract."}]});
+   }catch(e){
+    for(let i=0;i<reserved;i++)await releaseMedia(db,account.id,"image");
+    return json(res,502,{ok:false,error:"3-image pack generation failed: "+String(e?.message||e),verified:false,usage:await getMediaUsage(db,account.id),activity:[{tool:"image-pack",state:"failed",details:String(e?.message||e)}]});
+   }
+  }
   if(type==="image"){
    try{
     await reserveMedia(db,account.id,"image",10);
@@ -841,6 +864,23 @@ export default async function handler(req,res){
     audio.push({mimeType:music.mimeType,data:music.data,duration:music.duration,kind:"music",name:"background_music"});
    }
    return json(res,200,{ok:true,text:"## 🔊 Audio preview ready\\n\\nProvider-free procedural audio asset generated successfully.",verified:true,postProduction:manifest,audio,images:[],usage:await getMediaUsage(db,account.id)});
+  }
+  if(type==="shorts"){
+   try{
+    const latest=await getLatestMediaAsset(db,account.id,"video");
+    if(!latest?.data)return json(res,422,{ok:false,error:"No saved final MP4 is available. Render a final video first.",verified:false});
+    let plan=body.shortsPlan||null;
+    if(typeof plan==="string"){try{plan=JSON.parse(plan)}catch{plan=null;}}
+    if(!plan?.shorts){
+     const duration=Math.max(1,Number(body.duration)||Number(latest.duration)||30);
+     const timeline={scenes:[0,1,2].map((x,i)=>({sceneId:"scene-"+(i+1),startSeconds:Math.min(duration-1,i*Math.max(1,duration/3)),durationSeconds:Math.min(10,Math.max(3,duration/3)),scenePrompt:"BHAI X vertical highlight "+(i+1)}))};
+     plan=buildShortsPlan({title:"BHAI X",youtube:{hook:"BHAI X highlight"}},timeline);
+    }
+    const rendered=await renderShortsFromVideo(latest,plan);
+    return json(res,200,{ok:true,text:"## 📱 Shorts/Reels ready\n\nVerified final MP4 se vertical 9:16 Shorts render ho gaye.",verified:true,shorts:rendered.shorts,images:rendered.shorts.map(x=>({...x.media,video:true,duration:x.durationSeconds,name:x.title})),activity:[{tool:"shorts-renderer",state:"done",details:rendered.shorts.length+" vertical 9:16 short(s) encoded and verified."}]});
+   }catch(e){
+    return json(res,502,{ok:false,error:"Shorts rendering failed: "+String(e?.message||e),verified:false,activity:[{tool:"shorts-renderer",state:"failed",details:String(e?.message||e)}]});
+   }
   }
   if(type==="video"){
    try{

@@ -16,6 +16,7 @@ import {normalizeVisualRequest,buildCharacterVisualPrompt,verifyCharacterVisualC
 import {normalizeVideoRequest,buildCharacterVideoPrompt,verifyCharacterVideoContract} from "../src/characterVideoEngine.js";
 import {normalizeVoiceRequest,makeCharacterVoiceProfile,buildCharacterVoiceContract,verifyCharacterVoiceContract,extractSpokenText,buildLipSyncManifest,isLikelyCharacterVoiceRequest} from "../src/characterVoiceEngine.js";
 import {normalizeScenePostRequest,detectScenePostIntent,buildScenePostProductionManifest,renderProceduralAudio,verifyScenePostManifest} from "../src/scenePostProductionEngine.js";
+import {normalizeSceneClip,buildEditTimeline,verifyEditTimeline,isLikelyEditRequest} from "../src/sceneEditorEngine.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
@@ -827,6 +828,46 @@ export default async function handler(req,res){
   };
   return json(res,200,{ok:true,text:conversationalReply||casualReplies[normalizedCasual]||"Arre bhai! 😄 Main yahin hoon. Batao kya karna hai? 🚀",casual:true,verified:true,activity:[]});
  }
+
+// Deterministic scene editor lane. It builds and verifies the final timeline but
+// never claims an MP4 render unless every source scene is verified.
+if(isLikelyEditRequest(latestUserMessage)){
+  const sceneInputs=Array.isArray(body.scenes)?body.scenes:[];
+  const timeline=buildEditTimeline({
+    scenes:sceneInputs.map((s,i)=>normalizeSceneClip(s,i)),
+    aspectRatio:body.aspectRatio||"16:9",
+    fps:body.fps||30
+  });
+  const verification=verifyEditTimeline(timeline);
+  if(!verification.ok){
+    return json(res,422,{
+      ok:false,
+      text:"## ⚠️ Final video abhi render-ready nahi hai\\n\\nBHAI X ne timeline ko fail-closed block kiya hai kyunki har scene ka verified source video/timing proof available nahi hai.",
+      verified:false,
+      renderReady:false,
+      editor:timeline,
+      verification,
+      images:[],
+      audio:[],
+      usage:await getMediaUsage(db,account.id)
+    });
+  }
+  return json(res,200,{
+    ok:true,
+    text:"## 🎬 Final timeline ready\\n\\nScene order, duration, voice/lip-sync timing aur post-production contracts verify ho gaye. Ab renderer is timeline ko final MP4 mein compose kar sakta hai.",
+    verified:true,
+    renderReady:true,
+    provider:"deterministic",
+    backend_provider:"scene-editor",
+    model:"bhai-scene-editor-v1",
+    editor:timeline,
+    verification,
+    images:[],
+    audio:[],
+    usage:await getMediaUsage(db,account.id),
+    activity:[{tool:"scene-editor",state:"done",details:"Final timeline verified and render-ready."}]
+  });
+}
 
 // Deterministic scene post-production routing: VFX manifests and provider-free Music/SFX
 // previews are generated without calling an external provider. This keeps Stage 6 usable

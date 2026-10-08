@@ -52,17 +52,22 @@ test("generic chat does not hard-wire Core-first route",()=>{
  assert.match(source,/role:codingMode\?"coding":"chat-general"/);
 });
 
-test("agent prioritizes deterministic conversation/coding gates before research",()=>{
+test("agent prioritizes canonical conversation/coding gates before current research",()=>{
  const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
- assert.match(source,/const deterministicConversationReply=getCasualReply\(latestText\)/);
- assert.match(source,/const localCodingRequest=isLocalCodingIntent\(latestText\)/);
- assert.ok(source.indexOf("const deterministicConversationReply=getCasualReply(latestText)") < source.indexOf("const currentResearchRequest=isWebResearchIntent(latestText)"));
+ const conversation=source.indexOf("const deterministicConversationReply=getCasualReply(latestText)");
+ const coding=source.indexOf('const localCodingRequest=canonicalRequest.lane==="coding";');
+ const current=source.indexOf('const currentResearchRequest=canonicalRequest.lane==="current";');
+ assert.ok(conversation>=0);
+ assert.ok(coding>=0);
+ assert.ok(current>=0);
+ assert.ok(coding<current);
 });
 
 test("ordinary agent chat does not force Gemini tool mode",()=>{
  const source=fs.readFileSync(new URL("../api/agent.js",import.meta.url),"utf8");
- assert.match(source,/const agentNeedsTools=latestRequestsProjectExecution \|\| latestHasExplicitGithub/);
+ assert.match(source,/const agentNeedsTools=explicitExecutionCue/);
  assert.match(source,/if\(useTools&&agentNeedsTools&&key\)/);
+ assert.match(source,/const directAnswerLane=!agentNeedsTools && \["general","knowledge","coding"\]\.includes\(canonicalRequest\.lane\)/);
 });
 
 test("provider boundary has a malformed-output recovery gate",()=>{

@@ -1,4 +1,4 @@
-/**
+/** 
  * Shared deterministic intent helpers for BHAI X.
  * No provider/model/API knowledge lives here.
  */
@@ -21,6 +21,12 @@ const VIDEO_WORDS = /\b(?:video|clip|animation|animated)\b/i;
 const CREATE_WORDS = /\b(?:generate|create|make|draw|design|render|visualize|produce|banao|bana|banado|ban[aā]o)\b/i;
 const INSULT_WORDS = /\b(?:chutiya|chutiye|bewakoof|bewkoof|gadha|gadhi|pagal|kamine|kamina|nalayak|ullu|saala|sala)\b/i;
 const MEDICAL_WORDS = /\b(?:sardi|shardi|cold|runny nose|naak se pani|naak bah|khansi|cough|bukhar|fever|dard|pain|headache|medicine|dawai|dava|doctor|hospital|symptom|tabiyat|health|sehat|pregnan|baby|baccha|infant|vomit|diarrhea|dast|blood|bleeding|saans|breathing|chest|seene|allergy|rash|swelling|infection|thakan|weakness|chakkar|dizziness|bp|blood pressure|sugar|diabetes|nutrition|diet|fiber|fibre|vitamin|protein|supplement|constipation)\b/i;
+
+// Indirect current-context cues matter too: users often ask about the present
+// situation without writing "latest", "today", or "current" explicitly.
+const WEATHER_CLIMATE_WORDS = /\b(?:garmi|garmee|heat|heatwave|loo|baarish|barish|rain|rainfall|monsoon|mausam|weather|temperature|temp|tapman|humidity|nami|drought|sukha|sukha padna|sukha pada|thand|cold wave|flood|baadh|pani|water level|water shortage|rainy season|summer|winter|season)\b/i;
+const CURRENT_CONTEXT_CUES = /\b(?:is\s+bar|iss\s+bar|is\s+bhaar|iss\s+bhaar|is\s+baar|iss\s+baar|this\s+year|this\s+season|this\s+summer|this\s+winter|is\s+saal|iss\s+saal|is\s+season|iss\s+season|aajkal|in\s+dino|in\s+dinon|these\s+days|lately|recently|abhi|filhaal|filhal|is\s+waqt|right\s+now|aane\s+wala|aane\s+wali|padne\s+wala|padne\s+wali|hone\s+wala|hone\s+wali|expected|forecast|prediction|kitni\s+garmi|bahut\s+garmi|kam\s+baarish|kam\s+pani|kam\s+paanee|zyada\s+garmi|zyada\s+baarish|pani\s+kam|paanee\s+kam)\b/i;
+const CURRENT_STATUS_CUES = /(?:\b(?:kya\s+scene|haalat\s+kya|situation\s+kya|kaisa\s+weather|weather\s+kaisa|mausam\s+kaisa|kaisa\s+mausam|garmi\s+kaisi|garmi\s+kitni|baarish\s+kaisi|baarish\s+kitni|temperature\s+kya|temperature\s+kitna|tapman\s+kya|tapman\s+kitna|padegi|padega|hogi|hoga|rahegi|rahega)\b)/i;
 
 // Natural conversational phrases that are clearly social/check-in chatter,
 // not a request to search, code, execute, or generate media.
@@ -59,7 +65,7 @@ export function getCasualReply(text=""){
   if(!key)return null;
   if(!hasClearWorkCue(text) && CONVERSATION_KEYS.some(pattern=>pattern.test(String(text||"")))){
     if(/\b(?:kya|kaisa)\s+(?:reply|jawab|response)\s+(?:dega|deta|deti|aayega|aata|milega|milta)\b/i.test(text)){
-      return "😂 Haan bhai, samajh gaya — tu bas test kar raha tha ki main kya reply deta hoon. Main yahin hoon, bol kya scene hai! 🚀";
+      return "😂 Haan bhai, samajh gaya — tu bas test kar raha tha ki main kya reply deta hai. Main yahin hoon, bol kya scene hai! 🚀";
     }
     if(/\b(?:mazak|mazaak|masti|timepass)\b/i.test(text)){
       return "😂 Samajh gaya bhai, thodi masti chal rahi thi. Main ready hoon — bol, ab kya karna hai? 😄";
@@ -109,6 +115,17 @@ export function detectMediaIntent(text="") {
 
 export function isMedicalChatIntent(text="") { return MEDICAL_WORDS.test(String(text||"")); }
 
+/**
+ * Detects indirect current-context questions that need fresh external evidence
+ * even when the user never says "latest", "today", or "current".
+ */
+export function isCurrentContextIntent(text="") {
+  const raw=String(text||"").trim();
+  if(!raw || isCasualIntent(raw)) return false;
+  if(!WEATHER_CLIMATE_WORDS.test(raw)) return false;
+  return CURRENT_CONTEXT_CUES.test(raw) || CURRENT_STATUS_CUES.test(raw);
+}
+
 export function isKnowledgeResearchIntent(text="") {
   const raw=String(text||"").trim();
   if(!raw) return false;
@@ -124,14 +141,13 @@ export function isKnowledgeResearchIntent(text="") {
   const conversational=/(?:^|\s)(?:who are you|what are you|what can you do|what are you doing|how are you doing|can you help me|tell me about yourself)(?:$|\s)/i.test(normalized);
   if(conversational) return false;
 
-  // A knowledge answer is safer when stable facts also go through evidence/strong-provider routing.
-  // Domain words make this explicit; otherwise a clear explanatory question is enough.
   return question && (domain || /^(?:why|how|what|who|when|where|which|explain|define)\b/i.test(normalized) || /(?:\bkya\b|\bkaise\b|\bkyu\b|\bkyon\b).{0,80}\?/i.test(raw));
 }
 
 export function isWebResearchIntent(text="") {
   const raw=String(text||"").trim();
   if(!raw) return false;
+  if(isCurrentContextIntent(raw)) return true;
   return /(?:\b(?:search|lookup|look up|find online|search online|research|web search|internet|online)\b|\b(?:latest|newest|current|today|todays|this week|this month|recent|recently|right now|abhi|aaj|is waqt|filhaal|filhal)\b|\b(?:news|price|rate|weather|forecast|availability|opening hours|schedule|who is the current|what is the current|how much is|where can i find)\b)/i.test(raw);
 }
 
@@ -151,7 +167,6 @@ export function isMediaToolAllowed(toolName,text="") {
   if(toolName==="generate_video") return type==="video";
   return true;
 }
-
 
 /**
  * Detects local coding-help requests that should stay in the chat path.

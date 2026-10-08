@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent} from "../src/intentRouter.js";
+import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isLocalCodingIntent,isWebResearchIntent,isKnowledgeResearchIntent,isMedicalChatIntent,isCurrentContextIntent} from "../src/intentRouter.js";
 
 test("normalizes bhai prefix and suffix",()=>{
  assert.equal(normalizeIntent("Bhai kya haal hai?"),"kya haal hai");
@@ -24,8 +24,6 @@ test("natural conversation does not swallow real work requests",()=>{
  assert.equal(isCasualIntent("Bhai mazaak nahi, GitHub repo me bug fix karo"),false);
  assert.equal(isCasualIntent("Bhai test kar raha hoon, baby ko fever hai"),false);
 });
-
-
 
 test("abusive casual input gets a calm deterministic reply",()=>{
  const text="Chutiye";
@@ -51,12 +49,25 @@ test("detects fresh web/current-information requests",()=>{
  assert.equal(isWebResearchIntent("What is 2+2?"),false);
 });
 
+test("detects indirect current-context weather questions without latest/today keywords",()=>{
+ const prompts=[
+  "Bhai is bar log bol rahe hai ki garmi bahut padne wali hai kya scene hai or is bar pani bhi bahut kam pada",
+  "Is baar garmi kaisi rehne wali hai?",
+  "Iss saal baarish kam hogi kya?",
+  "Aajkal mausam itna garam kyun hai?"
+ ];
+ for(const text of prompts){
+  assert.equal(isCurrentContextIntent(text),true,text);
+  assert.equal(isWebResearchIntent(text),true,text);
+ }
+ assert.equal(isWebResearchIntent("Garmi kya hoti hai?"),false);
+});
+
 test("media intent distinguishes image and video",()=>{
  assert.deepEqual(detectMediaIntent("Bhai ek image banao"),{type:"image",imageToVideo:false});
  assert.deepEqual(detectMediaIntent("Bhai ek video banao"),{type:"video",imageToVideo:false});
  assert.deepEqual(detectMediaIntent("Is image ko video bana do"),{type:"video",imageToVideo:true});
 });
-
 
 test("media tools are blocked for non-media coding requests",()=>{
  const coding="Bhai is Python code me bug hai, fix karke working code do: def divide(a, b): return a / b — zero se divide hone par error nahi aana chahiye.";
@@ -72,20 +83,18 @@ test("media tool gate allows only the detected media type",()=>{
  assert.equal(isMediaToolAllowed("generate_video","Bhai ek image banao"),false);
 });
 
-
 test("local coding intent is isolated from engineering execution",()=>{
  const text="Bhai is Python code me bug hai, fix karke working code do: def divide(a, b): return a / b — zero se divide hone par error nahi aana chahiye.";
  assert.equal(isLocalCodingIntent(text),true);
  assert.equal(isLocalCodingIntent("Bhai GitHub repository me ye Python bug fix karo"),false);
 });
 
-
 test("routes generic explanatory questions to evidence-backed research",()=>{
  assert.equal(isKnowledgeResearchIntent("Why is the sky blue?"),true);
  assert.equal(isKnowledgeResearchIntent("Fiber ki kami se kya-kya asar ho sakta hai?"),true);
  assert.equal(isKnowledgeResearchIntent("What are you doing?"),false);
 });
- 
+
 test("routes technical factual questions to evidence-backed research",()=>{
  assert.equal(isKnowledgeResearchIntent("Petrol mein kya hota hai?"),true);
  assert.equal(isKnowledgeResearchIntent("How does a car battery work?"),true);

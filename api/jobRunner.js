@@ -125,7 +125,7 @@ export function buildExecutionResume(executionPlan={},checkpoint={}){
   };
 }
 
-export function buildCheckpoint(job,result=null,{message="",progress=null,phase=null,tool=null,complete=false}={){
+export function buildCheckpoint(job,result=null,{message="",progress=null,phase=null,tool=null,complete=false}={}){
   const activity=Array.isArray(result?.activity)?result.activity.at(-1):null;
   const steps=Array.isArray(job.checkpoint?.steps)?job.checkpoint.steps:buildStepPlan(job);
   const activeRaw=String(tool||activity?.tool||steps.find(x=>x.status==="running")?.tool||job.type||"executor").slice(0,120);

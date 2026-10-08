@@ -574,3 +574,17 @@ test("verified answer engine performs one bounded correction after reviewer fail
     Object.assign(process.env,old);
   }
 });
+
+test("general chat routing prefers stronger configured providers before local Core",()=>{
+  const old={...process.env};
+  try{
+    process.env.BHAI_CORE_URL="https://core.test";
+    process.env.BHAI_CORE_API_KEY="x";
+    process.env.GEMINI_API_KEY="x";
+    process.env.OPENAI_API_KEY="x";
+    assert.equal(routeAI({task:"Bhai tu kya kar sakta hai?",role:"chat-general"}),"gemini");
+  }finally{
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});

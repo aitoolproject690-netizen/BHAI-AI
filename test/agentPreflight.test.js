@@ -62,5 +62,5 @@ test("agent server guard uses the shared natural conversational reply helper",()
 
 test("generic agent requests use the general-chat provider lane while work requests keep the engineering lane",()=>{
   assert.ok(agentSource.includes('const directAnswerLane=!agentNeedsTools && ["general","knowledge","coding"].includes(canonicalRequest.lane);'));
-  assert.ok(agentSource.includes('role:directAnswerLane||generalConversation?"chat-general":"engineering"'));
+  assert.ok(agentSource.includes('role:directAnswerLane?directRole:(generalConversation?"chat-general":"engineering")'));
 });

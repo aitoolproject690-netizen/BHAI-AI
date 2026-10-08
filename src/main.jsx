@@ -96,16 +96,46 @@ function App(){
  const[sessions,setSessions]=useState(()=>{try{return JSON.parse(localStorage.getItem(K))||[]}catch{return[]}});
  const[active,setActive]=useState(null),[input,setInput]=useState(''),[running,setRunning]=useState(false),doIt=true;
  const[fileInfo,setFileInfo]=useState(null),[listening,setListening]=useState(false),[activity,setActivity]=useState([]),[activityOpen,setActivityOpen]=useState(false);
- const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[historyOpen,setHistoryOpen]=useState(false),[resumeMission,setResumeMission]=useState(null),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3});
+ const[sidebar,setSidebar]=useState(true),[search,setSearch]=useState(''),[toolsOpen,setToolsOpen]=useState(false),[copied,setCopied]=useState(''),[ownerOpen,setOwnerOpen]=useState(false),[connectOpen,setConnectOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[missionMode,setMissionMode]=useState(false),[codeFixOpen,setCodeFixOpen]=useState(false),[generatorOpen,setGeneratorOpen]=useState(false),[systemOpen,setSystemOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[account,setAccount]=useState(null),[resellerOpen,setResellerOpen]=useState(false),[brainOpen,setBrainOpen]=useState(false),[historyOpen,setHistoryOpen]=useState(false),[resumeMission,setResumeMission]=useState(null),[usage,setUsage]=useState({images:0,videos:0,imageLimit:10,videoLimit:3}),[resumeProduction,setResumeProduction]=useState(null);
  const end=useRef(null),recognition=useRef(null),workTicker=useRef(null);
  const[authChecked,setAuthChecked]=useState(false);
  useEffect(()=>{let live=true;(async()=>{const t=authToken();if(!t){if(live)setAuthChecked(true);return;}try{const r=await fetch(apiUrl("/api/accounts?me=1"),{headers:authHeaders()});const d=await r.json();if(live&&r.ok&&d.account){setAccount(d.account);setAuthChecked(true);return;}}catch{}localStorage.removeItem("bhai_user_session");sessionStorage.removeItem("bhai_user_session");if(live){setAccount(null);setAuthChecked(true);}})();return()=>{live=false}},[]);
 
  useEffect(()=>{if(!sessions.length){const s={id:crypto.randomUUID(),title:'New chat',messages:[starter]};setSessions([s]);setActive(s.id)}else if(!active)setActive(sessions[0].id)},[]);
  useEffect(()=>{localStorage.setItem(K,JSON.stringify(sessions));end.current?.scrollIntoView({behavior:'smooth'})},[sessions]);
- useEffect(()=>{try{const cp=JSON.parse(localStorage.getItem('bhai_x_checkpoint')||'null');if(cp?.id)setResumeMission(cp)}catch{}},[]);
+ useEffect(()=>{try{const cp=JSON.parse(localStorage.getItem('bhai_x_checkpoint')||'null');if(cp?.id)setResumeMission(cp);const prod=JSON.parse(localStorage.getItem('bhai_x_production_checkpoint')||'null');if(prod?.pipelineId)setResumeProduction(prod)}catch{}},[]);
  const chat=sessions.find(x=>x.id===active);
  const upd=fn=>setSessions(a=>a.map(s=>s.id===active?{...s,messages:fn(s.messages)}:s));
+
+ async function resumeProductionRun(){
+  if(!resumeProduction||running)return;
+  setRunning(true);setActivityOpen(true);
+  const id=crypto.randomUUID(),replyId=id+'-production-resume-reply';
+  const title=String(resumeProduction?.request?.prompt||resumeProduction?.story?.title||'Previous autonomous production').slice(0,140);
+  upd(m=>[...m,{id:crypto.randomUUID(),role:'user',text:'🔄 Resume production: '+title},{id:replyId,role:'assistant',text:'🧭 BHAI X saved checkpoint se verified production stages resume kar raha hai...'}]);
+  setActivity([
+   {id:id+'0',step:'Resume',text:'🧭 Durable production checkpoint load kiya ja raha hai...',state:'running'},
+   {id:id+'1',step:'Continue',text:'⏭️ Verified stages/scene assets skip honge; sirf remaining work chalega...',state:'pending'},
+   {id:id+'2',step:'Proof',text:'✅ Final verification ke bina DONE claim nahi hoga...',state:'pending'}
+  ]);
+  try{
+   const req=resumeProduction.request||{};
+   const rr=await fetch(apiUrl('/api/production'),{method:'POST',headers:authHeaders(),body:JSON.stringify({
+    ...req,prompt:req.prompt||resumeProduction.story?.prompt||'Resume autonomous production',
+    productionPipelineId:resumeProduction.pipelineId,recoveryCheckpoint:resumeProduction
+   })});
+   const d=await rr.json().catch(()=>({}));
+   if(d.productionCheckpoint&&!d.verified){localStorage.setItem('bhai_x_production_checkpoint',JSON.stringify(d.productionCheckpoint));setResumeProduction(d.productionCheckpoint);}
+   if(!rr.ok||d.error)throw new Error(d.error||('Production resume backend HTTP '+rr.status));
+   if(d.verified===true){localStorage.removeItem('bhai_x_production_checkpoint');setResumeProduction(null);}
+   setActivity(a=>a.map(x=>({...x,state:'done'})));if(d.usage)setUsage(d.usage);
+   upd(m=>m.map(x=>x.id===replyId?{...x,text:(d.text||'✅ Autonomous production result ready.')+(d.youtubeAuthUrl?'\n\n🔐 [YouTube connect karo]('+d.youtubeAuthUrl+')':''),images:d.images||[],providerMeta:{provider:'bhai-self-hosted',backend_provider:'autonomous-production',model:'bhai-production-v1'}}:x));
+   if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Production',text:x.details||x.state||'',state:x.state||'done'}))]);
+  }catch(e){
+   setActivity(a=>a.map(x=>({...x,state:'failed'})));
+   upd(m=>m.map(x=>x.id===replyId?{...x,text:'⚠️ PRODUCTION RESUME STOPPED\n\n'+e.message+'\n\nBHAI X ne unverified output ko DONE nahi maana.'}:x));
+  }finally{setRunning(false);clearInterval(workTicker.current);workTicker.current=null;}
+ }
 
  async function send(textOverride){
   const userIntentText=(textOverride??input).trim();
@@ -217,10 +247,13 @@ function App(){
    try{
     const rr=await fetch(apiUrl('/api/production'),{method:'POST',headers:authHeaders(),body:JSON.stringify({
      prompt:userIntentText,durationSeconds:15,language:'Hindi',genre:'suspense',visualStyle:'3D anime cinematic cartoon',
-     aspectRatio:'16:9',autoPublish:true,privacy:/\bpublic\b/i.test(userIntentText)?'public':/\bunlisted\b/i.test(userIntentText)?'unlisted':'private',render:true,maxScenes:3
+     aspectRatio:'16:9',autoPublish:true,privacy:/\bpublic\b/i.test(userIntentText)?'public':/\bunlisted\b/i.test(userIntentText)?'unlisted':'private',render:true,maxScenes:3,
+     ...(resumeProduction?.pipelineId?{productionPipelineId:resumeProduction.pipelineId,recoveryCheckpoint:resumeProduction}:{})
     })});
     const d=await rr.json().catch(()=>({}));
+    if(d.productionCheckpoint&&!d.verified){localStorage.setItem('bhai_x_production_checkpoint',JSON.stringify(d.productionCheckpoint));setResumeProduction(d.productionCheckpoint);}
     if(!rr.ok||d.error)throw new Error(d.error||('Production backend HTTP '+rr.status));
+    if(d.verified===true){localStorage.removeItem('bhai_x_production_checkpoint');setResumeProduction(null);}
     setActivity(a=>a.map(x=>({...x,state:'done'})));if(d.usage)setUsage(d.usage);
     upd(m=>m.map(x=>x.id===replyId?{...x,text:(d.text||'✅ Autonomous production result ready.')+(d.youtubeAuthUrl?'\n\n🔐 [YouTube connect karo]('+d.youtubeAuthUrl+')':''),images:d.images||[],providerMeta:{provider:'bhai-self-hosted',backend_provider:'autonomous-production',model:'bhai-production-v1'}}:x));
     if(Array.isArray(d.activity)&&d.activity.length)setActivity(a=>[...a,...d.activity.map(x=>({id:crypto.randomUUID(),step:x.tool||'Production',text:x.details||x.state||'',state:x.state||'done'}))]);
@@ -540,6 +573,7 @@ function App(){
     <button className="headerIconBtn" aria-label="Settings" title="Settings" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button>
    </header>
    {resumeMission?.jobId&&<div className="resumeBar"><span>🧭 Previous mission checkpoint saved: <b>{String(resumeMission.goal||resumeMission.name||"Interrupted task").slice(0,90)}</b></span><button onClick={()=>setHistoryOpen(true)}>Open History</button><button onClick={()=>setHistoryOpen(true)}>Resume / Retry</button></div>}
+   {resumeProduction?.pipelineId&&<div className="resumeBar"><span>🎬 Production checkpoint saved: <b>{String(resumeProduction.currentStep||resumeProduction.pipelineId||"Interrupted production").slice(0,90)}</b></span><button onClick={resumeProductionRun} disabled={running}>Resume production</button><button onClick={()=>{localStorage.removeItem('bhai_x_production_checkpoint');setResumeProduction(null)}}>Dismiss</button></div>}
    <section className="messages">
     {chat?.messages.map(m=><div className={m.role==='user'?'row user':'row'} key={m.id}>
       <div className={m.role==='user'?'bubble userBubble':'bubble'}>

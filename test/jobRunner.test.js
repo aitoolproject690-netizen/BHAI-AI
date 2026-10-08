@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {JOB_STATES,canTransition,retryDelayMs,verifyJobResult} from "../api/jobRunner.js";
+import {JOB_STATES,canTransition,retryDelayMs,verifyJobResult,buildExecutionResume,buildCheckpoint} from "../api/jobRunner.js";
 
 test("job state machine only permits forward/recovery transitions",()=>{
  assert.equal(canTransition(JOB_STATES.queued,JOB_STATES.running),true);
@@ -68,4 +68,37 @@ test("execution contract preserves ordered Brain steps",()=>{
  assert.deepEqual(plan.tools,checkpoint.steps.map(x=>x.tool));
  assert.equal(checkpoint.steps[0].status,"completed");
  assert.equal(checkpoint.steps[2].status,"planned");
+});
+
+
+test("execution resume hard-skips only verified completed stages and keeps verification executable",()=>{
+ const plan={schemaVersion:"2.0",tools:["preflight","github","verify"]};
+ const checkpoint={steps:[
+  {index:0,stepId:"brain-0-preflight",tool:"preflight",key:"preflight",status:"completed"},
+  {index:1,stepId:"brain-1-github",tool:"github",key:"github",status:"completed"},
+  {index:2,stepId:"brain-2-verify",tool:"verify",key:"verify",status:"planned"}
+ ]};
+ const resume=buildExecutionResume(plan,checkpoint);
+ assert.deepEqual(resume.completedTools,["preflight","github"]);
+ assert.deepEqual(resume.skipTools,["preflight","github"]);
+ assert.equal(resume.resumeFromStepIndex,2);
+ assert.equal(resume.completedStepIds.length,2);
+ assert.equal(resume.skipTools.includes("verify"),false);
+});
+
+test("checkpoint activity maps media stages to Brain stages",()=>{
+ const job={
+  id:"media-job",owner:"owner-media",type:"agent",goal:"make episode",attempts:1,progress:60,
+  payload:{brainPlan:{schemaVersion:"2.0",tools:["story","characters","visuals","videos","post-production","render"]}},
+  checkpoint:null
+ };
+ const checkpoint=buildCheckpoint(job,{activity:[
+  {tool:"story-engine",state:"done",details:"story verified"},
+  {tool:"character-identity",state:"done",details:"characters verified"},
+  {tool:"character-visual",state:"done",details:"visual verified"},
+  {tool:"character-video",state:"done",details:"video verified"},
+  {tool:"scene-post-production",state:"done",details:"post verified"}
+ ]},{progress:75,tool:"scene-post-production"});
+ assert.deepEqual(checkpoint.steps.slice(0,5).map(s=>s.status),["completed","completed","completed","completed","completed"]);
+ assert.equal(checkpoint.steps[5].status,"planned");
 });

@@ -136,12 +136,15 @@ export function isKnowledgeResearchIntent(text="") {
   const mathShape = /^\d/.test(raw) && hasOperator && (!hasLetters || /kitna\s+(?:hota|hoga)|what\s+is/i.test(raw));
   if(mathShape) return false;
 
-  const domain=/(?:petrol|gasoline|diesel|fuel|engine|car|battery|electric vehicle|chemistry|chemical|physics|biology|medicine|drug|nutrition|vitamin|fiber|fibre|computer|programming|javascript|python|network|internet|cyber|api|database|cloud|ai|artificial intelligence|machine learning|space|astronomy|geology|history|geography|economics|finance|tax|law|legal|constitution|science|scientific|technology|technical)/i.test(raw);
+  const domain=/(?:petrol|gasoline|diesel|fuel|engine|car|battery|electric vehicle|chemistry|chemical|physics|biology|medicine|drug|nutrition|vitamin|fiber|fibre|computer|programming|javascript|python|network|internet|cyber|api|database|cloud|ai|artificial intelligence|machine learning|space|astronomy|geology|history|geography|economics|finance|tax|law|legal|constitution|science|scientific|technology|technical|local model|llama|llama\.cpp|ollama|vulkan|gpu|cpu|inference|gguf|quantization|android|termux|smollm)/i.test(raw);
+  const broadInformational=/(?:^|\s)(?:what|why|how|when|where|which|who)\b/i.test(normalized)
+    || /\b(?:kya|kaise|kyu|kyon|kisliye)\b.{0,120}\b(?:hai|hota|hoti|hote|kaam|kar(?:ta|ti|te)?|samjha|samjhao|batao|bata|explain|meaning|matlab)\b/i.test(raw)
+    || /\b(?:simple scene|samjha de|samjha do|easy language|simple language)\b/i.test(raw);
   const question=/(?:\?|\bwhat\b|\bwhat is\b|\bwhat are\b|\bhow does\b|\bhow do\b|\bwhy does\b|\bwhy do\b|\bexplain\b|\bmeaning\b|\bdefine\b|\bkaise\b|\bkyu\b|\bkyon\b|\bkya hota\b|\bkya hai\b|\bkya kya\b|\bmein kya\b|\bme kya\b|\bmatlab\b|\bkaise kaam\b)/i.test(raw);
   const conversational=/(?:^|\s)(?:who are you|what are you|what can you do|what are you doing|how are you doing|can you help me|tell me about yourself)(?:$|\s)/i.test(normalized);
   if(conversational) return false;
 
-  return question && (domain || /^(?:why|how|what|who|when|where|which|explain|define)\b/i.test(normalized) || /(?:\bkya\b|\bkaise\b|\bkyu\b|\bkyon\b).{0,80}\?/i.test(raw));
+  return question && (domain || broadInformational || /^(?:why|how|what|who|when|where|which|explain|define)\b/i.test(normalized) || /(?:\bkya\b|\bkaise\b|\bkyu\b|\bkyon\b).{0,80}\?/i.test(raw));
 }
 
 export function isWebResearchIntent(text="") {

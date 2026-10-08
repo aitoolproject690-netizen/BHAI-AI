@@ -7,6 +7,7 @@
 import { solveSimpleMath } from "./simpleMath.js";
 import {
   getCasualReply,
+  isCasualIntent,
   isKnowledgeResearchIntent,
   isLocalCodingIntent,
   isMedicalChatIntent,
@@ -34,7 +35,7 @@ export function classifyUserRequest(text="") {
   }
 
   const deterministicReply=getCasualReply(task);
-  if(deterministicReply){
+  if(deterministicReply || isCasualIntent(task)){
     return {
       lane:"conversation",
       type:"conversation",

@@ -19,6 +19,9 @@ export default async function handler(req,res){
  }
  if(req.method==="GET"){
   const account=await requireSession(req,res);if(!account)return;
+  if(req.query?.history==="1"){
+   return json(res,200,{ok:true,history:await listHistoryForOwner(account,{limit:req.query?.limit}),persistent:true});
+  }
   const id=String(req.query?.id||"").trim();
   if(!id){
    return json(res,200,{ok:true,jobs:await listJobsForOwner(account,{limit:req.query?.limit}),persistent:true});

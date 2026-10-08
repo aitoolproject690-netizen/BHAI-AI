@@ -75,7 +75,7 @@ export function nextAutonomousStep(plan,completedEvidence=[]){
 
 export function productionCompletionProof({plan,evidence,finalVideo,youTube}={}){
  const required=(plan?.steps||[]).filter(s=>s.required);
- const failures=required.filter(s=>!evidence?.[s.id]);
+ const failures=required.filter(s=>s.id==="youtube" ? !(youTube?.verified&&youTube?.url) : !evidence?.[s.id]);
  const finalVerified=Boolean(finalVideo?.verified&&finalVideo?.rendered);
  const youtubeRequired=required.some(s=>s.id==="youtube");
  const youtubeVerified=!youtubeRequired||Boolean(youTube?.verified&&youTube?.url);

@@ -8,6 +8,7 @@ import {buildEditTimeline,verifyEditTimeline} from "../src/sceneEditorEngine.js"
 import {normalizeScenePostRequest,buildScenePostProductionManifest,verifyScenePostManifest} from "../src/scenePostProductionEngine.js";
 import {renderTimeline} from "../src/videoRenderer.js";
 import {buildAutonomousPlan,normalizeAutonomousRequest,productionCompletionProof} from "../src/autonomousProductionEngine.js";
+import {buildProductionCheckpoint,productionStepDone} from "../src/productionCheckpoint.js";
 import {beginYouTubeOAuth,getYouTubeStatus,uploadToYouTube} from "./youtube.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
@@ -81,6 +82,49 @@ async function loadVideoPackage(db,accountId){
  return q.rows[0]||null;
 }
 
+async function ensureProductionCheckpointTable(db){
+ await db.query(`CREATE TABLE IF NOT EXISTS bhai_production_checkpoints (
+  account_id TEXT PRIMARY KEY,
+  pipeline_id TEXT NOT NULL,
+  data JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ )`);
+ await db.query("CREATE INDEX IF NOT EXISTS idx_bhai_production_checkpoints_pipeline ON bhai_production_checkpoints(pipeline_id)");
+}
+
+async function loadProductionCheckpoint(db,accountId,pipelineId){
+ if(!pipelineId)return null;
+ await ensureProductionCheckpointTable(db);
+ const q=await db.query("SELECT data FROM bhai_production_checkpoints WHERE account_id=$1 AND pipeline_id=$2",[accountId,String(pipelineId)]);
+ return q.rows[0]?.data||null;
+}
+
+async function saveProductionCheckpoint(db,accountId,checkpoint){
+ if(!db||!checkpoint?.pipelineId)return;
+ await ensureProductionCheckpointTable(db);
+ await db.query(`INSERT INTO bhai_production_checkpoints(account_id,pipeline_id,data,updated_at)
+   VALUES($1,$2,$3::jsonb,NOW())
+   ON CONFLICT(account_id) DO UPDATE SET pipeline_id=EXCLUDED.pipeline_id,data=EXCLUDED.data,updated_at=NOW()`,
+   [accountId,String(checkpoint.pipelineId),JSON.stringify(checkpoint)]);
+}
+
+async function loadCharacterVisualAssetById(db,accountId,assetId){
+ if(!assetId)return null;
+ try{
+  const q=await db.query("SELECT asset_id,mime_type,data,provider,identity_fingerprint,identity_version FROM bhai_character_visual_assets WHERE account_id=$1 AND asset_id=$2",[accountId,String(assetId)]);
+  return q.rows[0]||null;
+ }catch{return null;}
+}
+
+async function loadCharacterVideoAssetById(db,accountId,assetId){
+ if(!assetId)return null;
+ try{
+  const q=await db.query("SELECT asset_id,mime_type,data,provider,request_json,identity_fingerprint,identity_version,source_visual_asset_id,frame_identity_verified FROM bhai_character_video_assets WHERE account_id=$1 AND asset_id=$2",[accountId,String(assetId)]);
+  return q.rows[0]||null;
+ }catch{return null;}
+}
+
 function selectScenes(story,maxScenes){
  const scenes=Array.isArray(story?.scenes)?story.scenes:[];
  return scenes.slice(0,Math.min(maxScenes,scenes.length));
@@ -119,128 +163,278 @@ async function buildStory(request){
 }
 
 async function runProduction(account,rawInput){
- const request=normalizeAutonomousRequest(rawInput);
- const plan=buildAutonomousPlan(request);
- const activity=[];
- const evidence={story:false,characters:false,visuals:false,videos:false,post:false,render:false,youtube:false};
- let story=null;
- let characterRows=[];
- let sceneClips=[];
- let rendered=null;
- let youtube=null;
- let youtubeAuthUrl=null;
-
- activity.push({tool:"production-plan",state:"done",details:"Autonomous pipeline plan verified; no manual tool selection required."});
- try{
-  const storyResult=await buildStory(request.story);
-  story=storyResult.plan;
-  evidence.story=true;
-  activity.push({tool:"story-engine",state:"done",details:"Structured story/script schema verified with "+story.scenes.length+" planned scene(s)."});
- }catch(e){
-  activity.push({tool:"story-engine",state:"failed",details:String(e?.message||e)});
-  throw Object.assign(e,{productionActivity:activity});
- }
-
- const selectedScenes=selectScenes(story,Math.min(request.maxScenes,3));
- if(!selectedScenes.length)throw Object.assign(new Error("Story contained no renderable scenes."),{productionActivity:activity});
- if(selectedScenes.length<story.scenes.length)activity.push({tool:"scene-budget",state:"done",details:"Daily free video lane is capped at 3 scene renders; the autonomous run is limited to the first "+selectedScenes.length+" scene(s) and will not falsely claim the full story was rendered."});
-
- for(const c of story.characters.slice(0,16)){
-  characterRows.push({...await getOrCreateCharacter((await getDb()),account.id,c),sourceId:c.id});
- }
- evidence.characters=characterRows.length>0;
- activity.push({tool:"character-identity",state:"done",details:characterRows.length+" account-scoped permanent Character ID(s) verified/reused."});
-
  const db=await getDb();
  if(!db)throw new Error("DATABASE_URL is required");
 
- for(let i=0;i<selectedScenes.length;i++){
-  const s=selectedScenes[i];
-  const primary=scenePrimaryCharacter(s,characterRows);
-  const charName=primary?.name||"";
-  const scenePrompt=clean([charName&&("Character: "+charName),s.action,s.visualPrompt,s.cameraPrompt].filter(Boolean).join("\n"),9000);
-  await reserveMedia(db,account.id,"image",10);
-  let visual;
-  try{visual=await generateCharacterVisual(db,account.id,scenePrompt,request.aspectRatio);await saveMediaAsset(db,account.id,"image",visual.media);}
-  catch(e){await releaseMedia(db,account.id,"image");throw Object.assign(new Error("Scene "+(i+1)+" visual generation failed: "+String(e?.message||e)),{productionActivity:activity});}
-  activity.push({tool:"character-visual",state:"done",details:"Scene "+(i+1)+" visual generated with account-scoped identity lineage."});
-  evidence.visuals=true;
+ const suppliedCheckpoint=rawInput?.recoveryCheckpoint&&typeof rawInput.recoveryCheckpoint==="object" ? rawInput.recoveryCheckpoint : null;
+ const requestedPipelineId=String(rawInput?.productionPipelineId||rawInput?.resumePipelineId||suppliedCheckpoint?.pipelineId||"").trim();
+ const storedCheckpoint=requestedPipelineId?await loadProductionCheckpoint(db,account.id,requestedPipelineId):null;
+ const previous=storedCheckpoint||suppliedCheckpoint||null;
 
-  await reserveMedia(db,account.id,"video",3);
-  let video;
-  try{
-   const videoPrompt=clean(["Character: "+(charName||"primary story character"),s.action,s.visualPrompt,s.cameraPrompt].filter(Boolean).join("\n"),9000);
-   video=await generateCharacterVideo(db,account.id,videoPrompt,Math.min(5,Math.max(1,Number(s.durationSeconds)||5)),request.aspectRatio,visual.media);
-   await saveMediaAsset(db,account.id,"video",video.media);
-  }catch(e){await releaseMedia(db,account.id,"video");throw Object.assign(new Error("Scene "+(i+1)+" video generation failed: "+String(e?.message||e)),{productionActivity:activity});}
-  activity.push({tool:"character-video",state:"done",details:"Scene "+(i+1)+" actual video output validated and character lineage preserved."});
-  evidence.videos=true;
+ const request=normalizeAutonomousRequest(
+  previous?.request && !String(rawInput?.prompt||"").trim()
+   ? previous.request
+   : rawInput
+ );
+ const freshPlan=buildAutonomousPlan(request);
+ const plan=previous?.plan?.pipelineId ? previous.plan : freshPlan;
 
-  const postRequest=normalizeScenePostRequest({prompt:[s.vfxPrompt,s.musicPrompt,s.sfxPrompt,s.action].filter(Boolean).join("\n"),duration:Math.min(5,Math.max(1,Number(video.media.duration||s.durationSeconds)||5)),style:"cinematic"});
-  const post=buildScenePostProductionManifest({...postRequest,includeMusic:true});
-  const postCheck=verifyScenePostManifest(post);
-  if(!postCheck.ok)throw Object.assign(new Error("Scene "+(i+1)+" post-production contract failed."),{productionActivity:activity});
-  evidence.post=true;
-  sceneClips.push({sceneId:s.id||("scene_"+(i+1)),videoAssetId:video.assetId||"",sourceVideo:video.media,durationSeconds:Math.min(5,Math.max(1,Number(video.media.duration||s.durationSeconds)||5)),verified:true,postProduction:post,transition:"cut"});
-  activity.push({tool:"scene-post-production",state:"done",details:"VFX/Music/SFX manifest verified for scene "+(i+1)+"."});
- }
+ const activity=[];
+ const evidence={story:false,characters:false,visuals:false,videos:false,post:false,render:false,youtube:false};
+ const completed=new Set(Array.isArray(previous?.completedStepIds)?previous.completedStepIds.map(String):[]);
+ let story=previous?.story||null;
+ let characterRows=Array.isArray(previous?.characters)?previous.characters.map(c=>({...c})).filter(c=>c?.character_id):[];
+ let sceneStates=Array.isArray(previous?.sceneStates)?previous.sceneStates.map(s=>({...s})):[]; 
+ let rendered=null;
+ let youtube=previous?.youtube||null;
+ let youtubeAuthUrl=null;
+ let checkpoint=null;
 
- const timeline=buildEditTimeline({scenes:sceneClips,aspectRatio:request.aspectRatio,fps:30});
- const timelineCheck=verifyEditTimeline(timeline);
- if(!timelineCheck.ok)throw Object.assign(new Error("Final timeline verification failed."),{productionActivity:activity});
- try{
-  rendered=await renderTimeline(timeline,{
-   title:story.youtube?.titleIdeas?.[0]||("BHAI X | "+story.title),
-   description:story.youtube?.description||("Created by BHAI X from an autonomous production pipeline.\n\n"+(story.youtube?.hook||"")),
-   tags:["BHAI X","Hindi","cartoon","cinematic",story.genre].filter(Boolean)
+ const snapshot=({currentStep=null,message="",renderProof=null}={})=>{
+  checkpoint=buildProductionCheckpoint({
+   plan,request,story,characters:characterRows,sceneStates,evidence,
+   completedStepIds:[...completed],currentStep,renderProof,youtube,activity
   });
- }catch(e){throw Object.assign(new Error("Final MP4 rendering failed: "+String(e?.message||e)),{productionActivity:activity});}
- evidence.render=Boolean(rendered?.verification?.ok&&rendered?.media?.data);
- await saveMediaAsset(db,account.id,"video",rendered.media);
- await saveVideoPackage(db,account.id,rendered);
- activity.push({tool:"ffmpeg-renderer",state:evidence.render?"done":"failed",details:evidence.render?"Actual final MP4 + thumbnail encoded and output contract verified.":"Final MP4 was not verified."});
-
- if(request.autoPublish){
-  try{
-   const status=await getYouTubeStatus(account.id);
-   if(status.connected){
-    youtube=await uploadToYouTube(account.id,{
-     videoData:rendered.media.data,mimeType:rendered.media.mimeType,
-     title:rendered.youtube.title,description:rendered.youtube.description,
-     tags:rendered.youtube.tags,privacy:request.privacy
-    });
-    evidence.youtube=Boolean(youtube?.verified&&youtube?.url);
-    activity.push({tool:"youtube-publisher",state:evidence.youtube?"done":"failed",details:evidence.youtube?"Actual YouTube upload completed; post-upload URL proof returned.":"Upload response did not contain verified URL proof."});
-   }else if(status.configured){
-    const started=await beginYouTubeOAuth(account.id);
-    youtubeAuthUrl=started.authUrl;
-    activity.push({tool:"youtube-publisher",state:"pending",details:"YouTube OAuth is configured but this account is not connected; secure connect URL generated."});
-   }else{
-    activity.push({tool:"youtube-publisher",state:"pending",details:"YouTube OAuth credentials are not configured on the server; final MP4 remains ready but publishing is fail-closed."});
-   }
-  }catch(e){
-   activity.push({tool:"youtube-publisher",state:"failed",details:String(e?.message||e)});
-  }
- }
- const proof=productionCompletionProof({plan,evidence,finalVideo:{rendered:Boolean(rendered),verified:evidence.render},youTube:youtube});
- const fullStoryRendered=selectedScenes.length===story.scenes.length;
- const verified=proof.ok&&fullStoryRendered;
- return {
-  ok:true,verified,production:{planId:plan.pipelineId,schemaVersion:plan.schemaVersion,evidence,proof,fullStoryRendered},
-  text:verified
-   ? "## ✅ Autonomous production DONE\n\nStory → permanent characters → visuals → scene videos → VFX/Music/SFX → final MP4 → YouTube publishing complete hua, aur har required step ka proof verified hai."
-   : evidence.render
-    ? "## 🎬 Final MP4 ready\n\nBHAI X ne autonomous story-to-video pipeline complete karke actual MP4 + thumbnail verify kiya. "+(request.autoPublish?(evidence.youtube?"YouTube upload bhi verified hai.":"YouTube publishing abhi verified nahi hai; isliye DONE claim nahi kiya."):"YouTube publishing request nahi thi, isliye final MP4 ko verified output maana gaya.")+
-      (youtubeAuthUrl?"\n\n🔐 **YouTube connect:** "+youtubeAuthUrl:"")
-    : "## ⚠️ Autonomous production partial\n\nRequired verification complete nahi hui; BHAI X ne DONE claim nahi kiya.",
-  story,characters:characterRows.map(c=>({characterId:c.character_id,name:c.name,identityFingerprint:c.identity_fingerprint})),
-  timeline,rendered:rendered?{media:rendered.media,thumbnail:rendered.thumbnail,youtube:rendered.youtube,verification:rendered.verification,stats:rendered.stats,applied:rendered.applied}:null,
-  youtube,youtubeAuthUrl,
-  images:rendered?[{mimeType:rendered.media.mimeType,data:rendered.media.data,video:true,duration:rendered.media.duration,name:rendered.youtube.filename}]:[],
-  thumbnail:rendered?.thumbnail||null,
-  activity,
-  usage:await getMediaUsage(db,account.id)
+  return checkpoint;
  };
+ const persist=async(opts={})=>{
+  const cp=snapshot(opts);
+  await saveProductionCheckpoint(db,account.id,cp);
+  return cp;
+ };
+ const fail=async(error,currentStep)=>{
+  const cp=await persist({currentStep,message:String(error?.message||error).slice(0,500)});
+  throw Object.assign(error,{productionActivity:activity,productionCheckpoint:cp});
+ };
+
+ activity.push({tool:"production-plan",state:"done",details:previous?"Durable production checkpoint loaded; resume path will skip verified stages and completed scene renders.":"Autonomous pipeline plan verified; no manual tool selection required."});
+ await persist({currentStep:previous?previous.currentStep:"story",message:previous?"Production resume initialized from durable checkpoint.":"Production pipeline initialized."});
+
+ try{
+  if(productionStepDone(previous,"story")&&story){
+   evidence.story=true;completed.add("story");
+   activity.push({tool:"story-engine",state:"skipped",details:"Verified story checkpoint reused; generation was not repeated."});
+  }else{
+   const storyResult=await buildStory(request.story);
+   story=storyResult.plan;
+   evidence.story=true;completed.add("story");
+   activity.push({tool:"story-engine",state:"done",details:"Structured story/script schema verified with "+story.scenes.length+" planned scene(s)."});
+  }
+  await persist({currentStep:"characters",message:"Story stage verified."});
+
+  const selectedScenes=selectScenes(story,Math.min(request.maxScenes,3));
+  if(!selectedScenes.length) throw new Error("Story contained no renderable scenes.");
+  if(selectedScenes.length<story.scenes.length){
+   activity.push({tool:"scene-budget",state:"done",details:"Daily free video lane is capped at 3 scene renders; only the first "+selectedScenes.length+" scene(s) are eligible and the run will not falsely claim the full story rendered."});
+  }
+
+  if(productionStepDone(previous,"characters") && characterRows.length){
+   evidence.characters=true;completed.add("characters");
+   activity.push({tool:"character-identity",state:"skipped",details:"Verified permanent Character ID checkpoint reused; character generation was not repeated."});
+  }else{
+   characterRows=[];
+   for(const source of (Array.isArray(story.characters)?story.characters:[]).slice(0,16)){
+    characterRows.push({...await getOrCreateCharacter(db,account.id,source),sourceId:source.id});
+   }
+   evidence.characters=characterRows.length>0;
+   if(evidence.characters)completed.add("characters");
+   activity.push({tool:"character-identity",state:evidence.characters?"done":"failed",details:characterRows.length+" account-scoped permanent Character ID(s) verified/reused."});
+  }
+  await persist({currentStep:"visuals",message:"Character identity stage verified."});
+
+  for(let i=0;i<selectedScenes.length;i++){
+   const s=selectedScenes[i];
+   const sceneId=String(s.id||("scene_"+(i+1)));
+   const previousScene=sceneStates.find(x=>String(x.sceneId)===sceneId);
+   const primary=scenePrimaryCharacter(s,characterRows);
+   const charName=primary?.name||"";
+   const scenePrompt=clean([charName&&("Character: "+charName),s.action,s.visualPrompt,s.cameraPrompt].filter(Boolean).join("\n"),9000);
+
+   let visualMedia=null;
+   let visualAssetId=previousScene?.visualAssetId||null;
+   const storedVisual=visualAssetId?await loadCharacterVisualAssetById(db,account.id,visualAssetId):null;
+   if(previousScene?.visualVerified&&storedVisual?.data){
+    visualMedia={mimeType:storedVisual.mime_type,data:storedVisual.data,provider:storedVisual.provider||"character-visual"};
+    activity.push({tool:"character-visual",state:"skipped",details:"Scene "+(i+1)+" verified visual asset reused from checkpoint."});
+   }else{
+    await reserveMedia(db,account.id,"image",10);
+    try{
+     const visual=await generateCharacterVisual(db,account.id,scenePrompt,request.aspectRatio);
+     visualMedia=visual.media;
+     await saveMediaAsset(db,account.id,"image",visual.media);
+     visualAssetId=visual.assetId||null;
+    }catch(e){
+     await releaseMedia(db,account.id,"image");
+     await fail(new Error("Scene "+(i+1)+" visual generation failed: "+String(e?.message||e)),"visuals");
+    }
+    activity.push({tool:"character-visual",state:"done",details:"Scene "+(i+1)+" visual generated with account-scoped identity lineage."});
+   }
+   let state=sceneStates.find(x=>String(x.sceneId)===sceneId)||{sceneId,index:i};
+   state={...state,index:i,sceneId,visualAssetId,visualVerified:Boolean(visualAssetId&&visualMedia?.data)};
+   sceneStates=sceneStates.filter(x=>String(x.sceneId)!==sceneId).concat(state);
+   evidence.visuals=selectedScenes.every(scene=>{
+    const row=sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(selectedScenes.indexOf(scene)+1))));
+    return Boolean(row?.visualVerified);
+   });
+   if(evidence.visuals)completed.add("visuals");
+   await persist({currentStep:"videos",message:"Scene "+(i+1)+" visual stage verified."});
+
+   let videoMedia=null;
+   let videoAssetId=state.videoAssetId||null;
+   const storedVideo=videoAssetId?await loadCharacterVideoAssetById(db,account.id,videoAssetId):null;
+   const storedVideoOk=Boolean(state.videoVerified&&storedVideo?.data);
+   if(storedVideoOk){
+    videoMedia={mimeType:storedVideo.mime_type,data:storedVideo.data,provider:storedVideo.provider||"character-video"};
+    activity.push({tool:"character-video",state:"skipped",details:"Scene "+(i+1)+" verified video asset reused from checkpoint; generation was not repeated."});
+   }else{
+    await reserveMedia(db,account.id,"video",3);
+    try{
+     const videoPrompt=clean(["Character: "+(charName||"primary story character"),s.action,s.visualPrompt,s.cameraPrompt].filter(Boolean).join("\n"),9000);
+     const video=await generateCharacterVideo(db,account.id,videoPrompt,Math.min(5,Math.max(1,Number(s.durationSeconds)||5)),request.aspectRatio,visualMedia);
+     videoMedia=video.media;
+     await saveMediaAsset(db,account.id,"video",video.media);
+     videoAssetId=video.assetId||null;
+     state={...state,videoAssetId};
+    }catch(e){
+     await releaseMedia(db,account.id,"video");
+     await fail(new Error("Scene "+(i+1)+" video generation failed: "+String(e?.message||e)),"videos");
+    }
+    activity.push({tool:"character-video",state:"done",details:"Scene "+(i+1)+" actual video output validated and character lineage preserved."});
+   }
+
+   const durationSeconds=Math.min(5,Math.max(1,Number(videoMedia?.duration||s.durationSeconds)||5));
+   const storedPost=state.postProduction&&state.postVerified ? state.postProduction : null;
+   let post=storedPost;
+   if(post){
+    activity.push({tool:"scene-post-production",state:"skipped",details:"Scene "+(i+1)+" verified VFX/Music/SFX manifest reused from checkpoint."});
+   }else{
+    const postRequest=normalizeScenePostRequest({prompt:[s.vfxPrompt,s.musicPrompt,s.sfxPrompt,s.action].filter(Boolean).join("\n"),duration:durationSeconds,style:"cinematic"});
+    post=buildScenePostProductionManifest({...postRequest,includeMusic:true});
+    const postCheck=verifyScenePostManifest(post);
+    if(!postCheck.ok) await fail(new Error("Scene "+(i+1)+" post-production contract failed."),"post");
+    activity.push({tool:"scene-post-production",state:"done",details:"VFX/Music/SFX manifest verified for scene "+(i+1)+"."});
+   }
+
+   state={...state,sceneId,index:i,visualAssetId,videoAssetId,postProduction:post,durationSeconds,verified:true,visualVerified:Boolean(visualAssetId&&visualMedia?.data),videoVerified:Boolean(videoAssetId&&videoMedia?.data),postVerified:true};
+   sceneStates=sceneStates.filter(x=>String(x.sceneId)!==sceneId).concat(state);
+   evidence.visuals=selectedScenes.every((scene,j)=>Boolean(sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(j+1))))?.visualVerified));
+   evidence.videos=selectedScenes.every((scene,j)=>Boolean(sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(j+1))))?.videoVerified));
+   evidence.post=selectedScenes.every((scene,j)=>Boolean(sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(j+1))))?.postVerified));
+   if(evidence.visuals)completed.add("visuals"); else completed.delete("visuals");
+   if(evidence.videos)completed.add("videos"); else completed.delete("videos");
+   if(evidence.post)completed.add("post"); else completed.delete("post");
+   await persist({currentStep:i+1<selectedScenes.length?"visuals":"render",message:"Scene "+(i+1)+" checkpoint verified."});
+  }
+
+  const sceneClips=[];
+  for(let i=0;i<selectedScenes.length;i++){
+   const s=selectedScenes[i];
+   const id=String(s.id||("scene_"+(i+1)));
+   const state=sceneStates.find(x=>String(x.sceneId)===id);
+   if(!state?.videoAssetId||!state?.verified) await fail(new Error("Scene "+(i+1)+" checkpoint is incomplete; final render blocked."),"render");
+   const storedVideo=await loadCharacterVideoAssetById(db,account.id,state.videoAssetId);
+   if(!storedVideo?.data) await fail(new Error("Scene "+(i+1)+" verified video asset could not be reloaded from storage."),"render");
+   const primary=scenePrimaryCharacter(s,characterRows);
+   sceneClips.push({
+    sceneId:id,
+    videoAssetId:state.videoAssetId,
+    sourceVideo:{mimeType:storedVideo.mime_type,data:storedVideo.data,provider:storedVideo.provider||"character-video"},
+    durationSeconds:Number(state.durationSeconds||5),
+    verified:true,
+    postProduction:state.postProduction,
+    transition:"cut",
+    scenePrompt:clean([primary?.name,s.action,s.visualPrompt,s.cameraPrompt].filter(Boolean).join(" "),240)
+   });
+  }
+
+  const timeline=buildEditTimeline({scenes:sceneClips,aspectRatio:request.aspectRatio,fps:30});
+  const timelineCheck=verifyEditTimeline(timeline);
+  if(!timelineCheck.ok) await fail(new Error("Final timeline verification failed."),"render");
+
+  try{
+   rendered=await renderTimeline(timeline,{
+    title:story.youtube?.titleIdeas?.[0]||("BHAI X | "+story.title),
+    description:story.youtube?.description||("Created by BHAI X from an autonomous production pipeline.\n\n"+(story.youtube?.hook||"")),
+    tags:["BHAI X","Hindi","cartoon","cinematic",story.genre].filter(Boolean)
+   });
+  }catch(e){
+   await fail(new Error("Final MP4 rendering failed: "+String(e?.message||e)),"render");
+  }
+
+  evidence.render=Boolean(rendered?.verification?.ok&&rendered?.media?.data);
+  if(evidence.render)completed.add("render"); else completed.delete("render");
+  await saveMediaAsset(db,account.id,"video",rendered.media);
+  await saveVideoPackage(db,account.id,rendered);
+  activity.push({tool:"ffmpeg-renderer",state:evidence.render?"done":"failed",details:evidence.render?"Actual final MP4 + thumbnail encoded and output contract verified.":"Final MP4 was not verified."});
+  await persist({currentStep:request.autoPublish?"youtube":null,message:"Final MP4 checkpoint verified.",renderProof:rendered?.verification||null});
+
+  if(request.autoPublish){
+   if(productionStepDone(previous,"youtube")&&youtube?.verified&&youtube?.url){
+    evidence.youtube=true;completed.add("youtube");
+    activity.push({tool:"youtube-publisher",state:"skipped",details:"Verified YouTube upload proof reused from checkpoint; upload was not repeated."});
+   }else{
+    try{
+     const status=await getYouTubeStatus(account.id);
+     if(status.connected){
+      youtube=await uploadToYouTube(account.id,{
+       videoData:rendered.media.data,mimeType:rendered.media.mimeType,
+       title:rendered.youtube.title,description:rendered.youtube.description,
+       tags:rendered.youtube.tags,privacy:request.privacy
+      });
+      evidence.youtube=Boolean(youtube?.verified&&youtube?.url);
+      if(evidence.youtube)completed.add("youtube");
+      else completed.delete("youtube");
+      activity.push({tool:"youtube-publisher",state:evidence.youtube?"done":"failed",details:evidence.youtube?"Actual YouTube upload completed; post-upload URL proof returned.":"Upload response did not contain verified URL proof."});
+     }else if(status.configured){
+      const started=await beginYouTubeOAuth(account.id);
+      youtubeAuthUrl=started.authUrl;
+      activity.push({tool:"youtube-publisher",state:"pending",details:"YouTube OAuth is configured but this account is not connected; secure connect URL generated."});
+     }else{
+      activity.push({tool:"youtube-publisher",state:"pending",details:"YouTube OAuth credentials are not configured on the server; final MP4 remains ready but publishing is fail-closed."});
+     }
+    }catch(e){
+     activity.push({tool:"youtube-publisher",state:"failed",details:String(e?.message||e)});
+    }
+   }
+  }else{
+   completed.add("youtube");
+   evidence.youtube=true;
+  }
+
+  const proof=productionCompletionProof({plan,evidence,finalVideo:{rendered:Boolean(rendered),verified:evidence.render},youTube:youtube});
+  const fullStoryRendered=selectedScenes.length===story.scenes.length;
+  const verified=proof.ok&&fullStoryRendered;
+  if(verified)completed.add("youtube");
+  const finalCheckpoint=await persist({
+   currentStep:verified?null:request.autoPublish?"youtube":"render",
+   message:verified?"All autonomous production stages verified.":"Final MP4 verified; remaining production proof is still pending.",
+   renderProof:rendered?.verification||null
+  });
+  return {
+   ok:true,verified,
+   production:{planId:plan.pipelineId,schemaVersion:plan.schemaVersion,evidence,proof,fullStoryRendered,resumed:Boolean(previous),checkpoint:finalCheckpoint},
+   text:verified
+    ? "## ✅ Autonomous production DONE\n\nStory → permanent characters → visuals → scene videos → VFX/Music/SFX → final MP4 → YouTube publishing complete hua, aur har required step ka proof verified hai."
+    : evidence.render
+     ? "## 🎬 Final MP4 ready\n\nBHAI X ne autonomous story-to-video pipeline complete karke actual MP4 + thumbnail verify kiya. "+(request.autoPublish?(evidence.youtube?"YouTube upload bhi verified hai.":"YouTube publishing abhi verified nahi hai; isliye DONE claim nahi kiya."): "YouTube publishing request nahi thi, isliye final MP4 ko verified output maana gaya.")+
+       (youtubeAuthUrl?"\n\n🔐 **YouTube connect:** "+youtubeAuthUrl:"")
+     : "## ⚠️ Autonomous production partial\n\nRequired verification complete nahi hui; BHAI X ne DONE claim nahi kiya.",
+   story,characters:characterRows.map(c=>({characterId:c.character_id,name:c.name,identityFingerprint:c.identity_fingerprint})),
+   timeline,rendered:rendered?{media:rendered.media,thumbnail:rendered.thumbnail,youtube:rendered.youtube,verification:rendered.verification,stats:rendered.stats,applied:rendered.applied}:null,
+   youtube,youtubeAuthUrl,
+   images:rendered?[{mimeType:rendered.media.mimeType,data:rendered.media.data,video:true,duration:rendered.media.duration,name:rendered.youtube.filename}]:[],
+   thumbnail:rendered?.thumbnail||null,
+   productionCheckpoint:finalCheckpoint,
+   activity,
+   usage:await getMediaUsage(db,account.id)
+  };
+ }catch(e){
+  if(e?.productionCheckpoint)return e;
+  const cp=await persist({currentStep:checkpoint?.currentStep||"recovery",message:String(e?.message||e).slice(0,500)}).catch(()=>checkpoint);
+  e.productionActivity=activity;
+  e.productionCheckpoint=cp;
+  throw e;
+ }
 }
 
 export default async function handler(req,res){

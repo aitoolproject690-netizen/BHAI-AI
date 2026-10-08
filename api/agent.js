@@ -484,6 +484,28 @@ export default async function handler(req,res){
     }
    }
 
+   const deterministicConversationReply=getCasualReply(task);
+   if(deterministicConversationReply){
+    return json(res,200,{ok:true,text:deterministicConversationReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true});
+   }
+
+   const standaloneCodingRequest=isLocalCodingIntent(task);
+   if(standaloneCodingRequest){
+    try{
+     const coding=await generateWithRouter({
+      task,
+      system:system+"\n\nCODING-ONLY MODE: Answer the standalone coding question directly. Do not search the web unless the user explicitly asks for current documentation.",
+      messages:chatMessages,
+      preferred:"core",
+      role:"coding",
+      fallback:true
+     });
+     return json(res,200,{ok:true,text:String(coding?.text||"I could not generate a coding answer."),provider:coding.provider,backend_provider:coding.backend_provider||null,model:coding.model||null,verified:true});
+    }catch(e){
+     return json(res,502,{error:"Coding provider failed: "+String(e?.message||e)});
+    }
+   }
+
    if(isWebResearchIntent(task)||isKnowledgeResearchIntent(task)){
     try{
      const results=await webSearch(task);
@@ -511,10 +533,6 @@ export default async function handler(req,res){
     }
    }
 
-   const casualReply=getCasualReply(task);
-   if(casualReply){
-    return json(res,200,{ok:true,text:casualReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true});
-   }
    const codingMode=isLocalCodingIntent(task);
    let routed=await generateWithRouter({
     task,
@@ -797,7 +815,32 @@ if(isMedicalChatIntent(latestUserMessage)){
  }
 }
 
+// Deterministic conversation gate MUST run before any provider or research lane.
 const latestText=String(latestUserMessage||"").trim();
+const deterministicConversationReply=getCasualReply(latestText);
+if(deterministicConversationReply){
+ return json(res,200,{ok:true,text:deterministicConversationReply,provider:"deterministic",backend_provider:"conversation",model:"bhai-chat-v1",verified:true,activity:[]});
+}
+
+// Standalone coding-help MUST beat knowledge/web research. This prevents
+// Python/JS explanations from being hijacked into generic search results.
+const localCodingRequest=isLocalCodingIntent(latestText);
+if(localCodingRequest){
+ try{
+  const routed=await generateWithRouter({
+   task:latestText,
+   system:"You are BHAI X, a practical coding assistant. For standalone code questions, answer directly with the corrected code and a brief explanation. Do not claim GitHub, repository, build, deploy, or file changes unless they were actually performed.",
+   messages:[{role:"user",text:latestText}],
+   preferred:"core",
+   role:"coding",
+   fallback:true
+  });
+  return json(res,200,{ok:true,text:String(routed?.text||"I could not generate a coding answer."),provider:routed?.provider||null,backend_provider:routed?.backend_provider||null,model:routed?.model||null,activity:[{tool:"coding-chat",state:"done",details:"Standalone coding request kept out of engineering execution and web research."}],images:[],usage:await getMediaUsage(db,account.id),verified:true});
+ }catch(e){
+  return json(res,502,{error:"Coding chat provider failed: "+String(e?.message||e),activity:[{tool:"coding-chat",state:"failed",details:String(e?.message||e)}]});
+ }
+}
+
 const currentResearchRequest=isWebResearchIntent(latestText);
 if(currentResearchRequest){
  try{
@@ -835,23 +878,6 @@ if(currentResearchRequest){
 }
 
 
-// Deterministic local-coding isolation: short coding-help requests stay on the chat provider.
-const localCodingRequest=isLocalCodingIntent(latestText);
-if(localCodingRequest){
- try{
-  const routed=await generateWithRouter({
-   task:latestText,
-   system:"You are BHAI X, a practical coding assistant. For standalone code questions, answer directly with the corrected code and a brief explanation. Do not claim GitHub, repository, build, deploy, or file changes unless they were actually performed.",
-   messages:[{role:"user",text:latestText}],
-   preferred:"core",
-   role:"chat",
-   fallback:true
-  });
-  return json(res,200,{ok:true,text:String(routed?.text||"I could not generate a coding answer."),provider:routed?.provider||null,backend_provider:routed?.backend_provider||null,model:routed?.model||null,activity:[{tool:"coding-chat",state:"done",details:"Standalone coding request kept out of engineering execution."}],images:[],usage:await getMediaUsage(db,account.id),verified:true});
- }catch(e){
-  return json(res,502,{error:"Coding chat provider failed: "+String(e?.message||e),activity:[{tool:"coding-chat",state:"failed",details:String(e?.message||e)}]});
- }
-}
 const missionMode=/\b(?:app|project|repo|repository|website|apk)\b/i.test(latestText) && /\b(?:create|make|build|bana|ban[a-z]*|fix|deploy|publish|push|commit|update|repair|test|verify)\b/i.test(latestText);
 const mission=createMissionController();
 const missionStep=(next,details="")=>{ mission.transition(next); activity.push({tool:"mission:"+next,state:"done",details}); };
@@ -1086,6 +1112,8 @@ if(githubLinkRequest && githubRequestedRepo && autoDoIt && !githubFileRequest){
  }
 }
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+ const agentNeedsTools=latestRequestsProjectExecution || latestHasExplicitGithub ||
+  selectedSkills.some(skill=>["github","file","build","automation"].includes(skill));
  const generateWithFallback=async(useTools=true)=>{
   const chatMessages=compactContents(contents).flatMap(x=>{
    const parts=Array.isArray(x?.parts)?x.parts:[];
@@ -1093,7 +1121,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
    if(!text)return [];
    return [{role:x.role==="model"?"assistant":"user",text}];
   });
-  if(useTools&&key){
+  if(useTools&&agentNeedsTools&&key){
    const models=await getModelsFast();
    let lastError=null;
    for(const model of models){

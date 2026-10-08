@@ -293,14 +293,14 @@ test("provider cooldown skips an exhausted provider on the next request",async()
 });
 
 
-test("chat provider ordering prefers conversational providers over local Core",()=>{
+test("chat provider ordering prefers BHAI-CORE local-first routing",()=>{
  const old={...process.env};
  try{
   process.env.GEMINI_API_KEY="test-gemini";
   process.env.OPENAI_API_KEY="test-openai";
   process.env.BHAI_CORE_URL="https://core.test";
   process.env.BHAI_CORE_API_KEY="test-core";
-  assert.equal(routeAI({task:"bhai kya haal hai",role:"chat-general"}),"gemini");
+  assert.equal(routeAI({task:"bhai kya haal hai",role:"chat-general"}),"core");
  }finally{
   for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
   Object.assign(process.env,old);
@@ -596,14 +596,14 @@ test("verified answer engine performs one bounded correction after reviewer fail
   }
 });
 
-test("general chat routing prefers stronger configured providers before local Core",()=>{
+test("general chat routing prefers BHAI-CORE before external fallback",()=>{
   const old={...process.env};
   try{
     process.env.BHAI_CORE_URL="https://core.test";
     process.env.BHAI_CORE_API_KEY="x";
     process.env.GEMINI_API_KEY="x";
     process.env.OPENAI_API_KEY="x";
-    assert.equal(routeAI({task:"Bhai tu kya kar sakta hai?",role:"chat-general"}),"gemini");
+    assert.equal(routeAI({task:"Bhai tu kya kar sakta hai?",role:"chat-general"}),"core");
   }finally{
     for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
     Object.assign(process.env,old);

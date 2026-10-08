@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import {initDb,getDb} from "./db.js";
 import {internalHeaders} from "./internalAuth.js";
 

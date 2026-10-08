@@ -639,3 +639,35 @@ test("AI router quality fallback skips malformed provider output and uses the ne
   Object.assign(process.env,old);
  }
 });
+
+
+test("AI router falls back from Gemini quota to Pollinations text",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.GEMINI_API_KEY="test-gemini";
+  process.env.POLLINATIONS_API_KEY="test-pollinations";
+  try{
+    const calls=[];
+    global.fetch=async(url)=>{
+      const u=String(url);
+      calls.push(u);
+      if(u.includes("generativelanguage.googleapis.com")){
+        return new Response(JSON.stringify({error:{message:"Quota exceeded for metric generate_content_free_tier_requests"}}),{status:429});
+      }
+      if(u.includes("gen.pollinations.ai/v1/chat/completions")){
+        return new Response(JSON.stringify({choices:[{message:{content:"Haan bhai 😄 main ready hoon."}}]}),{status:200});
+      }
+      throw new Error("Unexpected provider request: "+u);
+    };
+    const {generateWithRouter}=await import("../api/aiRouter.js?pollinations-fallback="+Date.now());
+    const out=await generateWithRouter({task:"Bhai kya kar raha hai?",preferred:"gemini",role:"chat-general",fallback:true});
+    assert.equal(out.provider,"pollinations");
+    assert.equal(out.text,"Haan bhai 😄 main ready hoon.");
+    assert.deepEqual(out.failedProviders,["gemini"]);
+    assert.equal(calls.length,2);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});

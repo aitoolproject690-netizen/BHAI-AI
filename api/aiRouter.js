@@ -57,6 +57,13 @@ const PROVIDERS = {
     env: ["HF_TOKEN"],
     modelEnv: "HF_CHAT_MODEL",
     defaultModel: "openai/gpt-oss-120b:fastest"
+  },
+  pollinations: {
+    id: "pollinations",
+    name: "Pollinations Text",
+    env: ["POLLINATIONS_API_KEY"],
+    modelEnv: "POLLINATIONS_TEXT_MODEL",
+    defaultModel: "openai/gpt-5.6-luna"
   }
 };
 
@@ -106,18 +113,18 @@ export function routeAI({ task="", preferred="", role="chat", exclude=[] }={}) {
 
   const lower = String(task).toLowerCase();
   const order = role === "reviewer"
-    ? ["openai", "anthropic", "huggingface", "gemini", "core"]
+    ? ["openai", "anthropic", "pollinations", "huggingface", "gemini", "core"]
     : role === "researcher" || role === "web-research"
-      ? ["gemini", "openai", "anthropic", "huggingface", "core"]
+      ? ["gemini", "openai", "anthropic", "pollinations", "huggingface", "core"]
       : role === "medical"
-        ? ["gemini", "openai", "anthropic", "huggingface", "core"]
+        ? ["gemini", "openai", "anthropic", "pollinations", "huggingface", "core"]
         : role === "chat-general" || role === "conversation"
-          ? ["gemini", "openai", "huggingface", "anthropic", "core"]
+          ? ["gemini", "openai", "pollinations", "huggingface", "anthropic", "core"]
           : /github|repo|repository|build|test|engineering/.test(lower)
-            ? ["core", "gemini", "openai", "anthropic", "huggingface"]
+            ? ["core", "gemini", "openai", "pollinations", "anthropic", "huggingface"]
             : /code|debug/.test(lower)
-              ? ["gemini", "openai", "huggingface", "anthropic", "core"]
-            : ["gemini", "openai", "huggingface", "anthropic", "core"]; // strong general provider first; weak local Core is last-resort
+              ? ["gemini", "openai", "pollinations", "huggingface", "anthropic", "core"]
+            : ["gemini", "openai", "pollinations", "huggingface", "anthropic", "core"]; // strong general provider first; weak local Core is last-resort
 
   return order.find(id => available.includes(id)) || available[0];
 }
@@ -236,6 +243,20 @@ async function callHuggingFace({apiKey,model,system,messages}) {
   return {text:text.trim(),provider:"huggingface",model};
 }
 
+async function callPollinations({apiKey,model,system,messages}) {
+  const input=[...(system?[{role:"system",content:String(system)}]:[]),...normalizeMessages(messages).map(m=>({role:m.role,content:m.text}))];
+  const r=await fetch("https://gen.pollinations.ai/v1/chat/completions",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+    body:JSON.stringify({model,stream:false,messages:input}),
+    signal:timeout(30000)
+  });
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw providerError(d?.error?.message||"Pollinations text API request failed",r.status,"pollinations");
+  const text=d?.choices?.[0]?.message?.content;
+  if(typeof text!=="string"||!text.trim()) throw new Error("Pollinations returned no text.");
+  return {text:text.trim(),provider:"pollinations",model};
+}
 async function callAnthropic({apiKey,model,system,messages}) {
   const input=normalizeMessages(messages).map(m=>({role:m.role==="assistant"?"assistant":"user",content:m.text}));
   const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},body:JSON.stringify({model,max_tokens:4096,system:String(system||""),messages:input}),signal:timeout(30000)});
@@ -254,6 +275,7 @@ async function callProvider(id,args) {
   if(id==="gemini")return callGemini({...args,apiKey,model});
   if(id==="openai")return callOpenAI({...args,apiKey,model});
   if(id==="anthropic")return callAnthropic({...args,apiKey,model});
+  if(id==="pollinations")return callPollinations({...args,apiKey,model});
   if(id==="huggingface")return callHuggingFace({...args,apiKey,model});
   throw new Error("Unsupported AI provider: "+id);
 }

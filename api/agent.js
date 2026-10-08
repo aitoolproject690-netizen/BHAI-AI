@@ -12,11 +12,63 @@ import { routeConversationContext } from "./contextRouter.js";
 import { isMedicalIntent,getMedicalSafetyPrompt,applyMedicalSafetyFooter,isSimpleColdQuestion } from "../src/medicalSafety.js";
 import {normalizeIntent,isCasualIntent,getCasualReply,detectMediaIntent,isMediaToolAllowed,isGeneralChatIntent} from "../src/intentRouter.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
+import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
 import {isObviouslyGarbledResponse} from "../src/responseQuality.js";
+import {buildSimpleCodingFallback} from "../src/codingFallback.js";
 import { webSearch, filterResearchSources } from "../src/webSearch.js";
 
 const json=(res,status,data)=>res.status(status).json(data);
+function isReadOnlyGithubAuditRequest(text=""){
+ const raw=String(text||"");
+ return /\b(?:github|git\s*hub|repo(?:sitory)?)\b/i.test(raw)
+   && /\b(?:inspect|check|audit|review|obvious\s+build|build\s+problem|status)\b/i.test(raw)
+   && !/\b(?:fix|change|modify|update|edit|commit|push|delete|remove|create|deploy)\b/i.test(raw);
+}
+
+async function runReadOnlyGithubAudit(text=""){
+ const target=resolveGithubTarget(text);
+ if(!target.owner||!target.repo) return null;
+ if(!githubConfigured()) throw Object.assign(new Error("GitHub access is not configured on the server."),{status:503});
+ const base=githubRepoUrl(target.owner,target.repo);
+ const repoMeta=await githubApiJson(base,{timeoutMs:12000});
+ const root=await githubApiJson(base+"/contents",{timeoutMs:12000});
+ const entries=Array.isArray(root)?root:[];
+ const names=new Set(entries.map(x=>String(x?.name||"")));
+ let packageJson=null;
+ const pkg=entries.find(x=>String(x?.name||"").toLowerCase()==="package.json");
+ if(pkg?.path){
+   const raw=await githubApiJson(base+"/contents/"+encodeGithubPath(pkg.path),{timeoutMs:12000});
+   if(raw?.content&&raw?.encoding==="base64"){
+     try{ packageJson=JSON.parse(Buffer.from(String(raw.content).replace(/\s+/g,""),"base64").toString("utf8")); }catch{}
+   }
+ }
+ let workflows=[];
+ try{
+   const workflowDir=await githubApiJson(base+"/contents/.github/workflows",{timeoutMs:12000});
+   workflows=Array.isArray(workflowDir)?workflowDir.map(x=>String(x?.name||"")).filter(Boolean):[];
+ }catch{}
+ const buildScript=String(packageJson?.scripts?.build||"").trim();
+ const testScript=String(packageJson?.scripts?.test||"").trim();
+ const risks=[];
+ if(pkg && !buildScript) risks.push("package.json exists but has no build script");
+ if(!pkg && !entries.some(x=>/^(?:vite\.config\.|next\.config\.|angular\.json|pyproject\.toml|requirements\.txt|Cargo\.toml)$/i.test(String(x?.name||"")))) risks.push("no obvious project build manifest found at repository root");
+ const lockfiles=["package-lock.json","npm-shrinkwrap.json","pnpm-lock.yaml","yarn.lock","bun.lockb"].filter(name=>names.has(name));
+ const summary=[
+   "## 🔍 Read-only GitHub audit",
+   "**Repository:** `"+target.owner+"/"+target.repo+"`",
+   "**Default branch:** `"+String(repoMeta?.default_branch||"unknown")+"`",
+   "**Language:** "+String(repoMeta?.language||"not reported"),
+   "**Build script:** "+(buildScript?"✅ `"+buildScript+"`":"⚠️ missing"),
+   "**Test script:** "+(testScript?"✅ `"+testScript+"`":"ℹ️ not defined"),
+   "**Lockfile:** "+(lockfiles.length?"✅ "+lockfiles.join(", "):"ℹ️ none detected (not automatically a build failure)"),
+   "**CI workflows:** "+(workflows.length?"✅ "+workflows.join(", "):"ℹ️ none detected"),
+   risks.length?"":"**Result:** ✅ No obvious build blocker found from read-only repository metadata.",
+   ...risks.map(x=>"**Potential issue:** ⚠️ "+x+".")
+ ].filter(Boolean).join("\n");
+ return {text:summary,owner:target.owner,repo:target.repo,branch:String(repoMeta?.default_branch||""),risks,workflows,lockfiles,buildScript,testScript};
+}
+
 
 async function generateImage(prompt,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
@@ -452,6 +504,11 @@ export default async function handler(req,res){
     return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true});
    }
 
+   const deterministicTime=solveSimpleTime(task);
+   if(deterministicTime){
+    return json(res,200,{ok:true,text:deterministicTime,provider:"deterministic",backend_provider:"reasoning",model:"bhai-reasoning-v1",verified:true});
+   }
+
    // High-risk medical triage and simple cold advice stay deterministic and
    // never wait for a language model.
    if(canonicalRequest.lane==="medical"){
@@ -503,6 +560,10 @@ export default async function handler(req,res){
      });
      return json(res,200,{ok:true,text:String(coding?.text||"I could not generate a coding answer."),provider:coding.provider,backend_provider:coding.backend_provider||null,model:coding.model||null,verified:true});
     }catch(e){
+     const fallback=buildSimpleCodingFallback(task);
+     if(fallback){
+      return json(res,200,{ok:true,text:fallback,provider:"deterministic",backend_provider:"coding-fallback",model:"bhai-coding-v1",verified:true});
+     }
      return json(res,502,{error:"Coding provider failed: "+String(e?.message||e)});
     }
    }
@@ -600,15 +661,9 @@ export default async function handler(req,res){
   // Automatic execution: no user-facing DO IT switch is required.
  const latestUserMessage=[...messages].reverse().find(m=>m&&m.role==="user")?.text||"";
  const canonicalRequest=classifyUserRequest(latestUserMessage);
- // Server-side hard guard: casual conversation must NEVER enter the work/mission agent.
- // This protects against stale browser bundles, old checkpoints, or a frontend routing bug.
  const normalizedCasual=normalizeIntent(latestUserMessage);
  const conversationalReply=getCasualReply(latestUserMessage);
  const serverCasual=isCasualIntent(latestUserMessage);
-   const deterministicMath=solveSimpleMath(latestUserMessage);
- if(deterministicMath!==null){
-  return json(res,200,{ok:true,text:deterministicMath,provider:"deterministic",backend_provider:"math",model:"bhai-math-v1",verified:true,activity:[]});
- }
  if(serverCasual){
   const casualReplies={
    "kya chal raha":"Bas bhai, yahin BHAI X ka kaam chal raha hai 😄🚀 Tum batao, kya scene hai?",
@@ -705,6 +760,18 @@ if(directImageRequest){
  const githubTaskText=hasUniqueContextRepo
   ? "GitHub repository: "+contextRepoKeys[0]+"\n"+latestUserMessage
   : latestUserMessage;
+ if(isReadOnlyGithubAuditRequest(githubTaskText)){
+  try{
+   const audit=await runReadOnlyGithubAudit(githubTaskText);
+   if(audit){
+    return json(res,200,{ok:true,text:audit.text,provider:"deterministic",backend_provider:"github-readonly-audit",model:"bhai-github-audit-v1",verified:true,activity:[{tool:"github-audit",state:"done",details:"Read-only repository metadata inspected; no changes were made."}]});
+   }
+  }catch(e){
+   if(!/GitHub access is not configured/i.test(String(e?.message||e))){
+    return json(res,502,{error:"Read-only GitHub audit failed: "+String(e?.message||e),activity:[{tool:"github-audit",state:"failed",details:String(e?.message||e)}]});
+   }
+  }
+ }
   const latestHasExplicitGithub=/(?:github|git hub|repository|repo\b|\bcreate\s+(?:a\s+)?repo|\bgithub\s+repo)/i.test(latestUserMessage);
   const latestRequestsProjectExecution=/(?:\bapp\b|\bproject\b|\bwebsite\b|\bapk\b|\bcode\b|\bbuild\b|\bdeploy\b|\bcreate\b|\bmake\b|\bbana\b|\bban[a-z]*\b|\bfix\b|\bupdate\b|\bpublish\b|\bcommit\b|\bpush\b)/i.test(latestUserMessage);
   const freshTaskIsolation=contextRoute.mode==="fresh_task";
@@ -839,6 +906,10 @@ if(localCodingRequest){
   });
   return json(res,200,{ok:true,text:String(routed?.text||"I could not generate a coding answer."),provider:routed?.provider||null,backend_provider:routed?.backend_provider||null,model:routed?.model||null,activity:[{tool:"coding-chat",state:"done",details:"Standalone coding request kept out of engineering execution and web research."}],images:[],usage:await getMediaUsage(db,account.id),verified:true});
  }catch(e){
+  const fallback=buildSimpleCodingFallback(latestText);
+  if(fallback){
+   return json(res,200,{ok:true,text:fallback,provider:"deterministic",backend_provider:"coding-fallback",model:"bhai-coding-v1",activity:[{tool:"coding-chat",state:"done",details:"Deterministic coding fallback used after all configured providers failed."}],images:[],usage:await getMediaUsage(db,account.id),verified:true});
+  }
   return json(res,502,{error:"Coding chat provider failed: "+String(e?.message||e),activity:[{tool:"coding-chat",state:"failed",details:String(e?.message||e)}]});
  }
 }

@@ -349,6 +349,40 @@ function mergeSearchResults(attempts,query){
     .map(({_score,...result})=>result);
 }
 
+async function searchPollinations(q){
+  const apiKey=process.env.POLLINATIONS_API_KEY;
+  if(!apiKey) throw new Error("Pollinations web search fallback is not configured.");
+  const model=process.env.POLLINATIONS_SEARCH_MODEL||"google/gemini-2.5-flash-lite:search";
+  const prompt=[
+    "Use live web search to answer the user's current-information question.",
+    "Prefer primary or authoritative sources.",
+    "Return a concise evidence summary and include the most useful source URLs in plain text.",
+    "Do not invent URLs. Do not answer from memory.",
+    "",
+    "USER QUESTION:",
+    String(q).trim()
+  ].join("\n");
+  const r=await fetch("https://gen.pollinations.ai/v1/chat/completions",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+    body:JSON.stringify({model,messages:[{role:"user",content:prompt}],stream:false}),
+    signal:AbortSignal.timeout(GEMINI_SEARCH_TIMEOUT_MS)
+  });
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d?.error?.message||"Pollinations web search fallback failed.");
+  const summary=String(d?.choices?.[0]?.message?.content||"").trim();
+  if(!summary) throw new Error("Pollinations web search returned no text.");
+  const urls=[...summary.matchAll(/https?:\/\/[^\s)\]}>,]+/gi)].map(m=>m[0].replace(/[.,;]+$/,""));
+  const uniqueUrls=[...new Set(urls)].slice(0,8);
+  const snippet=summary.replace(/https?:\/\/[^\s)\]}>,]+/gi,"").replace(/\s+/g," ").trim();
+  const sources=uniqueUrls.map((url,index)=>({
+    title:"Web source "+(index+1)+" (Pollinations search)",
+    url,
+    snippet:index===0?snippet:""
+  }));
+  if(!sources.length) sources.push({title:"Web search synthesis (Pollinations)",url:"https://gen.pollinations.ai/",snippet});
+  return sources;
+}
 function hasAuthoritativeSource(results){
   return (results||[]).some(result=>sourceAuthorityScore(result)>=5);
 }
@@ -384,6 +418,13 @@ export async function webSearch(query="") {
   if(merged.length) return merged;
 
   try {
+    const pollinations=await searchPollinations(q);
+    return pollinations;
+  } catch(error) {
+    errors.push("pollinations-search: "+String(error?.message||error).slice(0,300));
+  }
+
+  try {
     const grounded=await searchGeminiGrounding(q);
     return grounded;
   } catch(error) {
@@ -393,4 +434,4 @@ export async function webSearch(query="") {
   throw new Error("All web search providers failed: "+errors.join(" | "));
 }
 
-export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore,searchGeminiGrounding,searchWikipedia,isFreshQuery,sourceAuthorityScore,mergeSearchResults,filterResearchSources};
+export const __test={parseDuckDuckGo,parseBing,parseGoogle,buildSearchQueries,relevanceScore,searchGeminiGrounding,searchWikipedia,searchPollinations,isFreshQuery,sourceAuthorityScore,mergeSearchResults,filterResearchSources};

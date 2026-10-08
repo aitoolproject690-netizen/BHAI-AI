@@ -161,3 +161,32 @@ test("webSearch aggregates providers and rewards authoritative sources",()=>{
   ],"Petrol gasoline chemical composition hydrocarbons");
   assert.equal(rows[0].url,"https://www.eia.gov/energyexplained/gasoline/");
 });
+
+
+test("webSearch falls back to Pollinations search before Gemini when public search is unavailable",async()=>{
+  const originalFetch=globalThis.fetch;
+  const originalKey=process.env.POLLINATIONS_API_KEY;
+  const originalGemini=process.env.GEMINI_API_KEY;
+  process.env.POLLINATIONS_API_KEY="test-pollinations";
+  delete process.env.GEMINI_API_KEY;
+  const calls=[];
+  globalThis.fetch=async(url)=>{
+    const u=String(url); calls.push(u);
+    if(u.includes("duckduckgo")||u.includes("bing.com/search")||u.includes("google.com/search")) throw new Error("search host unavailable");
+    if(u.includes("gen.pollinations.ai/v1/chat/completions")){
+      return new Response(JSON.stringify({choices:[{message:{content:"Current petrol prices are monitored by official fuel-price sources. Source: https://ppac.gov.in/ and https://iocl.com/petrol-diesel-price"}}]}),{status:200,headers:{"Content-Type":"application/json"}});
+    }
+    throw new Error("unexpected provider");
+  };
+  try{
+    const rows=await webSearch("India mein abhi petrol ka price kya chal raha hai?");
+    assert.equal(rows.length,2);
+    assert.match(rows[0].url,/ppac\.gov\.in/);
+    assert.ok(calls.some(url=>String(url).includes("gen.pollinations.ai/v1/chat/completions")));
+    assert.equal(calls.some(url=>String(url).includes("generativelanguage.googleapis.com")),false);
+  }finally{
+    globalThis.fetch=originalFetch;
+    if(originalKey===undefined) delete process.env.POLLINATIONS_API_KEY; else process.env.POLLINATIONS_API_KEY=originalKey;
+    if(originalGemini===undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY=originalGemini;
+  }
+});

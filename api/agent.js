@@ -311,7 +311,7 @@ async function generateCharacterVideo(db,accountId,prompt,duration=5,aspectRatio
  const sourceVisualAsset=await getLatestCharacterVisualAsset(db,accountId,character.character_id,character.identity_fingerprint);
  const sourceImage=sourceVisualAsset?.data ? {mimeType:sourceVisualAsset.mime_type,data:sourceVisualAsset.data,provider:sourceVisualAsset.provider||"character-visual"} : fallbackSourceImage;
  const media=await generateVideo(lockedPrompt,request.duration,request.aspectRatio,sourceImage);
- const postProduction=buildScenePostProductionManifest({prompt:request.prompt,duration:request.duration,style:request.style||identityOf(character)?.visualStyle||"cinematic"});
+ const postProduction=buildScenePostProductionManifest({prompt:request.prompt,duration:request.duration,style:request.style||character?.identity_json?.visualStyle||character?.identity?.visualStyle||"cinematic"});
  const assetId=await saveCharacterVideoAsset(db,accountId,character,request,media,verification,sourceVisualAsset?.asset_id||null);
  return {media,character,request,verification,sourceVisualAsset,assetId,lockedPrompt,postProduction};
 }

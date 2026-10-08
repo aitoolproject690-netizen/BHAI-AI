@@ -231,10 +231,11 @@ async function executeHealth(job){
 
 async function executeDeploy(job){
   const base=String(process.env.RENDER_EXTERNAL_URL||process.env.BHAI_PUBLIC_URL||"").replace(/\/$/,"")||`http://127.0.0.1:${Number(process.env.PORT)||10000}`;
-  return requestJson(base+"/api/deploy",{
+  const result=await requestJson(base+"/api/deploy",{
     method:"POST",headers:{"Content-Type":"application/json",...internalHeaders(job.owner)},
     body:JSON.stringify({serviceId:job.payload?.serviceId,commit:String(job.payload?.commit||""),reason:String(job.payload?.reason||"BHAI X queued deployment"),doIt:true})
   },4*60*1000);
+  return {...result,healthVerified:result?.ok===true&&result?.status==="complete"};
 }
 
 async function githubJson(url,options={}){

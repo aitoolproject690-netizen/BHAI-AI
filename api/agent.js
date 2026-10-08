@@ -834,7 +834,7 @@ if(localCodingRequest){
    task:latestText,
    system:"You are BHAI X, a practical coding assistant. For standalone code questions, answer directly with the corrected code and a brief explanation. Do not claim GitHub, repository, build, deploy, or file changes unless they were actually performed.",
    messages:[{role:"user",text:latestText}],
-   preferred:"core",
+   preferred:"",
    role:"coding",
    fallback:true
   });

@@ -16,7 +16,7 @@ export function selectSkillsForTask(taskText=""){
  if(/image|photo|picture|draw|generate/.test(text))add(SKILLS.IMAGE);
  if(/apk|android|build app|compile/.test(text))add(SKILLS.BUILD);
  if(/schedule|remind|every day|automate/.test(text))add(SKILLS.AUTOMATION);
- return skills.length?skills:[SKILLS.CODING];
+ return skills.length?skills:[SKILLS.GENERAL];
 }
 export function selectSkillForTask(taskText=""){return selectSkillsForTask(taskText)[0];}
 export function getSkillPromptContext(skillNames){

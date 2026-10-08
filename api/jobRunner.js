@@ -77,9 +77,17 @@ function appendEvent(job,event){
   return next;
 }
 
-function buildCheckpoint(job,result=null,{message="",progress=null,phase=null,tool=null}={}){
+function buildStepPlan(job){
+  const tools=Array.isArray(job.payload?.brainPlan?.tools)?job.payload.brainPlan.tools:[];
+  return tools.map((tool,index)=>({index,tool:String(tool).slice(0,120),status:index===0?"running":"planned",startedAt:index===0?now():null,completedAt:null}));
+}
+
+function buildCheckpoint(job,result=null,{message="",progress=null,phase=null,tool=null,complete=false}={}){
   const activity=Array.isArray(result?.activity)?result.activity.at(-1):null;
-  return {phase:String(phase||activity?.state||job.type||"execution").slice(0,80),tool:String(tool||activity?.tool||job.type||"executor").slice(0,120),progress:Math.min(95,Math.max(0,Number(progress??job.progress)||0)),message:String(message||activity?.details||"Execution checkpoint").slice(0,600),at:now(),attempt:Number(job.attempts||0),proofRequired:Boolean(job.type==="mission"||job.type==="agent"||job.type==="build"||job.type==="deploy")};
+  const steps=Array.isArray(job.checkpoint?.steps)?job.checkpoint.steps:buildStepPlan(job);
+  const activeTool=String(tool||activity?.tool||steps.find(x=>x.status==="running")?.tool||job.type||"executor").slice(0,120);
+  const nextSteps=steps.map(step=>step.tool===activeTool?{...step,status:complete?"completed":"running",startedAt:step.startedAt||now(),completedAt:complete?now():null}:step);
+  return {phase:String(phase||activity?.state||job.type||"execution").slice(0,80),tool:activeTool,progress:Math.min(95,Math.max(0,Number(progress??job.progress)||0)),message:String(message||activity?.details||"Execution checkpoint").slice(0,600),at:now(),attempt:Number(job.attempts||0),proofRequired:Boolean(job.type==="mission"||job.type==="agent"||job.type==="build"||job.type==="deploy"),stepIndex:Math.max(0,nextSteps.findIndex(x=>x.status==="running")),steps:nextSteps};
 }
 
 function compactResult(result){
@@ -336,7 +344,7 @@ async function processJob(initial){
   const report=async(progress,message,meta={})=>{
     const fresh=await readJob(job.id,job.owner);
     if(!fresh||fresh.status==="cancelled")return;
-    job={...fresh,progress:Math.min(95,Math.max(0,Number(progress)||0)),checkpoint:buildCheckpoint(fresh,null,{progress,message,phase:meta.phase,tool:meta.tool}),leaseUntil:new Date(Date.now()+DEFAULT_LEASE_SECONDS*1000).toISOString(),events:appendEvent(fresh,{state:"running",progress:Math.min(95,Math.max(0,Number(progress)||0)),message,checkpoint:meta.phase||null})};
+    job={...fresh,progress:Math.min(95,Math.max(0,Number(progress)||0)),checkpoint:buildCheckpoint(fresh,null,{progress,message,phase:meta.phase||"execution",tool:meta.tool||fresh.type}),leaseUntil:new Date(Date.now()+DEFAULT_LEASE_SECONDS*1000).toISOString(),events:appendEvent(fresh,{state:"running",progress:Math.min(95,Math.max(0,Number(progress)||0)),message,checkpoint:meta.phase||null})};
     await writeJob(job);
   };
   try{
@@ -348,7 +356,7 @@ async function processJob(initial){
     await writeJob(job);
     const verification=verifyJobResult(job.type,result);
     if(verification.ok){
-      job={...job,status:"completed",progress:100,checkpoint:{...buildCheckpoint(job,result,{progress:100,message:verification.reason,phase:"proof",tool:"completion-proof"}),proof:verification.reason},leaseUntil:null,finishedAt:now(),verificationSummary:verification.reason,events:appendEvent(job,{state:"completed",progress:100,message:verification.reason})};
+      job={...job,status:"completed",progress:100,checkpoint:{...buildCheckpoint(job,result,{progress:100,message:verification.reason,phase:"proof",tool:"completion-proof",complete:true}),proof:verification.reason},leaseUntil:null,finishedAt:now(),verificationSummary:verification.reason,events:appendEvent(job,{state:"completed",progress:100,message:verification.reason})};
       await writeJob(job);
       await recordHistory(job);
     }else{

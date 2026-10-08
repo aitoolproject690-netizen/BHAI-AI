@@ -154,7 +154,15 @@ async function claimJobs(){
   const db=await getDb();
   if(!db||active>=MAX_CONCURRENCY)return [];
   const limit=Math.max(1,MAX_CONCURRENCY-active);
-  const client=await db.connect();
+  // api/db.js exposes a connected pg Client, not a Pool. Use a dedicated
+  // short-lived transaction client here instead of calling connect() twice.
+  const {Client}=await import("pg");
+  const client=new Client({
+    connectionString:String(process.env.DATABASE_URL||""),
+    ssl:{rejectUnauthorized:false},
+    connectionTimeoutMillis:5000
+  });
+  await client.connect();
   try{
     await client.query("BEGIN");
     const q=await client.query(`SELECT id,data FROM bhai_jobs
@@ -185,7 +193,7 @@ async function claimJobs(){
   }catch(e){
     await client.query("ROLLBACK").catch(()=>{});
     throw e;
-  }finally{client.release();}
+  }finally{await client.end().catch(()=>{});}
 }
 
 async function requestJson(url,options={},timeoutMs=600000){

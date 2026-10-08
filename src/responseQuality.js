@@ -10,6 +10,7 @@ const CURRENT_QUESTION_TASK=/(?:\?|\b(?:is\s+bar|iss\s+bar|is\s+baar|iss\s+baar|
 const WORD_ONLY=/^[\p{L}\p{N}_-]{1,48}$/u;
 const REPEATED_PUNCT=/[A-Za-z\p{L}\p{N}]{3,}[\/\\|_~]{3,}/u;
 const STANDALONE_FRAGMENT=/^(?:from|the|and|or|of|to|a|an|is|are|was|were|be|been|being)$/i;
+const NON_ANSWER_FRAGMENT=/^(?:from|pathlib|b|actly|uge|essors|rylic|undefined|null|nan|object|function|error|failed|failure|none|n\/a)$/i;
 const CONVERSATIONAL_TASK=/\b(?:hello|hi|hey|namaste|salam|kaise ho|kya haal|kya scene|bas|aise hi|waise hi|test|check|reply|jawab|response|baat|sun bhai|bhai sun|mazak|mazaak|masti|timepass|random|sirf|just)\b/i;
 const ACCEPTABLE_SHORT_REPLIES=new Set(["yes","no","haan","han","nahi","nahin","ok","okay","theek","thik","badhiya","mast","hello","hi","hey","thanks","thank","done"]);
 
@@ -23,6 +24,7 @@ function isLikelyOneTokenNonAnswer(value,task){
   const taskText=String(task??"").trim();
   if(!taskText) return false;
   if(EXPLANATORY_TASK.test(taskText)) return true;
+  if(NON_ANSWER_FRAGMENT.test(value)) return true;
   const wordCount=taskText.split(/\s+/).filter(Boolean).length;
   const currentContext=CURRENT_CONTEXT_TASK.test(taskText) && CURRENT_QUESTION_TASK.test(taskText);
   if(currentContext && wordCount>=5 && !isMathLikeTask(taskText)) return true;

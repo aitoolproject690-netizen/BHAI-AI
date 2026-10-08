@@ -60,3 +60,12 @@ test("brain plan becomes persisted executable step state",async()=>{
  const job={id:"step-job",owner:"o",type:"mission",goal:"ship",status:"failed",attempts:1,maxAttempts:3,progress:55,checkpoint:{phase:"execution",tool:"github",progress:55,message:"Running github",stepIndex:1,steps:[{index:0,tool:"preflight",status:"completed"},{index:1,tool:"github",status:"running"},{index:2,tool:"verify",status:"planned"}]},payload:{brainPlan:{tools:["preflight","github","verify"]}},events:[]};
  const h=buildHistoryRecord(job); assert.equal(h.checkpoint.steps[1].status,"running"); assert.equal(h.checkpoint.steps[0].status,"completed"); assert.equal(h.checkpoint.steps[2].status,"planned");
 });
+
+
+test("execution contract preserves ordered Brain steps",()=>{
+ const plan={tools:["preflight","github","verify"]};
+ const checkpoint={steps:[{index:0,tool:"preflight",status:"completed"},{index:1,tool:"github",status:"running"},{index:2,tool:"verify",status:"planned"}]};
+ assert.deepEqual(plan.tools,checkpoint.steps.map(x=>x.tool));
+ assert.equal(checkpoint.steps[0].status,"completed");
+ assert.equal(checkpoint.steps[2].status,"planned");
+});

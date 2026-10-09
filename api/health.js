@@ -4,6 +4,7 @@ import { rendererSupports } from "../src/videoRenderer.js";
 import { youtubeConfigured } from "./youtube.js";
 import { buildBrainPlan } from "./brainOrchestrator.js";
 import { jobRunnerStatus } from "./jobRunner.js";
+import { mediaQuotaSummary } from "../src/mediaUsagePolicy.js";
 
 function runBrainSelfCheck(){
   const autonomous=buildBrainPlan({task:"story bana kar final video YouTube ke liye ready karo",messages:[]});
@@ -105,6 +106,7 @@ export default async function handler(req,res){
     conversationRouting,
     brainRouting,
     videoRenderer,youtubePublisher,jobRunner,characterMedia,
+    mediaProviders:{image:process.env.BHAI_IMAGE_URL?"self-hosted":"provider-fallback",video:process.env.BHAI_VIDEO_URL?"self-hosted":"provider-fallback",selfHostedImageConfigured:Boolean(process.env.BHAI_IMAGE_URL),selfHostedVideoConfigured:Boolean(process.env.BHAI_VIDEO_URL),quota:mediaQuotaSummary()},
     deployment:{verified,commit,branch,url,status:verified?"live":"unknown"},
     time:new Date().toISOString()
   });

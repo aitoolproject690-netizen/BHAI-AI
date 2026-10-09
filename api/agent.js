@@ -21,6 +21,8 @@ import {normalizeScenePostRequest,detectScenePostIntent,buildScenePostProduction
 import {normalizeSceneClip,buildEditTimeline,verifyEditTimeline,isLikelyEditRequest} from "../src/sceneEditorEngine.js";
 import {renderTimeline,renderShortsFromVideo,rendererSupports} from "../src/videoRenderer.js";
 import {buildImagePackPrompts,buildShortsPlan} from "../src/mediaProductionEngine.js";
+import {generateSelfHostedImage,generateSelfHostedVideo} from "../src/selfHostedMediaProvider.js";
+import {mediaLimitFor,mediaQuotaSummary} from "../src/mediaUsagePolicy.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {solveSimpleTime} from "../src/simpleReasoning.js";
 import {classifyUserRequest} from "../src/requestRouter.js";
@@ -169,6 +171,10 @@ async function generateImage(prompt,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
  const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;
  const height=aspectRatio==="9:16"?1365:aspectRatio==="1:1"?768:576;
+ const selfHostedEndpoint=String(process.env.BHAI_IMAGE_URL||"").trim();
+ if(selfHostedEndpoint){
+  return generateSelfHostedImage({prompt,aspectRatio,width,height},{endpoint:selfHostedEndpoint,apiKey:process.env.BHAI_IMAGE_API_KEY,timeoutMs:180000});
+ }
  const errors=[];
  const maxBytes=12*1024*1024;
  const findImageUrl=(value,depth=0)=>{
@@ -281,12 +287,15 @@ async function generateImage(prompt,aspectRatio="16:9"){
 async function ensureUsageTable(db){
  await db.query("CREATE TABLE IF NOT EXISTS bhai_media_usage (account_id TEXT NOT NULL, usage_date DATE NOT NULL, images INTEGER NOT NULL DEFAULT 0, videos INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(account_id,usage_date))");
 }
-async function reserveMedia(db,accountId,type,limit){
+async function reserveMedia(db,accountId,type,requestedLimit){
  await ensureUsageTable(db);
  const col=type==="video"?"videos":"images";
+ const limit=mediaLimitFor(type,process.env,requestedLimit);
  await db.query("INSERT INTO bhai_media_usage(account_id,usage_date) VALUES($1,(NOW() AT TIME ZONE 'Asia/Kolkata')::date) ON CONFLICT(account_id,usage_date) DO NOTHING",[accountId]);
- const q=await db.query("UPDATE bhai_media_usage SET "+col+"="+col+"+1 WHERE account_id=$1 AND usage_date=(NOW() AT TIME ZONE 'Asia/Kolkata')::date AND "+col+"<$2 RETURNING "+col,[accountId,limit]);
- if(!q.rows[0]) throw new Error(type==="video"?"Daily video limit reached (3/3). Try again after 12:00 AM IST.":"Daily image limit reached (10/10). Try again after 12:00 AM IST.");
+ const q=limit==null
+  ? await db.query("UPDATE bhai_media_usage SET "+col+"="+col+"+1 WHERE account_id=$1 AND usage_date=(NOW() AT TIME ZONE 'Asia/Kolkata')::date RETURNING "+col,[accountId])
+  : await db.query("UPDATE bhai_media_usage SET "+col+"="+col+"+1 WHERE account_id=$1 AND usage_date=(NOW() AT TIME ZONE 'Asia/Kolkata')::date AND "+col+"<$2 RETURNING "+col,[accountId,limit]);
+ if(!q.rows[0]) throw new Error(type==="video"?"Daily video limit reached ("+limit+"/"+limit+"). Try again after 12:00 AM IST.":"Daily image limit reached ("+limit+"/"+limit+"). Try again after 12:00 AM IST.");
  return q.rows[0][col];
 }
 async function releaseMedia(db,accountId,type){
@@ -348,7 +357,7 @@ async function getMediaUsage(db,accountId){
  await ensureUsageTable(db);
  const q=await db.query("SELECT images,videos FROM bhai_media_usage WHERE account_id=$1 AND usage_date=(NOW() AT TIME ZONE 'Asia/Kolkata')::date",[accountId]);
  const x=q.rows[0]||{images:0,videos:0};
- return {images:Number(x.images||0),videos:Number(x.videos||0),imageLimit:10,videoLimit:3};
+ return {images:Number(x.images||0),videos:Number(x.videos||0),...mediaQuotaSummary(process.env)};
 }
 
 // CI verification marker: hardened free video fallback
@@ -403,6 +412,10 @@ async function generateCharacterVideo(db,accountId,prompt,duration=5,aspectRatio
 async function generateVideo(prompt,duration=5,aspectRatio="16:9",sourceImage=null){
  const timeout=(ms)=>AbortSignal.timeout(ms);
  const seconds=Math.min(5,Math.max(1,Number(duration)||5));
+ const selfHostedEndpoint=String(process.env.BHAI_VIDEO_URL||"").trim();
+ if(selfHostedEndpoint){
+  return generateSelfHostedVideo({prompt,durationSeconds:seconds,aspectRatio,sourceImage},{endpoint:selfHostedEndpoint,apiKey:process.env.BHAI_VIDEO_API_KEY,timeoutMs:360000});
+ }
  const errors=[];
  const maxBytes=20*1024*1024;
  const downloadVideo=async(value)=>{

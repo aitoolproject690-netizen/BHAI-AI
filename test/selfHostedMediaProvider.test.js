@@ -57,3 +57,44 @@ test("self-hosted endpoints reject public plain HTTP and malformed media", async
   await assert.rejects(generateSelfHostedSpeech({script:"hello",speakers:[]},{endpoint:"http://tts.example/run",fetchImpl:async()=>{throw new Error("must not call");}}),/must use HTTPS/);
   await assert.rejects(generateSelfHostedLipSync({videoData:"bm90bXA0",audioData:fakeWav().toString("base64")},{endpoint:"https://media.example/run",fetchImpl:async()=>{throw new Error("must not call");}}),/verified MP4 container/);
 });
+
+
+function fakePngForSelfHostedTests() {
+  const b=Buffer.alloc(32);
+  Buffer.from([137,80,78,71,13,10,26,10]).copy(b,0);
+  b.writeUInt32BE(13,8); b.write("IHDR",12,"ascii"); b.writeUInt32BE(1,16); b.writeUInt32BE(1,20);
+  return b;
+}
+
+test("self-hosted image endpoint sends prompt and validates image bytes", async () => {
+  const { generateSelfHostedImage } = await import("../src/selfHostedMediaProvider.js");
+  const png=fakePngForSelfHostedTests(); let call;
+  const result=await generateSelfHostedImage({prompt:"Aarav 3D anime",aspectRatio:"16:9",width:1024,height:576},{
+    endpoint:"https://media.example/v1/image",apiKey:"local-secret",
+    fetchImpl:async(url,options)=>{call={url:String(url),options};return {ok:true,status:200,json:async()=>({mimeType:"image/png",data:png.toString("base64"),provider:"local-sd"})};}
+  });
+  assert.equal(call.url,"https://media.example/v1/image");
+  assert.equal(call.options.headers.authorization,"Bearer local-secret");
+  assert.equal(JSON.parse(call.options.body).prompt,"Aarav 3D anime");
+  assert.equal(result.provider,"local-sd");
+  assert.equal(result.verification.ok,true);
+});
+
+test("self-hosted video endpoint sends image-conditioned request and verifies MP4", async () => {
+  const { generateSelfHostedVideo } = await import("../src/selfHostedMediaProvider.js");
+  const mp4=fakeMp4(); const png=fakePngForSelfHostedTests(); let call;
+  const result=await generateSelfHostedVideo({prompt:"Aarav waves",durationSeconds:3,aspectRatio:"16:9",sourceImage:{mimeType:"image/png",data:png.toString("base64")}},{
+    endpoint:"https://media.example/v1/video",apiKey:"local-secret",
+    fetchImpl:async(url,options)=>{call={url:String(url),options};return {ok:true,status:200,json:async()=>({mimeType:"video/mp4",data:mp4.toString("base64"),duration:3,provider:"local-video"})};}
+  });
+  const request=JSON.parse(call.options.body);
+  assert.equal(request.sourceImageData,png.toString("base64"));
+  assert.equal(result.provider,"local-video");
+  assert.equal(result.verification.containerValid,true);
+});
+
+test("self-hosted image rejects non-HTTPS public endpoints and mismatched bytes", async () => {
+  const { generateSelfHostedImage } = await import("../src/selfHostedMediaProvider.js");
+  await assert.rejects(generateSelfHostedImage({prompt:"test"},{endpoint:"http://media.example/image",fetchImpl:async()=>{throw new Error("must not call");}}),/must use HTTPS/);
+  await assert.rejects(generateSelfHostedImage({prompt:"test"},{endpoint:"https://media.example/image",fetchImpl:async()=>({ok:true,status:200,json:async()=>({mimeType:"image/png",data:fakeMp4().toString("base64")})})}),/signature\/MIME/);
+});

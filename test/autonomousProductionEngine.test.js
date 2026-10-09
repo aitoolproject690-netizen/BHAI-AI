@@ -20,4 +20,12 @@ test("autonomous request normalizes a bounded render plan",()=>{
  assert.equal(r.aspectRatio,"9:16");
  assert.equal(r.privacy,"unlisted");
 });
-\ntest("autonomous plan refuses DONE when generated voice or pixel lip-sync proof is missing",()=>{\n const p=buildAutonomousPlan({prompt:"A story bana kar YouTube pe upload karo"});\n const evidence={story:true,characters:true,camera:true,visuals:true,videos:true,post:true,voice:true,lipSync:false,audio:true,render:true,youtubePackage:true,shorts:true,youtube:false};\n const proof=productionCompletionProof({plan:p,evidence,finalVideo:{rendered:true,verified:true},youTube:null});\n assert.equal(proof.ok,false);\n assert.ok(proof.failures.includes("lipSync"));\n});\n
+
+
+test("autonomous plan refuses DONE when generated voice or pixel lip-sync proof is missing",()=>{
+ const p=buildAutonomousPlan({prompt:"A story bana kar YouTube pe upload karo"});
+ const evidence={story:true,characters:true,camera:true,visuals:true,videos:true,post:true,voice:true,lipSync:false,audio:true,render:true,youtubePackage:true,shorts:true,youtube:false};
+ const proof=productionCompletionProof({plan:p,evidence,finalVideo:{rendered:true,verified:true},youTube:null});
+ assert.equal(proof.ok,false);
+ assert.ok(proof.failures.includes("lipSync"));
+});

@@ -25,6 +25,36 @@ function assertWav(bytes) {
   }
 }
 
+function fitWavDuration(bytes, durationSeconds) {
+  const target = Number(durationSeconds);
+  if (!Number.isFinite(target) || target <= 0) return bytes;
+  if (target > 30) throw new Error("Lip-sync scene duration exceeds the 30 second per-scene limit.");
+  const sampleRate = bytes.readUInt32LE(24);
+  const channels = bytes.readUInt16LE(22);
+  const bits = bytes.readUInt16LE(34);
+  const format = bytes.readUInt16LE(20);
+  const dataSize = bytes.readUInt32LE(40);
+  if (format !== 1 || bits !== 16 || !sampleRate || !channels || bytes.length < 44) {
+    throw new Error("Lip-sync audio must use verified 16-bit PCM WAV audio.");
+  }
+  const pcm = bytes.subarray(44, Math.min(bytes.length, 44 + dataSize));
+  const bytesPerSecond = sampleRate * channels * (bits / 8);
+  const targetBytes = Math.max(2, Math.floor(target * bytesPerSecond));
+  const alignedTarget = targetBytes - (targetBytes % (channels * (bits / 8)));
+  const fitted = pcm.length > alignedTarget
+    ? pcm.subarray(0, alignedTarget)
+    : Buffer.concat([pcm, Buffer.alloc(alignedTarget - pcm.length)]);
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0); header.writeUInt32LE(36 + fitted.length, 4);
+  header.write("WAVE", 8); header.write("fmt ", 12); header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(bytesPerSecond, 28);
+  header.writeUInt16LE(channels * (bits / 8), 32); header.writeUInt16LE(bits, 34);
+  header.write("data", 36); header.writeUInt32LE(fitted.length, 40);
+  return Buffer.concat([header, fitted]);
+}
+
 async function parseJson(response) {
   return await response.json().catch(() => ({}));
 }
@@ -35,9 +65,10 @@ export async function generateCharacterLipSync(input = {}, options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== "function") throw new Error("Fetch is unavailable for lip-sync.");
   const videoBytes = decodeMedia(input.videoData, "video");
-  const audioBytes = decodeMedia(input.audioData, "audio");
+  let audioBytes = decodeMedia(input.audioData, "audio");
   assertMp4(videoBytes, "Lip-sync source video");
   assertWav(audioBytes);
+  if (Number(input.durationSeconds) > 0) audioBytes = fitWavDuration(audioBytes, input.durationSeconds);
   const model = clean(options.model || process.env.SYNC_LIPSYNC_MODEL || DEFAULT_CHARACTER_LIPSYNC_MODEL, 80);
   const form = new FormData();
   form.set("model", model);

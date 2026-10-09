@@ -1,4 +1,4 @@
-export const PRODUCTION_CHECKPOINT_SCHEMA_VERSION="2.1";
+export const PRODUCTION_CHECKPOINT_SCHEMA_VERSION="2.2";
 
 const clean=(v,n=160)=>String(v??"").trim().slice(0,n);
 
@@ -38,6 +38,8 @@ export function buildProductionCheckpoint({
       videos:Boolean(evidence?.videos),
       post:Boolean(evidence?.post),
       audio:Boolean(evidence?.audio),
+      voice:Boolean(evidence?.voice),
+      lipSync:Boolean(evidence?.lipSync),
       camera:Boolean(evidence?.camera),
       render:Boolean(evidence?.render),
       youtubePackage:Boolean(evidence?.youtubePackage),
@@ -59,6 +61,9 @@ export function buildProductionCheckpoint({
       index:Number.isFinite(Number(s?.index))?Number(s.index):0,
       visualAssetId:s?.visualAssetId||null,
       videoAssetId:s?.videoAssetId||null,
+      voiceAssetId:s?.voiceAssetId||null,
+      voiceVerified:Boolean(s?.voiceVerified),
+      lipSyncManifest:s?.lipSyncManifest||null,
       postProduction:s?.postProduction||null,
       cameraDirection:s?.cameraDirection||"",
       durationSeconds:Number(s?.durationSeconds||0),
@@ -89,7 +94,7 @@ export function buildProductionCheckpoint({
 }
 
 export function nextProductionResumeStep(checkpoint){
-  const ids=["story","characters","camera","visuals","videos","post","audio","render","youtubePackage","shorts","youtube"];
+  const ids=["story","characters","camera","visuals","videos","post","voice","lipSync","audio","render","youtubePackage","shorts","youtube"];
   const done=new Set((checkpoint?.completedStepIds||[]).map(String));
   return ids.find(id=>!done.has(id)&&checkpoint?.plan?.steps?.find(s=>s.id===id)?.required!==false)||null;
 }

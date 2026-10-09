@@ -386,7 +386,7 @@ async function runProduction(account,rawInput){
       speechAsset={asset_id:voiceAssetId,mime_type:generatedSpeech.mimeType,data:generatedSpeech.data,provider:generatedSpeech.provider,verification:generatedSpeech.verification,text_hash:generatedSpeech.textHash,duration:generatedSpeech.duration};
      }else voiceAssetId=speechAsset.asset_id;
      const voiceDuration=Number(speechAsset.duration||0);
-     voiceVerified=Boolean(speechAsset.data&&speechAsset.verification?.ok&&/^audio\\/wav$/i.test(String(speechAsset.mime_type||speechAsset.mimeType||"audio/wav"))&&(!voiceDuration||voiceDuration<=durationSeconds+0.5));
+     voiceVerified=Boolean(speechAsset.data&&speechAsset.verification?.ok&&String(speechAsset.mime_type||speechAsset.mimeType||"audio/wav").toLowerCase()==="audio/wav"&&(!voiceDuration||voiceDuration<=durationSeconds+0.5));
      if(!voiceVerified)throw new Error("Generated speech did not pass WAV/duration verification for this scene.");
      activity.push({tool:"character-voice-tts",state:"done",details:"Actual server-generated speech WAV saved and verified for scene "+(i+1)+"; stable per-character voice profiles applied."});
     }catch(e){
@@ -552,6 +552,8 @@ async function runProduction(account,rawInput){
    timeline,rendered:rendered?{media:rendered.media,thumbnail:rendered.thumbnail,youtube:rendered.youtube,verification:rendered.verification,stats:rendered.stats,applied:rendered.applied}:null,
    youtube,youtubeAuthUrl,
    characterBible,cameraPlan,audioMaster,youtubePackage,shortsPlan,
+   voiceVerified:evidence.voice,
+   lipSyncVerified:evidence.lipSync,
    thumbnails:rendered?.thumbnails||[],
    mediaSuite:rendered?.mediaSuite||null,
    images:rendered?[{mimeType:rendered.media.mimeType,data:rendered.media.data,video:true,duration:rendered.media.duration,name:rendered.youtube.filename}]:[],

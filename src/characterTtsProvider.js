@@ -132,7 +132,7 @@ export function pcmToWavBase64(value, sampleRate = 24000, channels = 1) {
 }
 
 export async function generateCharacterSpeech(request = {}, options = {}) {
-  const apiKey = clean(options.apiKey ?? process.env.GEMINI_API_KEY ?? "", 1000);
+  const apiKey = clean(options.apiKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "", 1000);
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured; real server-side voice generation is unavailable.");
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== "function") throw new Error("Fetch is unavailable for voice generation.");

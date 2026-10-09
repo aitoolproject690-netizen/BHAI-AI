@@ -62,3 +62,31 @@ jobs:
             echo "Production medical smoke test failed: exact commit did not become live with all health self-checks passing."
             exit 1
           fi
+      - name: Real Gemini TTS + lip-sync provider smoke (when owner smoke secret exists)
+        env:
+          BHAI_E2E_SMOKE_KEY: ${{ secrets.BHAI_E2E_SMOKE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${BHAI_E2E_SMOKE_KEY:-}" ]; then
+            echo "Real media smoke skipped: BHAI_E2E_SMOKE_KEY GitHub secret is not configured."
+            exit 0
+          fi
+          code="$(curl --silent --show-error --max-time 360 -o /tmp/media-smoke.json -w '%{http_code}' \
+            -X POST https://bhai-ai-vpna.onrender.com/api/media-smoke \
+            -H "x-bhai-e2e-smoke-key: ${BHAI_E2E_SMOKE_KEY}" \
+            -H 'content-type: application/json' --data '{}')"
+          cat /tmp/media-smoke.json
+          test "$code" = "200"
+          node - <<'NODE'
+          const fs = require("fs");
+          const r = JSON.parse(fs.readFileSync("/tmp/media-smoke.json", "utf8"));
+          if (!r.ok || r.voice?.realProviderResponse !== true || r.voice?.wavVerified !== true ||
+              r.lipSync?.status !== "COMPLETED" || r.lipSync?.mp4Verified !== true) {
+            console.error("Real media E2E proof is incomplete.");
+            process.exit(1);
+          }
+          console.log("REAL_TTS_E2E=PASS");
+          console.log("PROVIDER_LIPSYNC_MP4_E2E=PASS");
+          console.log("INDEPENDENT_PIXEL_QUALITY_SCORE=" + String(r.lipSync?.pixelLipSyncVerified === true));
+          NODE

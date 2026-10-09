@@ -151,3 +151,65 @@ export async function generateSelfHostedLipSync(input = {}, options = {}) {
     }
   };
 }
+
+
+const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+
+function validateImage(bytes, mimeType, label = "Self-hosted image output") {
+  const mime = String(mimeType || "").toLowerCase().split(";")[0].trim();
+  const png = bytes.length >= 24 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+  const jpeg = bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[bytes.length-2] === 0xff && bytes[bytes.length-1] === 0xd9;
+  const webp = bytes.length >= 16 && bytes.subarray(0,4).toString("ascii") === "RIFF" && bytes.subarray(8,12).toString("ascii") === "WEBP";
+  if (!((mime === "image/png" && png) || (mime === "image/jpeg" && jpeg) || (mime === "image/webp" && webp))) {
+    throw new Error(label + " has a mismatched or unsupported image signature/MIME type.");
+  }
+  return { format:mime.slice(6), bytes:bytes.length };
+}
+
+/** Self-hosted image contract: POST {schemaVersion,prompt,aspectRatio,width,height};
+ * return {mimeType:"image/png|image/jpeg|image/webp",data:base64}. */
+export async function generateSelfHostedImage(input = {}, options = {}) {
+  const endpoint = endpointOf(options.endpoint ?? process.env.BHAI_IMAGE_URL ?? "", "Self-hosted image");
+  const aspectRatio = /^(?:9:16|4:5|1:1|16:9)$/.test(String(input.aspectRatio || "")) ? String(input.aspectRatio) : "16:9";
+  const body = await postJson(endpoint, {
+    schemaVersion:"1.0", prompt:clean(input.prompt,9000), aspectRatio,
+    width:Number(input.width)>0?Math.round(Number(input.width)):1024,
+    height:Number(input.height)>0?Math.round(Number(input.height)):576
+  }, { ...options, apiKey:options.apiKey ?? process.env.BHAI_IMAGE_API_KEY }, "Self-hosted image", 180000);
+  const mimeType = clean(body.mimeType || body.mime_type || "",100).split(";")[0].toLowerCase();
+  if (!["image/png","image/jpeg","image/webp"].includes(mimeType)) throw new Error("Self-hosted image must return image/png, image/jpeg, or image/webp.");
+  const bytes = decodeBase64(body.data || body.imageBase64 || body.image_base64, "Self-hosted image output");
+  if(bytes.length>MAX_IMAGE_BYTES) throw new Error("Self-hosted image output exceeds the 12 MB media limit.");
+  const image = validateImage(bytes,mimeType);
+  return {mimeType,data:bytes.toString("base64"),provider:clean(body.provider||"self-hosted-image",120),
+    width:Number(body.width)>0?Number(body.width):null,height:Number(body.height)>0?Number(body.height):null,
+    seed:body.seed??null,verification:{ok:true,mode:"self-hosted-image-container",...image}};
+}
+
+/** Self-hosted video contract: POST {schemaVersion,prompt,durationSeconds,aspectRatio,sourceImageData,sourceImageMimeType};
+ * return {mimeType:"video/mp4",data:base64,duration?}. */
+export async function generateSelfHostedVideo(input = {}, options = {}) {
+  const endpoint = endpointOf(options.endpoint ?? process.env.BHAI_VIDEO_URL ?? "", "Self-hosted video");
+  const durationSeconds = Math.min(5,Math.max(1,Number(input.durationSeconds ?? input.duration)||5));
+  const aspectRatio = /^(?:9:16|4:5|1:1|16:9)$/.test(String(input.aspectRatio||""))?String(input.aspectRatio):"16:9";
+  const sourceImageData = String(input.sourceImage?.data || input.sourceImageData || "");
+  const sourceImageMimeType = clean(input.sourceImage?.mimeType || input.sourceImageMimeType || "image/png",100);
+  if(sourceImageData) {
+    const imageBytes=decodeBase64(sourceImageData,"Self-hosted video source image");
+    validateImage(imageBytes,sourceImageMimeType,"Self-hosted video source image");
+  }
+  const body = await postJson(endpoint,{
+    schemaVersion:"1.0",prompt:clean(input.prompt,9000),durationSeconds,aspectRatio,
+    sourceImageData:sourceImageData||null,sourceImageMimeType:sourceImageData?sourceImageMimeType:null
+  },{...options,apiKey:options.apiKey??process.env.BHAI_VIDEO_API_KEY},"Self-hosted video",360000);
+  const mimeType=clean(body.mimeType||body.mime_type||"video/mp4",100).split(";")[0].toLowerCase();
+  if(mimeType!=="video/mp4") throw new Error("Self-hosted video must return video/mp4.");
+  const bytes=decodeBase64(body.data||body.videoBase64||body.video_base64,"Self-hosted video output");
+  if(bytes.length>MAX_VIDEO_BYTES) throw new Error("Self-hosted video output exceeds the 20 MB media limit.");
+  validateMp4(bytes);
+  const duration=Number(body.duration)>0?Number(body.duration):durationSeconds;
+  if(Math.abs(duration-durationSeconds)>Math.max(1.5,durationSeconds*0.2)) throw new Error("Self-hosted video output duration differs materially from the requested duration.");
+  return {mimeType,data:bytes.toString("base64"),duration,provider:clean(body.provider||"self-hosted-video",120),
+    verification:{ok:true,mode:"self-hosted-video-mp4",bytes:bytes.length,duration,containerValid:true}};
+}

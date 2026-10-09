@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { generateSelfHostedLipSync } from "./selfHostedMediaProvider.js";
 
 export const CHARACTER_LIPSYNC_SCHEMA_VERSION = "1.0";
 export const DEFAULT_CHARACTER_LIPSYNC_MODEL = "lipsync-2";
@@ -60,6 +61,10 @@ async function parseJson(response) {
 }
 
 export async function generateCharacterLipSync(input = {}, options = {}) {
+  const selfHostedEndpoint = clean(options.endpoint ?? process.env.BHAI_LIPSYNC_URL ?? "", 2000);
+  if (selfHostedEndpoint) {
+    return generateSelfHostedLipSync(input, { ...options, endpoint: selfHostedEndpoint, apiKey: options.apiKey ?? process.env.BHAI_LIPSYNC_API_KEY ?? "" });
+  }
   const apiKey = clean(options.apiKey ?? process.env.SYNC_API_KEY ?? "");
   if (!apiKey) throw new Error("SYNC_API_KEY is not configured; real video lip-sync is unavailable.");
   const fetchImpl = options.fetchImpl || globalThis.fetch;

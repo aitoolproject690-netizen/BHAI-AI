@@ -63,6 +63,8 @@ export function buildProductionCheckpoint({
       videoAssetId:s?.videoAssetId||null,
       voiceAssetId:s?.voiceAssetId||null,
       voiceVerified:Boolean(s?.voiceVerified),
+      lipSyncAssetId:s?.lipSyncAssetId||null,
+      lipSyncVerified:Boolean(s?.lipSyncVerified),
       lipSyncManifest:s?.lipSyncManifest||null,
       postProduction:s?.postProduction||null,
       cameraDirection:s?.cameraDirection||"",

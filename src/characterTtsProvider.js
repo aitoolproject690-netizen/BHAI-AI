@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { generateSelfHostedSpeech } from "./selfHostedMediaProvider.js";
 
 export const CHARACTER_TTS_SCHEMA_VERSION = "1.0";
 export const DEFAULT_CHARACTER_TTS_MODEL = "gemini-2.5-flash-preview-tts";
@@ -132,6 +133,10 @@ export function pcmToWavBase64(value, sampleRate = 24000, channels = 1) {
 }
 
 export async function generateCharacterSpeech(request = {}, options = {}) {
+  const selfHostedEndpoint = clean(options.endpoint ?? process.env.BHAI_TTS_URL ?? "", 2000);
+  if (selfHostedEndpoint) {
+    return generateSelfHostedSpeech(request, { ...options, endpoint: selfHostedEndpoint, apiKey: options.apiKey ?? process.env.BHAI_TTS_API_KEY ?? "" });
+  }
   const apiKey = clean(options.apiKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "", 1000);
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured; real server-side voice generation is unavailable.");
   const fetchImpl = options.fetchImpl || globalThis.fetch;

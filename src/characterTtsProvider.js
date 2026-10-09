@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 export const CHARACTER_TTS_SCHEMA_VERSION = "1.0";
-export const DEFAULT_CHARACTER_TTS_MODEL = "gemini-3.8-flash-tts";
+export const DEFAULT_CHARACTER_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const VOICES = ["Kore", "Puck", "Charon", "Fenrir", "Zephyr", "Aoede", "Leda", "Orus"];
 const clean = (value, max = 5000) => String(value ?? "").trim().slice(0, max);
 const hash = value => crypto.createHash("sha256").update(String(value ?? "")).digest("hex");
@@ -86,10 +86,7 @@ export function buildGeminiTtsPayload(request = {}, model = DEFAULT_CHARACTER_TT
   if (!request.script || !speakers.length) throw new Error("A non-empty voice script and speaker profile are required.");
   const contents = [{
     role: "user",
-    parts: [{
-      text: request.script,
-      speech_metadata: { style: "Speak natural, expressive Hindi dialogue. Keep every character's delivery age-appropriate, clear, emotionally aligned with the scene, and do not add words." }
-    }]
+    parts: [{ text: "Speak natural, expressive Hindi dialogue. Keep each character clear and emotionally aligned with the scene. Do not add words.\n\n" + request.script }]
   }];
   const generationConfig = { responseModalities: ["AUDIO"] };
   if (speakers.length === 1) {

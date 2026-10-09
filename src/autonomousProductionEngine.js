@@ -46,6 +46,8 @@ export function buildAutonomousPlan(input={}){
   {id:"visuals",name:"Character Visuals",lane:"image",required:true,state:"pending"},
   {id:"videos",name:"Character-aware Scene Videos",lane:"video",required:true,state:"pending"},
   {id:"post",name:"VFX + Music + SFX",lane:"post-production",required:true,state:"pending"},
+  {id:"voice",name:"Generated Character Dialogue Audio",lane:"gemini-tts",required:true,state:"pending"},
+  {id:"lipSync",name:"Verified Speech-to-Mouth Synchronization",lane:"lip-sync-verification",required:true,state:"pending"},
   {id:"audio",name:"Audio Master Contract",lane:"audio",required:true,state:"pending"},
   {id:"render",name:"Final MP4 Renderer",lane:"ffmpeg-renderer",required:r.render,state:r.render?"pending":"skipped"},
   {id:"youtubePackage",name:"YouTube Package + Thumbnail Set",lane:"youtube-package",required:true,state:"pending"},

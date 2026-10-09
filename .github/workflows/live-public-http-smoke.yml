@@ -27,13 +27,34 @@ jobs:
           set -euo pipefail
           body=/tmp/bhai-x-health.json
           headers=/tmp/bhai-x-health.headers
-          http_code="$(curl --silent --show-error --location --connect-timeout 15 --max-time 30             --dump-header "$headers" --output "$body" --write-out '%{http_code}' "$URL")"
+          http_code=""
+          for attempt in 1 2 3 4; do
+            echo "Public health attempt $attempt/4"
+            if http_code="$(curl --silent --show-error --location --connect-timeout 15 --max-time 45 \
+              --dump-header "$headers" --output "$body" --write-out '%{http_code}' "$URL")"; then
+              if [ "$http_code" = "200" ] && node -e '
+                const fs = require("fs");
+                try {
+                  const d = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+                  process.exit(d.ok === true && d.service === "BHAI AI" ? 0 : 1);
+                } catch { process.exit(1); }
+              ' "$body"; then
+                break
+              fi
+            else
+              http_code="000"
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              echo "Health endpoint not ready (HTTP $http_code); waiting 10 seconds for Render startup."
+              sleep 10
+            fi
+          done
 
           echo "PUBLIC_HTTP_STATUS=$http_code"
           echo "=== response headers ==="
-          cat "$headers"
+          cat "$headers" 2>/dev/null || true
           echo "=== response body ==="
-          cat "$body"
+          cat "$body" 2>/dev/null || true
 
           test "$http_code" = "200"
 

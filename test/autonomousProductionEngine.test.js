@@ -11,7 +11,7 @@ test("autonomous plan requires proof before DONE",()=>{
  const p=buildAutonomousPlan({prompt:"A story bana kar YouTube pe upload karo"});
  const r=productionCompletionProof({plan:p,evidence:{story:true,characters:true,visuals:true,videos:true,post:true},finalVideo:{rendered:true,verified:true},youTube:null});
  assert.equal(r.ok,false);
- const r2=productionCompletionProof({plan:p,evidence:{story:true,characters:true,camera:true,visuals:true,videos:true,post:true,audio:true,render:true,youtubePackage:true,shorts:true},finalVideo:{rendered:true,verified:true},youTube:{verified:true,url:"https://www.youtube.com/watch?v=abc"}});
+ const r2=productionCompletionProof({plan:p,evidence:{story:true,characters:true,camera:true,visuals:true,videos:true,post:true,voice:true,lipSync:true,audio:true,render:true,youtubePackage:true,shorts:true},finalVideo:{rendered:true,verified:true},youTube:{verified:true,url:"https://www.youtube.com/watch?v=abc"}});
  assert.equal(r2.ok,true);
 });
 test("autonomous request normalizes a bounded render plan",()=>{
@@ -19,4 +19,13 @@ test("autonomous request normalizes a bounded render plan",()=>{
  assert.equal(r.durationSeconds,1800);
  assert.equal(r.aspectRatio,"9:16");
  assert.equal(r.privacy,"unlisted");
+});
+
+
+test("autonomous plan refuses DONE when generated voice or pixel lip-sync proof is missing",()=>{
+ const p=buildAutonomousPlan({prompt:"A story bana kar YouTube pe upload karo"});
+ const evidence={story:true,characters:true,camera:true,visuals:true,videos:true,post:true,voice:true,lipSync:false,audio:true,render:true,youtubePackage:true,shorts:true,youtube:false};
+ const proof=productionCompletionProof({plan:p,evidence,finalVideo:{rendered:true,verified:true},youTube:null});
+ assert.equal(proof.ok,false);
+ assert.ok(proof.failures.includes("lipSync"));
 });

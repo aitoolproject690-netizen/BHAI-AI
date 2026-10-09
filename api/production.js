@@ -1,4 +1,7 @@
 import {requireSession} from "./_utils.js";
+import crypto from "node:crypto";
+import {buildSceneSpeechRequest,generateCharacterSpeech} from "../src/characterTtsProvider.js";
+import {buildLipSyncManifest} from "../src/characterVoiceEngine.js";
 import {getDb} from "./db.js";
 import {generateWithRouter} from "./aiRouter.js";
 import {generateCharacterVisual,generateCharacterVideo,saveMediaAsset,getLatestMediaAsset,reserveMedia,releaseMedia,getMediaUsage} from "./agent.js";
@@ -127,6 +130,40 @@ async function loadCharacterVideoAssetById(db,accountId,assetId){
  }catch{return null;}
 }
 
+async function ensureCharacterSpeechAssetsTable(db){
+ await db.query(`CREATE TABLE IF NOT EXISTS bhai_character_speech_assets (
+  asset_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, scene_id TEXT NOT NULL,
+  text_hash TEXT NOT NULL, mime_type TEXT NOT NULL, data TEXT NOT NULL,
+  provider TEXT NOT NULL, verification JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(account_id,scene_id,text_hash)
+ )`);
+ await db.query("CREATE INDEX IF NOT EXISTS idx_bhai_character_speech_assets_lookup ON bhai_character_speech_assets(account_id,scene_id,created_at DESC)");
+}
+async function loadCharacterSpeechAssetById(db,accountId,assetId){
+ if(!assetId)return null;
+ await ensureCharacterSpeechAssetsTable(db);
+ const q=await db.query("SELECT asset_id,mime_type,data,provider,verification,text_hash FROM bhai_character_speech_assets WHERE account_id=$1 AND asset_id=$2",[accountId,String(assetId)]);
+ return q.rows[0]||null;
+}
+async function findCharacterSpeechAsset(db,accountId,sceneId,textHash){
+ await ensureCharacterSpeechAssetsTable(db);
+ const q=await db.query("SELECT asset_id,mime_type,data,provider,verification,text_hash FROM bhai_character_speech_assets WHERE account_id=$1 AND scene_id=$2 AND text_hash=$3",[accountId,String(sceneId),String(textHash)]);
+ return q.rows[0]||null;
+}
+async function saveCharacterSpeechAsset(db,accountId,sceneId,speech){
+ await ensureCharacterSpeechAssetsTable(db);
+ const hash=crypto.createHash("sha256").update([accountId,sceneId,speech.textHash].join("|")).digest("hex").slice(0,32);
+ const assetId="voice_"+hash;
+ const q=await db.query(`INSERT INTO bhai_character_speech_assets
+  (asset_id,account_id,scene_id,text_hash,mime_type,data,provider,verification)
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+  ON CONFLICT(account_id,scene_id,text_hash) DO UPDATE SET
+   mime_type=EXCLUDED.mime_type,data=EXCLUDED.data,provider=EXCLUDED.provider,verification=EXCLUDED.verification
+  RETURNING asset_id`,
+  [assetId,accountId,String(sceneId),speech.textHash,String(speech.mimeType||"audio/wav"),String(speech.data),String(speech.provider||"character-tts"),JSON.stringify(speech.verification||{})]);
+ return q.rows[0]?.asset_id||assetId;
+}
 function selectScenes(story,maxScenes){
  const scenes=Array.isArray(story?.scenes)?story.scenes:[];
  return scenes.slice(0,Math.min(maxScenes,scenes.length));
@@ -182,7 +219,7 @@ async function runProduction(account,rawInput){
  const plan=previous?.plan?.pipelineId ? previous.plan : freshPlan;
 
  const activity=[];
- const evidence={story:false,characters:false,visuals:false,videos:false,post:false,render:false,youtube:false};
+ const evidence={story:false,characters:false,visuals:false,videos:false,post:false,voice:false,lipSync:false,render:false,youtube:false};
  const completed=new Set(Array.isArray(previous?.completedStepIds)?previous.completedStepIds.map(String):[]);
  let story=previous?.story||null;
  let characterRows=Array.isArray(previous?.characters)?previous.characters.map(c=>({...c})).filter(c=>c?.character_id):[];
@@ -336,7 +373,36 @@ async function runProduction(account,rawInput){
     activity.push({tool:"scene-post-production",state:"done",details:"VFX/Music/SFX manifest verified for scene "+(i+1)+"."});
    }
 
-   state={...state,sceneId,index:i,visualAssetId,videoAssetId,postProduction:post,durationSeconds,verified:true,visualVerified:Boolean(visualAssetId&&visualMedia?.data),videoVerified:Boolean(videoAssetId&&videoMedia?.data),postVerified:true};
+   const speechRequest=buildSceneSpeechRequest(s,characterRows);
+   let voiceAssetId=state.voiceAssetId||null;
+   let speechAsset=voiceAssetId?await loadCharacterSpeechAssetById(db,account.id,voiceAssetId):null;
+   let voiceVerified=false;
+   if(speechRequest){
+    try{
+     if(!speechAsset?.data||speechAsset?.text_hash!==speechRequest.textHash) speechAsset=await findCharacterSpeechAsset(db,account.id,sceneId,speechRequest.textHash);
+     if(!speechAsset?.data){
+      const generatedSpeech=await generateCharacterSpeech(speechRequest);
+      voiceAssetId=await saveCharacterSpeechAsset(db,account.id,sceneId,generatedSpeech);
+      speechAsset={asset_id:voiceAssetId,mime_type:generatedSpeech.mimeType,data:generatedSpeech.data,provider:generatedSpeech.provider,verification:generatedSpeech.verification,text_hash:generatedSpeech.textHash,duration:generatedSpeech.duration};
+     }else voiceAssetId=speechAsset.asset_id;
+     const voiceDuration=Number(speechAsset.duration||0);
+     voiceVerified=Boolean(speechAsset.data&&speechAsset.verification?.ok&&String(speechAsset.mime_type||speechAsset.mimeType||"audio/wav").toLowerCase()==="audio/wav"&&(!voiceDuration||voiceDuration<=durationSeconds+0.5));
+     if(!voiceVerified)throw new Error("Generated speech did not pass WAV/duration verification for this scene.");
+     activity.push({tool:"character-voice-tts",state:"done",details:"Actual server-generated speech WAV saved and verified for scene "+(i+1)+"; stable per-character voice profiles applied."});
+    }catch(e){
+     voiceVerified=false;voiceAssetId=null;speechAsset=null;
+     activity.push({tool:"character-voice-tts",state:"failed",details:String(e?.message||e).slice(0,400)});
+    }
+   }else activity.push({tool:"character-voice-tts",state:"failed",details:"Scene "+(i+1)+" had no usable dialogue/narration/action text."});
+   const lipSyncManifest=speechRequest?{
+    ...buildLipSyncManifest(speechRequest.script,{language:story.language}),
+    durationMs:Math.round(durationSeconds*1000),
+    method:"word-timing-estimate",
+    pixelLipSyncVerified:false
+   }:null;
+   state={...state,sceneId,index:i,visualAssetId,videoAssetId,voiceAssetId:voiceVerified?voiceAssetId:null,
+    voiceVerified,lipSyncManifest,postProduction:post,durationSeconds,verified:true,
+    visualVerified:Boolean(visualAssetId&&visualMedia?.data),videoVerified:Boolean(videoAssetId&&videoMedia?.data),postVerified:true};
    sceneStates=sceneStates.filter(x=>String(x.sceneId)!==sceneId).concat(state);
    evidence.visuals=selectedScenes.every((scene,j)=>Boolean(sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(j+1))))?.visualVerified));
    evidence.videos=selectedScenes.every((scene,j)=>Boolean(sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(j+1))))?.videoVerified));
@@ -344,7 +410,10 @@ async function runProduction(account,rawInput){
    if(evidence.visuals)completed.add("visuals"); else completed.delete("visuals");
    if(evidence.videos)completed.add("videos"); else completed.delete("videos");
    if(evidence.post)completed.add("post"); else completed.delete("post");
-   await persist({currentStep:i+1<selectedScenes.length?"visuals":"render",message:"Scene "+(i+1)+" checkpoint verified."});
+   evidence.voice=selectedScenes.every((scene,j)=>Boolean(sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(j+1))))?.voiceVerified));
+   if(evidence.voice)completed.add("voice"); else completed.delete("voice");
+   evidence.lipSync=false;completed.delete("lipSync");
+   await persist({currentStep:i+1<selectedScenes.length?"visuals":"render",message:"Scene "+(i+1)+" visual/video/audio checkpoint verified."});
   }
 
   const sceneClips=[];
@@ -356,9 +425,18 @@ async function runProduction(account,rawInput){
    const storedVideo=await loadCharacterVideoAssetById(db,account.id,state.videoAssetId);
    if(!storedVideo?.data) await fail(new Error("Scene "+(i+1)+" verified video asset could not be reloaded from storage."),"render");
    const primary=scenePrimaryCharacter(s,characterRows);
+   let voiceAudio=null;
+   if(state.voiceVerified&&state.voiceAssetId){
+    const storedVoice=await loadCharacterSpeechAssetById(db,account.id,state.voiceAssetId);
+    if(storedVoice?.data&&storedVoice.verification?.ok) voiceAudio={mimeType:storedVoice.mime_type,data:storedVoice.data,provider:storedVoice.provider};
+    else {evidence.voice=false;completed.delete("voice");}
+   }
    sceneClips.push({
     sceneId:id,
     videoAssetId:state.videoAssetId,
+    voiceAssetId:state.voiceAssetId,
+    voiceAudio,
+    lipSyncManifest:state.lipSyncManifest||null,
     sourceVideo:{mimeType:storedVideo.mime_type,data:storedVideo.data,provider:storedVideo.provider||"character-video"},
     durationSeconds:Number(state.durationSeconds||5),
     verified:true,
@@ -368,6 +446,10 @@ async function runProduction(account,rawInput){
    });
   }
 
+  evidence.voice=evidence.voice&&sceneClips.every(scene=>Boolean(scene.voiceAudio?.data));
+  if(evidence.voice)completed.add("voice");else completed.delete("voice");
+  evidence.lipSync=false;completed.delete("lipSync");
+  activity.push({tool:"lip-sync-verification",state:"pending",details:"Per-word timing is available, but rendered mouth pixels are not verified against phonemes. The pipeline will not claim true lip-sync without frame-level proof."});
   const timeline=buildEditTimeline({scenes:sceneClips,aspectRatio:request.aspectRatio,fps:30});
   audioMaster=audioMaster||buildAudioMasterContract(timeline.audioMix);
   timeline.audioMix={...timeline.audioMix,...audioMaster};
@@ -470,6 +552,8 @@ async function runProduction(account,rawInput){
    timeline,rendered:rendered?{media:rendered.media,thumbnail:rendered.thumbnail,youtube:rendered.youtube,verification:rendered.verification,stats:rendered.stats,applied:rendered.applied}:null,
    youtube,youtubeAuthUrl,
    characterBible,cameraPlan,audioMaster,youtubePackage,shortsPlan,
+   voiceVerified:evidence.voice,
+   lipSyncVerified:evidence.lipSync,
    thumbnails:rendered?.thumbnails||[],
    mediaSuite:rendered?.mediaSuite||null,
    images:rendered?[{mimeType:rendered.media.mimeType,data:rendered.media.data,video:true,duration:rendered.media.duration,name:rendered.youtube.filename}]:[],

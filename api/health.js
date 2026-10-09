@@ -92,6 +92,7 @@ export default async function handler(req,res){
   const videoRenderer=rendererSupports();
   const jobRunner=jobRunnerStatus();
   const youtubePublisher={configured:youtubeConfigured(),oauthRequired:true};
+  const characterMedia={ttsConfigured:Boolean(process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY),lipSyncConfigured:Boolean(process.env.SYNC_API_KEY),lipSyncModel:String(process.env.SYNC_LIPSYNC_MODEL||"lipsync-2"),endToEndSmokeAvailable:Boolean(process.env.BHAI_E2E_SMOKE_KEY)};
   return res.status(200).json({
     ok:true,
     service:"BHAI AI",
@@ -103,7 +104,7 @@ export default async function handler(req,res){
     medicalSafety,
     conversationRouting,
     brainRouting,
-    videoRenderer,youtubePublisher,jobRunner,
+    videoRenderer,youtubePublisher,jobRunner,characterMedia,
     deployment:{verified,commit,branch,url,status:verified?"live":"unknown"},
     time:new Date().toISOString()
   });

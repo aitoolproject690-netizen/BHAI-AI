@@ -355,7 +355,9 @@ export async function renderTimeline(timeline={},options={}){
         music:"provider-free procedural",
         sfx:"provider-free procedural",
         voice:"scene voice audio when supplied; device-native preview is not server-rendered TTS",
-        lipSync:"timing manifests are preserved but pixel/phoneme lip-sync is not claimed",
+        lipSync:scenes.every(scene=>scene.lipSyncVerified===true)
+          ?"provider-generated synchronized scene video supplied for every scene; independent per-frame phoneme scoring is not included"
+          :"timing manifests are preserved but provider-generated lip-sync is incomplete",
         audioMaster:timeline.audioMix||null
       }
     };

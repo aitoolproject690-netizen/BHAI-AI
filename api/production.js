@@ -1,6 +1,7 @@
 import {requireSession} from "./_utils.js";
 import crypto from "node:crypto";
 import {buildSceneSpeechRequest,generateCharacterSpeech} from "../src/characterTtsProvider.js";
+import {generateCharacterLipSync} from "../src/characterLipSyncProvider.js";
 import {buildLipSyncManifest} from "../src/characterVoiceEngine.js";
 import {getDb} from "./db.js";
 import {generateWithRouter} from "./aiRouter.js";
@@ -162,6 +163,39 @@ async function saveCharacterSpeechAsset(db,accountId,sceneId,speech){
    mime_type=EXCLUDED.mime_type,data=EXCLUDED.data,provider=EXCLUDED.provider,verification=EXCLUDED.verification
   RETURNING asset_id`,
   [assetId,accountId,String(sceneId),speech.textHash,String(speech.mimeType||"audio/wav"),String(speech.data),String(speech.provider||"character-tts"),JSON.stringify(speech.verification||{})]);
+ return q.rows[0]?.asset_id||assetId;
+}
+async function ensureCharacterLipSyncAssetsTable(db){
+ await db.query(`CREATE TABLE IF NOT EXISTS bhai_character_lipsync_assets (
+  asset_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, scene_id TEXT NOT NULL,
+  text_hash TEXT NOT NULL, mime_type TEXT NOT NULL, data TEXT NOT NULL,
+  provider TEXT NOT NULL, verification JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(account_id,scene_id,text_hash)
+ )`);
+ await db.query("CREATE INDEX IF NOT EXISTS idx_bhai_character_lipsync_assets_lookup ON bhai_character_lipsync_assets(account_id,scene_id,created_at DESC)");
+}
+async function loadCharacterLipSyncAssetById(db,accountId,assetId){
+ if(!assetId)return null;
+ await ensureCharacterLipSyncAssetsTable(db);
+ const q=await db.query("SELECT asset_id,mime_type,data,provider,verification,text_hash FROM bhai_character_lipsync_assets WHERE account_id=$1 AND asset_id=$2",[accountId,String(assetId)]);
+ return q.rows[0]||null;
+}
+async function findCharacterLipSyncAsset(db,accountId,sceneId,textHash){
+ await ensureCharacterLipSyncAssetsTable(db);
+ const q=await db.query("SELECT asset_id,mime_type,data,provider,verification,text_hash FROM bhai_character_lipsync_assets WHERE account_id=$1 AND scene_id=$2 AND text_hash=$3",[accountId,String(sceneId),String(textHash)]);
+ return q.rows[0]||null;
+}
+async function saveCharacterLipSyncAsset(db,accountId,sceneId,textHash,media){
+ await ensureCharacterLipSyncAssetsTable(db);
+ const assetId="lipsync_"+crypto.createHash("sha256").update([accountId,sceneId,textHash].join("|")).digest("hex").slice(0,32);
+ const q=await db.query(`INSERT INTO bhai_character_lipsync_assets
+  (asset_id,account_id,scene_id,text_hash,mime_type,data,provider,verification)
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+  ON CONFLICT(account_id,scene_id,text_hash) DO UPDATE SET
+   mime_type=EXCLUDED.mime_type,data=EXCLUDED.data,provider=EXCLUDED.provider,verification=EXCLUDED.verification
+  RETURNING asset_id`,
+  [assetId,accountId,String(sceneId),String(textHash),String(media.mimeType||"video/mp4"),String(media.data),String(media.provider||"sync.so/lipsync-2"),JSON.stringify(media.verification||{})]);
  return q.rows[0]?.asset_id||assetId;
 }
 function selectScenes(story,maxScenes){
@@ -377,6 +411,9 @@ async function runProduction(account,rawInput){
    let voiceAssetId=state.voiceAssetId||null;
    let speechAsset=voiceAssetId?await loadCharacterSpeechAssetById(db,account.id,voiceAssetId):null;
    let voiceVerified=false;
+   let lipSyncAssetId=state.lipSyncAssetId||null;
+   let lipSyncAsset=lipSyncAssetId?await loadCharacterLipSyncAssetById(db,account.id,lipSyncAssetId):null;
+   let lipSyncVerified=false;
    if(speechRequest){
     try{
      if(!speechAsset?.data||speechAsset?.text_hash!==speechRequest.textHash) speechAsset=await findCharacterSpeechAsset(db,account.id,sceneId,speechRequest.textHash);
@@ -394,14 +431,41 @@ async function runProduction(account,rawInput){
      activity.push({tool:"character-voice-tts",state:"failed",details:String(e?.message||e).slice(0,400)});
     }
    }else activity.push({tool:"character-voice-tts",state:"failed",details:"Scene "+(i+1)+" had no usable dialogue/narration/action text."});
+   if(voiceVerified&&speechAsset?.data){
+    try{
+     if(!lipSyncAsset?.data||lipSyncAsset.text_hash!==speechAsset.text_hash) lipSyncAsset=await findCharacterLipSyncAsset(db,account.id,sceneId,speechAsset.text_hash);
+     if(!lipSyncAsset?.data){
+      const sourceVideo=await loadCharacterVideoAssetById(db,account.id,videoAssetId);
+      if(!sourceVideo?.data)throw new Error("Verified source video could not be loaded for lip-sync.");
+      const synchronized=await generateCharacterLipSync({
+       sceneId,videoData:sourceVideo.data,audioData:speechAsset.data,
+       videoMimeType:sourceVideo.mime_type||"video/mp4",durationSeconds
+      });
+      lipSyncAssetId=await saveCharacterLipSyncAsset(db,account.id,sceneId,speechAsset.text_hash,synchronized);
+      lipSyncAsset={asset_id:lipSyncAssetId,mime_type:synchronized.mimeType,data:synchronized.data,provider:synchronized.provider,verification:synchronized.verification,text_hash:speechAsset.text_hash};
+     }else lipSyncAssetId=lipSyncAsset.asset_id;
+     lipSyncVerified=Boolean(lipSyncAsset?.data&&lipSyncAsset.verification?.ok&&String(lipSyncAsset.verification?.status||"")==="COMPLETED");
+     if(!lipSyncVerified)throw new Error("Lip-sync provider output did not pass completed-MP4 verification.");
+     activity.push({tool:"character-lip-sync",state:"done",details:"Real lip-sync provider returned a completed MP4 for scene "+(i+1)+"; provider job and MP4 container verified. Independent pixel-quality scoring is not represented as a separate metric."});
+    }catch(e){
+     lipSyncVerified=false;lipSyncAssetId=null;lipSyncAsset=null;
+     activity.push({tool:"character-lip-sync",state:"failed",details:String(e?.message||e).slice(0,400)});
+    }
+   }else{
+    lipSyncVerified=false;lipSyncAssetId=null;lipSyncAsset=null;
+    activity.push({tool:"character-lip-sync",state:"failed",details:"Verified server-generated voice audio is required before lip-sync can run."});
+   }
    const lipSyncManifest=speechRequest?{
     ...buildLipSyncManifest(speechRequest.script,{language:story.language}),
     durationMs:Math.round(durationSeconds*1000),
-    method:"word-timing-estimate",
+    method:lipSyncVerified?"provider-generated-video-lipsync":"word-timing-estimate",
+    provider:lipSyncAsset?.provider||null,
+    providerJobId:lipSyncAsset?.verification?.providerJobId||null,
+    providerVerified:lipSyncVerified,
     pixelLipSyncVerified:false
    }:null;
    state={...state,sceneId,index:i,visualAssetId,videoAssetId,voiceAssetId:voiceVerified?voiceAssetId:null,
-    voiceVerified,lipSyncManifest,postProduction:post,durationSeconds,verified:true,
+    voiceVerified,lipSyncAssetId:lipSyncVerified?lipSyncAssetId:null,lipSyncVerified,lipSyncManifest,postProduction:post,durationSeconds,verified:true,
     visualVerified:Boolean(visualAssetId&&visualMedia?.data),videoVerified:Boolean(videoAssetId&&videoMedia?.data),postVerified:true};
    sceneStates=sceneStates.filter(x=>String(x.sceneId)!==sceneId).concat(state);
    evidence.visuals=selectedScenes.every((scene,j)=>Boolean(sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(j+1))))?.visualVerified));
@@ -412,8 +476,9 @@ async function runProduction(account,rawInput){
    if(evidence.post)completed.add("post"); else completed.delete("post");
    evidence.voice=selectedScenes.every((scene,j)=>Boolean(sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(j+1))))?.voiceVerified));
    if(evidence.voice)completed.add("voice"); else completed.delete("voice");
-   evidence.lipSync=false;completed.delete("lipSync");
-   await persist({currentStep:i+1<selectedScenes.length?"visuals":"render",message:"Scene "+(i+1)+" visual/video/audio checkpoint verified."});
+   evidence.lipSync=selectedScenes.every((scene,j)=>Boolean(sceneStates.find(x=>String(x.sceneId)===String(scene.id||("scene_"+(j+1))))?.lipSyncVerified));
+   if(evidence.lipSync)completed.add("lipSync"); else completed.delete("lipSync");
+   await persist({currentStep:i+1<selectedScenes.length?"visuals":"render",message:"Scene "+(i+1)+" visual/video/audio/lip-sync checkpoint verified."});
   }
 
   const sceneClips=[];
@@ -425,6 +490,19 @@ async function runProduction(account,rawInput){
    const storedVideo=await loadCharacterVideoAssetById(db,account.id,state.videoAssetId);
    if(!storedVideo?.data) await fail(new Error("Scene "+(i+1)+" verified video asset could not be reloaded from storage."),"render");
    const primary=scenePrimaryCharacter(s,characterRows);
+   let finalVideo=storedVideo;
+   let sceneLipSyncVerified=false;
+   if(state.lipSyncVerified&&state.lipSyncAssetId){
+    const synced=await loadCharacterLipSyncAssetById(db,account.id,state.lipSyncAssetId);
+    if(synced?.data&&synced.verification?.ok&&synced.verification?.status==="COMPLETED"){
+     finalVideo={mime_type:synced.mime_type,data:synced.data,provider:synced.provider};
+     sceneLipSyncVerified=true;
+    }else{
+     evidence.lipSync=false;completed.delete("lipSync");
+    }
+   }else{
+    evidence.lipSync=false;completed.delete("lipSync");
+   }
    let voiceAudio=null;
    if(state.voiceVerified&&state.voiceAssetId){
     const storedVoice=await loadCharacterSpeechAssetById(db,account.id,state.voiceAssetId);
@@ -437,7 +515,8 @@ async function runProduction(account,rawInput){
     voiceAssetId:state.voiceAssetId,
     voiceAudio,
     lipSyncManifest:state.lipSyncManifest||null,
-    sourceVideo:{mimeType:storedVideo.mime_type,data:storedVideo.data,provider:storedVideo.provider||"character-video"},
+    sourceVideo:{mimeType:finalVideo.mime_type||"video/mp4",data:finalVideo.data,provider:finalVideo.provider||"character-video"},
+    lipSyncVerified:sceneLipSyncVerified,
     durationSeconds:Number(state.durationSeconds||5),
     verified:true,
     postProduction:state.postProduction,
@@ -448,8 +527,11 @@ async function runProduction(account,rawInput){
 
   evidence.voice=evidence.voice&&sceneClips.every(scene=>Boolean(scene.voiceAudio?.data));
   if(evidence.voice)completed.add("voice");else completed.delete("voice");
-  evidence.lipSync=false;completed.delete("lipSync");
-  activity.push({tool:"lip-sync-verification",state:"pending",details:"Per-word timing is available, but rendered mouth pixels are not verified against phonemes. The pipeline will not claim true lip-sync without frame-level proof."});
+  evidence.lipSync=evidence.lipSync&&sceneClips.length===selectedScenes.length&&sceneClips.every(scene=>scene.lipSyncVerified);
+  if(evidence.lipSync)completed.add("lipSync");else completed.delete("lipSync");
+  activity.push({tool:"lip-sync-verification",state:evidence.lipSync?"done":"pending",details:evidence.lipSync
+   ?"Every scene has a provider-completed synchronized MP4 and valid MP4 container; independent per-frame phoneme scoring remains a separate quality metric."
+   :"At least one scene lacks a completed provider-generated lip-sync MP4; production will not mark lip-sync complete."});
   const timeline=buildEditTimeline({scenes:sceneClips,aspectRatio:request.aspectRatio,fps:30});
   audioMaster=audioMaster||buildAudioMasterContract(timeline.audioMix);
   timeline.audioMix={...timeline.audioMix,...audioMaster};

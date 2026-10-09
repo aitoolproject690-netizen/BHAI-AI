@@ -44,10 +44,11 @@ import characters from "./api/characters.js";
 import apiKeys from "./api/apiKeys.js";
 import youtube from "./api/youtube.js";
 import production from "./api/production.js";
+import mediaSmoke from "./api/mediaSmoke.js";
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.PORT)||10000;
 const configuredCorsOrigin=String(process.env.BHAI_CORS_ORIGIN||"").trim();
-const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/worker":worker,"/api/preflight":preflight,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/ai":ai,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests,"/api/dna":dna,"/api/vault":vault,"/api/accounts":accounts,"/api/resellers":resellers,"/api/billing":billing,"/api/errorfix":errorfix,"/api/deploy":deploy,"/api/engineering":engineering,"/api/mission":mission,"/api/story":story,"/api/characters":characters,"/api/api-keys":apiKeys,"/api/youtube":youtube,"/api/youtube/callback":youtube,"/api/production":production,"/api/media":agent,"/api/chat":agent};
+const routes={"/api/agent":agent,"/api/health":health,"/api/build":build,"/api/files":files,"/api/jobs":jobs,"/api/worker":worker,"/api/preflight":preflight,"/api/search":search,"/api/task":task,"/api/github":github,"/api/owner":owner,"/api/control":control,"/api/backups":backups,"/api/codefix":codefix,"/api/capabilities":capabilities,"/api/ai":ai,"/api/generate":generate,"/api/analyze":analyze,"/api/suggestions":suggestions,"/api/system":system,"/api/memory":memory,"/api/doctor":doctor,"/api/diff":diff,"/api/tests":tests,"/api/dna":dna,"/api/vault":vault,"/api/accounts":accounts,"/api/resellers":resellers,"/api/billing":billing,"/api/errorfix":errorfix,"/api/deploy":deploy,"/api/engineering":engineering,"/api/mission":mission,"/api/story":story,"/api/characters":characters,"/api/api-keys":apiKeys,"/api/youtube":youtube,"/api/youtube/callback":youtube,"/api/production":production,"/api/media-smoke":mediaSmoke,"/api/media":agent,"/api/chat":agent};
 function runApi(fn,req,res){
   attachRequestId(res,req.__bhaiRequestId||createRequestId());
   let body="";
@@ -100,7 +101,7 @@ http.createServer((req,res)=>{
   if(routes[u.pathname]){
     const fn=routes[u.pathname];
     // BHAI-X is a private owner-only app. Authentication is intentionally bypassed only for login/account bootstrap and Render health checks.
-    if(u.pathname!=="/api/accounts"&&u.pathname!=="/api/health"&&u.pathname!=="/api/youtube/callback")return runApi(async(req,res)=>{
+    if(u.pathname!=="/api/accounts"&&u.pathname!=="/api/health"&&u.pathname!=="/api/youtube/callback"&&u.pathname!=="/api/media-smoke")return runApi(async(req,res)=>{
       if(!isInternalRequest(req) && !await requireSession(req,res))return;
       return fn(req,res);
     },req,res);

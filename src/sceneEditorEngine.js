@@ -18,6 +18,7 @@ export function normalizeSceneClip(input={},index=0){
     durationSeconds:duration,
     sourceVideo:input.sourceVideo||null,
     voiceAssetId:clean(input.voiceAssetId||"",180)||null,
+    voiceAudio:input.voiceAudio||null,
     lipSyncManifest:input.lipSyncManifest||null,
     postProduction:input.postProduction||null,
     transition:clean(input.transition||"cut",80),

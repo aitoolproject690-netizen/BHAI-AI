@@ -92,7 +92,7 @@ export default async function handler(req,res){
   const videoRenderer=rendererSupports();
   const jobRunner=jobRunnerStatus();
   const youtubePublisher={configured:youtubeConfigured(),oauthRequired:true};
-  const characterMedia={ttsConfigured:Boolean(process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY),lipSyncConfigured:Boolean(process.env.SYNC_API_KEY),lipSyncModel:String(process.env.SYNC_LIPSYNC_MODEL||"lipsync-2"),endToEndSmokeAvailable:Boolean(process.env.BHAI_E2E_SMOKE_KEY)};
+  const characterMedia={ttsConfigured:Boolean(process.env.BHAI_TTS_URL||process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY),ttsProvider:process.env.BHAI_TTS_URL?"self-hosted":"gemini",lipSyncConfigured:Boolean(process.env.BHAI_LIPSYNC_URL||process.env.SYNC_API_KEY),lipSyncProvider:process.env.BHAI_LIPSYNC_URL?"self-hosted":"sync.so",lipSyncModel:String(process.env.SYNC_LIPSYNC_MODEL||"lipsync-2"),selfHostedTtsConfigured:Boolean(process.env.BHAI_TTS_URL),selfHostedLipSyncConfigured:Boolean(process.env.BHAI_LIPSYNC_URL),endToEndSmokeAvailable:Boolean(process.env.BHAI_E2E_SMOKE_KEY)};
   return res.status(200).json({
     ok:true,
     service:"BHAI AI",

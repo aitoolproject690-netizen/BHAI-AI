@@ -39,8 +39,7 @@ export default async function handler(req,res){
       videoData:clipBytes.toString("base64"),
       audioData:speech.data,
       videoMimeType:"video/mp4",
-      sceneId:"bhai-x-production-smoke",
-      durationSeconds:speech.duration
+      sceneId:"bhai-x-production-smoke"
     });
     const outputBytes=Buffer.from(synced.data,"base64");
     if(!synced.verification?.ok||outputBytes.subarray(4,8).toString("ascii")!=="ftyp"){

@@ -70,7 +70,7 @@ test("provider accepts a mocked valid audio response without a real key or netwo
   const out = await generateCharacterSpeech(request, {
     apiKey: "test-only",
     fetchImpl: async (url, options) => {
-      assert.match(url, /gemini-3\.8-flash-tts:generateContent/);
+      assert.match(url, /gemini-2\.5-flash-preview-tts:generateContent/);
       assert.equal(options.headers["x-goog-api-key"], "test-only");
       return {
         ok: true,

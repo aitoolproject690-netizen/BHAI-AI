@@ -80,7 +80,7 @@ test("provider accepts a mocked valid audio response without a real key or netwo
     }
   });
   assert.equal(out.mimeType, "audio/wav");
-  assert.equal(out.provider, "gemini-3.8-flash-tts");
+  assert.equal(out.provider, "gemini-2.5-flash-preview-tts");
   assert.equal(out.verification.ok, true);
   assert.equal(Buffer.from(out.data, "base64").subarray(0, 4).toString("ascii"), "RIFF");
 });

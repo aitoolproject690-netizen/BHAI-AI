@@ -135,7 +135,7 @@ async function generateImageViaBhAiCore(prompt,aspectRatio="16:9"){
  const coreKey=String(process.env.BHAI_CORE_API_KEY||process.env.BHAI_API_KEY||process.env.BHAI_CORE_KEY||"").trim();
  const internalKey=String(process.env.BHAI_CORE_INTERNAL_IMAGE_KEY||"").trim();
  const enabled=String(process.env.BHAI_LOCAL_IMAGE_FIRST||"true").toLowerCase()!=="false";
- if(!enabled||!coreKey) return null;
+ if(!enabled||(!coreKey&&!internalKey)) return null;
  const width=aspectRatio==="9:16"?576:aspectRatio==="1:1"?768:aspectRatio==="4:5"?640:768;
  const height=aspectRatio==="9:16"?1024:aspectRatio==="1:1"?768:aspectRatio==="4:5"?800:432;
  if(!internalKey && !coreKey) return null;

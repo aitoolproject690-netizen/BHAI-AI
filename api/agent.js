@@ -169,8 +169,8 @@ async function generateImageViaBhAiCore(prompt,aspectRatio="16:9"){
 
 async function generateImage(prompt,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
- const width=aspectRatio==="9:16"?768:aspectRatio==="1:1"?768:1024;
- const height=aspectRatio==="9:16"?1365:aspectRatio==="1:1"?768:576;
+ const width=aspectRatio==="9:16"?720:aspectRatio==="1:1"?768:1024;
+ const height=aspectRatio==="9:16"?1280:aspectRatio==="1:1"?768:576;
  const selfHostedEndpoint=String(process.env.BHAI_IMAGE_URL||"").trim();
  if(selfHostedEndpoint){
   return generateSelfHostedImage({prompt,aspectRatio,width,height},{endpoint:selfHostedEndpoint,apiKey:process.env.BHAI_IMAGE_API_KEY,timeoutMs:180000});

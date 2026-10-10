@@ -12,8 +12,10 @@ function endpointOf(value, label) {
     throw new Error(label + " endpoint must be an HTTP(S) URL without embedded credentials.");
   }
   const localHost = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname);
-  if (url.protocol !== "https:" && !localHost) {
-    throw new Error(label + " endpoint must use HTTPS unless it is localhost.");
+  // Plain HTTP is permitted only for explicitly named services on the private Garage Docker network.
+  const privateGarageHost = ["bhai-core"].includes(url.hostname);
+  if (url.protocol !== "https:" && !localHost && !privateGarageHost) {
+    throw new Error(label + " endpoint must use HTTPS unless it is localhost or the private BHAI Garage service.");
   }
   return url.toString();
 }
@@ -58,7 +60,14 @@ async function postJson(url, payload, options, label, defaultTimeoutMs) {
   if (typeof fetchImpl !== "function") throw new Error("Fetch is unavailable for " + label + ".");
   const headers = { "content-type": "application/json", accept: "application/json" };
   const apiKey = clean(options.apiKey ?? options.apiKeyFromEnv ?? "", 2000);
-  if (apiKey) headers.authorization = "Bearer " + apiKey;
+  const requestedAuthHeader = clean(options.authHeader || "authorization", 80).toLowerCase();
+  if (!/^[a-z0-9-]{1,80}$/.test(requestedAuthHeader)) throw new Error(label + " auth header name is invalid.");
+  if (apiKey) {
+    const authPrefix = options.authPrefix === undefined
+      ? (requestedAuthHeader === "authorization" ? "Bearer " : "")
+      : String(options.authPrefix);
+    headers[requestedAuthHeader] = authPrefix + apiKey;
+  }
   const response = await fetchImpl(url, {
     method: "POST",
     headers,
@@ -175,8 +184,14 @@ export async function generateSelfHostedImage(input = {}, options = {}) {
   const body = await postJson(endpoint, {
     schemaVersion:"1.0", prompt:clean(input.prompt,9000), aspectRatio,
     width:Number(input.width)>0?Math.round(Number(input.width)):1024,
-    height:Number(input.height)>0?Math.round(Number(input.height)):576
-  }, { ...options, apiKey:options.apiKey ?? process.env.BHAI_IMAGE_API_KEY }, "Self-hosted image", 180000);
+    height:Number(input.height)>0?Math.round(Number(input.height)):576,
+    provider:"comfyui"
+  }, {
+    ...options,
+    apiKey:options.apiKey ?? process.env.BHAI_IMAGE_API_KEY,
+    authHeader:options.authHeader ?? process.env.BHAI_IMAGE_AUTH_HEADER,
+    authPrefix:options.authPrefix ?? process.env.BHAI_IMAGE_AUTH_PREFIX
+  }, "Self-hosted image", 360000);
   const mimeType = clean(body.mimeType || body.mime_type || "",100).split(";")[0].toLowerCase();
   if (!["image/png","image/jpeg","image/webp"].includes(mimeType)) throw new Error("Self-hosted image must return image/png, image/jpeg, or image/webp.");
   const bytes = decodeBase64(body.data || body.imageBase64 || body.image_base64, "Self-hosted image output");

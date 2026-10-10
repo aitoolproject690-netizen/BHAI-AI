@@ -98,3 +98,36 @@ test("self-hosted image rejects non-HTTPS public endpoints and mismatched bytes"
   await assert.rejects(generateSelfHostedImage({prompt:"test"},{endpoint:"http://media.example/image",fetchImpl:async()=>{throw new Error("must not call");}}),/must use HTTPS/);
   await assert.rejects(generateSelfHostedImage({prompt:"test"},{endpoint:"https://media.example/image",fetchImpl:async()=>({ok:true,status:200,json:async()=>({mimeType:"image/png",data:fakeMp4().toString("base64")})})}),/signature\/MIME/);
 });
+
+
+test("private BHAI Garage image bridge uses scoped internal-key header without Bearer prefix", async () => {
+  const { generateSelfHostedImage } = await import("../src/selfHostedMediaProvider.js");
+  const png = fakePngForSelfHostedTests();
+  let call;
+  const result = await generateSelfHostedImage(
+    { prompt:"Aarav consistent 3D anime portrait", aspectRatio:"16:9", width:1024, height:576 },
+    {
+      endpoint:"http://bhai-core:10000/v1/internal/image/generate",
+      apiKey:"local-internal-key",
+      authHeader:"x-bhai-internal-key",
+      fetchImpl:async(url,options)=>{
+        call={url:String(url),options};
+        return {ok:true,status:200,json:async()=>({mimeType:"image/png",data:png.toString("base64"),provider:"bhai-core-comfyui",width:1024,height:576})};
+      }
+    }
+  );
+  assert.equal(call.url,"http://bhai-core:10000/v1/internal/image/generate");
+  assert.equal(call.options.headers["x-bhai-internal-key"],"local-internal-key");
+  assert.equal(call.options.headers.authorization,undefined);
+  assert.equal(JSON.parse(call.options.body).provider,"comfyui");
+  assert.equal(result.provider,"bhai-core-comfyui");
+});
+
+test("self-hosted image auth header rejects invalid header names", async () => {
+  const { generateSelfHostedImage } = await import("../src/selfHostedMediaProvider.js");
+  const png = fakePngForSelfHostedTests();
+  await assert.rejects(
+    generateSelfHostedImage({prompt:"test"},{endpoint:"https://media.example/image",apiKey:"secret",authHeader:"Bad Header",fetchImpl:async()=>({ok:true,status:200,json:async()=>({mimeType:"image/png",data:png.toString("base64")})})}),
+    /auth header name is invalid/
+  );
+});

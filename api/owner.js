@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { getDb } from "./db.js";
 
 const defaults={
   serverMode:"online", emergencyLock:false, releaseLocked:true,
@@ -7,31 +8,47 @@ const defaults={
   updatedAt:new Date().toISOString()
 };
 const state=structuredClone(defaults);
-let db=null;
-async function getDb(){
-  if(db!==null)return db;
-  if(!process.env.DATABASE_URL){db=false;return db}
-  try{
-    const {Client}=await import("pg");
-    const c=new Client({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false},connectionTimeoutMillis:5000});
-    await c.connect();
-    await c.query("CREATE TABLE IF NOT EXISTS bhai_owner_state (id INTEGER PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-    db=c;return db;
-  }catch(e){console.error("Owner persistence unavailable:",e.message);db=false;return db}
+let loaded=false;
+let loading=null;
+
+async function ensureOwnerReady(){
+  if(loaded)return true;
+  if(loading)return loading;
+  loading=(async()=>{
+    const c=await getDb();
+    if(!c)return false;
+    try{
+      await c.query("CREATE TABLE IF NOT EXISTS bhai_owner_state (id INTEGER PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+      const r=await c.query("SELECT data FROM bhai_owner_state WHERE id=1");
+      if(r.rows[0]?.data)Object.assign(state,r.rows[0].data);
+      else await c.query("INSERT INTO bhai_owner_state(id,data) VALUES(1,$1)",[state]);
+      loaded=true;
+      return true;
+    }catch(e){
+      console.error("Owner persistence unavailable:",String(e?.message||e));
+      return false;
+    }finally{
+      loading=null;
+    }
+  })();
+  return loading;
 }
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-export const ownerReady=(async()=>{
-  const c=await Promise.race([getDb(),sleep(5000).then(()=>null)]); if(!c)return;
-  try{
-    const r=await c.query("SELECT data FROM bhai_owner_state WHERE id=1");
-    if(r.rows[0]?.data)Object.assign(state,r.rows[0].data);
-    else await c.query("INSERT INTO bhai_owner_state(id,data) VALUES(1,$1)",[state]);
-  }catch(e){console.error("Owner state load failed:",e.message)}
-})();
+
+// Preserve the existing startup signal, but retry the load on later requests
+// if the database was unavailable during process startup.
+export const ownerReady=ensureOwnerReady();
+
 async function persist(){
-  const c=await getDb(); if(!c)return;
-  try{await c.query("INSERT INTO bhai_owner_state(id,data,updated_at) VALUES(1,$1,NOW()) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",[state])}
-  catch(e){console.error("Owner state save failed:",e.message)}
+  if(!await ensureOwnerReady())return false;
+  const c=await getDb();
+  if(!c)return false;
+  try{
+    await c.query("INSERT INTO bhai_owner_state(id,data,updated_at) VALUES(1,$1,NOW()) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW()",[state]);
+    return true;
+  }catch(e){
+    console.error("Owner state save failed:",String(e?.message||e));
+    return false;
+  }
 }
 function keyOk(req){
   const expected=process.env.OWNER_ACCESS_KEY,supplied=req.headers?.["x-owner-key"]||req.body?.ownerKey||"";
@@ -49,10 +66,15 @@ export function ownerGuard(req,res){
   return true;
 }
 export default async function handler(req,res){
-  await ownerReady;
-  if(req.method==="GET"){if(!ownerGuard(req,res))return;return res.json({ok:true,state})}
+  if(req.method==="GET"){
+    await ensureOwnerReady();
+    if(!ownerGuard(req,res))return;
+    return res.json({ok:true,state,persistence:{ready:loaded}});
+  }
   if(req.method!=="POST")return res.status(405).json({error:"Method not allowed"});
   if(!ownerGuard(req,res))return;
+  // Never acknowledge a state change that is only held in volatile memory.
+  if(!await ensureOwnerReady())return res.status(503).json({error:"Owner persistence database is unavailable; no changes were saved."});
   const b=req.body||{},action=b.action;
   if(action==="set_server_mode"){state.serverMode=b.mode==="maintenance"?"maintenance":"online";audit("server_mode_changed",{mode:state.serverMode})}
   else if(action==="set_emergency_lock"){state.emergencyLock=!!b.enabled;audit("emergency_lock_changed",{enabled:state.emergencyLock})}
@@ -68,6 +90,8 @@ export default async function handler(req,res){
   } else if(action==="delegate_revoke"){
     state.delegatedAdmins=state.delegatedAdmins.filter(x=>x.id!==b.id);audit("delegated_admin_revoked",{id:b.id});
   } else if(action==="audit_clear"){state.audit=[];state.updatedAt=new Date().toISOString()}
-  else return res.status(400).json({error:"Unknown owner action"});
-  await persist();return res.json({ok:true,state});
+  else return res.status(400).json({error:"Unknown action"});
+  const saved=await persist();
+  if(!saved)return res.status(503).json({error:"Owner state changed in memory but could not be persisted. Restore database availability and retry."});
+  return res.json({ok:true,state,persistence:{ready:true}});
 }

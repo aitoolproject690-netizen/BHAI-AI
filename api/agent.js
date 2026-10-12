@@ -22,6 +22,7 @@ import {normalizeSceneClip,buildEditTimeline,verifyEditTimeline,isLikelyEditRequ
 import {renderTimeline,renderShortsFromVideo,rendererSupports} from "../src/videoRenderer.js";
 import {buildImagePackPrompts,buildShortsPlan} from "../src/mediaProductionEngine.js";
 import {generateSelfHostedImage,generateSelfHostedVideo} from "../src/selfHostedMediaProvider.js";
+import {generateImageViaBhAiCore} from "../src/bhaiCoreImageProvider.js";
 import {mediaLimitFor,mediaQuotaSummary} from "../src/mediaUsagePolicy.js";
 import {solveSimpleMath} from "../src/simpleMath.js";
 import {solveSimpleTime} from "../src/simpleReasoning.js";
@@ -132,41 +133,6 @@ async function generateCharacterVisual(db,accountId,prompt,aspectRatio="16:9"){
  return {media,character,request,verification,assetId,lockedPrompt};
 }
 
-async function generateImageViaBhAiCore(prompt,aspectRatio="16:9"){
- const coreUrl=String(process.env.BHAI_CORE_URL||"https://bhai-core.onrender.com").replace(/\/$/,"");
- const coreKey=String(process.env.BHAI_CORE_API_KEY||process.env.BHAI_API_KEY||process.env.BHAI_CORE_KEY||"").trim();
- const internalKey=String(process.env.BHAI_CORE_INTERNAL_IMAGE_KEY||"").trim();
- const enabled=String(process.env.BHAI_LOCAL_IMAGE_FIRST||"true").toLowerCase()!=="false";
- if(!enabled||(!coreKey&&!internalKey)) return null;
- const width=aspectRatio==="9:16"?576:aspectRatio==="1:1"?768:aspectRatio==="4:5"?640:768;
- const height=aspectRatio==="9:16"?1024:aspectRatio==="1:1"?768:aspectRatio==="4:5"?800:432;
- if(!internalKey && !coreKey) return null;
- const r=await fetch(coreUrl+(internalKey?"/v1/internal/image/generate":"/v1/image/generate"),{
-  method:"POST",
-  headers:{...{"content-type":"application/json"},...(internalKey?{"x-bhai-internal-key":internalKey}:{"x-bhai-key":coreKey})},
-  body:JSON.stringify({
-   provider:"mobile",
-   prompt:String(prompt||"").trim().slice(0,4000),
-   aspectRatio,
-   width,
-   height,
-   model:process.env.BHAI_LOCAL_IMAGE_MODEL||"sd1.5",
-   steps:Number(process.env.BHAI_LOCAL_IMAGE_STEPS||10),
-   cfg:Number(process.env.BHAI_LOCAL_IMAGE_CFG||7.5),
-   scheduler:process.env.BHAI_LOCAL_IMAGE_SCHEDULER||"dpm"
-  }),
-  signal:AbortSignal.timeout(120000)
- });
- const d=await r.json().catch(()=>({}));
- if(!r.ok) throw new Error("BHAI-CORE local image returned HTTP "+r.status+" — "+String(d?.error||d?.message||"unknown").slice(0,500));
- const output=d?.output;
- if(!output?.data) throw new Error("BHAI-CORE local image returned no completed image.");
- const bytes=Buffer.from(String(output.data),"base64");
- if(!bytes.length) throw new Error("BHAI-CORE local image returned empty image data.");
- if(bytes.length>12*1024*1024) throw new Error("BHAI-CORE local image output exceeds 12 MB.");
- return {mimeType:String(output.mimeType||"image/png"),data:output.data,provider:"bhai-core:mobile-local-dream",local:true,seed:d.seed||output.seed||null,width:output.width||width,height:output.height||height,generationTimeMs:output.generationTimeMs||null};
-}
-
 async function generateImage(prompt,aspectRatio="16:9"){
  const timeout=(ms)=>AbortSignal.timeout(ms);
  const width=aspectRatio==="9:16"?720:aspectRatio==="1:1"?768:1024;
@@ -191,7 +157,7 @@ async function generateImage(prompt,aspectRatio="16:9"){
  try{
   const local=await generateImageViaBhAiCore(prompt,aspectRatio);
   if(local)return local;
- }catch(e){coreErrors.push("BHAI-CORE Local Dream: "+String(e?.message||e).slice(0,500));}
+ }catch(e){coreErrors.push("BHAI-CORE self-hosted GPU image: "+String(e?.message||e).slice(0,500));}
  const hfSpace=process.env.HF_IMAGE_SPACE||"black-forest-labs/FLUX.1-schnell";
  try{
   const {Client}=await import("@gradio/client");

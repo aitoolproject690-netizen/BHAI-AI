@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import {initDb,getDb} from "./db.js";
+import {createDatabaseClientConfig} from "./databaseConfig.js";
 import {internalHeaders} from "./internalAuth.js";
 
 const TERMINAL=new Set(["completed","failed","cancelled"]);
@@ -265,8 +266,7 @@ async function claimJobs(){
   // short-lived transaction client here instead of calling connect() twice.
   const {Client}=await import("pg");
   const client=new Client({
-    connectionString:String(process.env.DATABASE_URL||""),
-    ssl:{rejectUnauthorized:false},
+    ...createDatabaseClientConfig(String(process.env.DATABASE_URL||"")),
     connectionTimeoutMillis:5000
   });
   await client.connect();

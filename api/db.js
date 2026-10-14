@@ -1,3 +1,5 @@
+import { createDatabaseClientConfig } from "./databaseConfig.js";
+
 let client = null;
 let ready = null;
 let connectionFailures = 0;
@@ -29,8 +31,7 @@ export async function getDb() {
     try {
       const { Client } = await import("pg");
       candidate = new Client({
-        connectionString,
-        ssl: { rejectUnauthorized: false },
+        ...createDatabaseClientConfig(connectionString),
         connectionTimeoutMillis: 5000
       });
       await candidate.connect();

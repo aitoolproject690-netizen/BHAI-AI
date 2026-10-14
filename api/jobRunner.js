@@ -314,7 +314,7 @@ async function requestJson(url,options={},timeoutMs=600000){
 }
 
 async function executeAgent(job){
-  const base=String(process.env.RENDER_EXTERNAL_URL||process.env.BHAI_PUBLIC_URL||"").replace(/\/$/,"")||`http://127.0.0.1:${Number(process.env.PORT)||10000}`;
+  const base=String(process.env.RENDER_EXTERNAL_URL||process.env.BHAI_PUBLIC_URL||"").replace(/\/$/,"")||`http://127.0.0.1:${Number(process.env.PORT)||Number(process.env.SERVER_PORT)||10000}`;
   const recoveryCheckpoint=job.payload?.recovery?.checkpoint||job.checkpoint||null;
   const executionPlan=job.payload?.brainPlan||null;
   const executionResume=buildExecutionResume(executionPlan,recoveryCheckpoint);
@@ -326,7 +326,7 @@ async function executeAgent(job){
 }
 
 async function executeMission(job){
-  const base=String(process.env.RENDER_EXTERNAL_URL||process.env.BHAI_PUBLIC_URL||"").replace(/\/$/,"")||`http://127.0.0.1:${Number(process.env.PORT)||10000}`;
+  const base=String(process.env.RENDER_EXTERNAL_URL||process.env.BHAI_PUBLIC_URL||"").replace(/\/$/,"")||`http://127.0.0.1:${Number(process.env.PORT)||Number(process.env.SERVER_PORT)||10000}`;
   const recoveryCheckpoint=job.payload?.recovery?.checkpoint||job.checkpoint||null;
   const executionPlan=job.payload?.brainPlan||null;
   const executionResume=buildExecutionResume(executionPlan,recoveryCheckpoint);
@@ -357,7 +357,7 @@ async function executeHealth(job){
 }
 
 async function executeDeploy(job){
-  const base=String(process.env.RENDER_EXTERNAL_URL||process.env.BHAI_PUBLIC_URL||"").replace(/\/$/,"")||`http://127.0.0.1:${Number(process.env.PORT)||10000}`;
+  const base=String(process.env.RENDER_EXTERNAL_URL||process.env.BHAI_PUBLIC_URL||"").replace(/\/$/,"")||`http://127.0.0.1:${Number(process.env.PORT)||Number(process.env.SERVER_PORT)||10000}`;
   const result=await requestJson(base+"/api/deploy",{
     method:"POST",headers:{"Content-Type":"application/json",...internalHeaders(job.owner)},
     body:JSON.stringify({serviceId:job.payload?.serviceId,commit:String(job.payload?.commit||""),reason:String(job.payload?.reason||"BHAI X queued deployment"),doIt:true})

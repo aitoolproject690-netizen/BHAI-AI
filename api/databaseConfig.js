@@ -49,7 +49,7 @@ export function createDatabaseClientConfig(connectionString=process.env.DATABASE
     }
     normalized=url.toString();
   } catch (error) {
-    if (/^[a-z][a-z0-9+.-]*:\\/\\//i.test(raw)) {
+    if (raw.includes("://")) {
       throw new Error("DATABASE_URL is not a valid database URL.");
     }
   }

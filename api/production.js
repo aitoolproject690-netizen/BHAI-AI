@@ -612,7 +612,7 @@ async function runProduction(account,rawInput){
    evidence.youtube=true;
   }
 
-  const proof=productionCompletionProof({plan,evidence,finalVideo:{rendered:Boolean(rendered),verified:evidence.render},youTube:youtube});
+  const proof=productionCompletionProof({plan,evidence,finalVideo:{rendered:Boolean(rendered),verified:evidence.render,durationSeconds:Number(rendered?.media?.duration||0)},youTube:youtube,requestedDurationSeconds:request.durationSeconds});
   const fullStoryRendered=selectedScenes.length===story.scenes.length;
   const verified=proof.ok&&fullStoryRendered;
   if(verified)completed.add("youtube");

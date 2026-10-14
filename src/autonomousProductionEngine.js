@@ -79,17 +79,23 @@ export function nextAutonomousStep(plan,completedEvidence=[]){
  return {steps,next,complete:!next};
 }
 
-export function productionCompletionProof({plan,evidence,finalVideo,youTube}={}){
+export function productionCompletionProof({plan,evidence,finalVideo,youTube,requestedDurationSeconds}={}){
  const required=(plan?.steps||[]).filter(s=>s.required);
- const failures=required.filter(s=>s.id==="youtube" ? !(youTube?.verified&&youTube?.url) : !evidence?.[s.id]);
+ const failures=required.filter(s=>s.id==="youtube" ? !(youTube?.verified&&youTube?.url) : !evidence?.[s.id]).map(s=>s.id);
  const finalVerified=Boolean(finalVideo?.verified&&finalVideo?.rendered);
  const youtubeRequired=required.some(s=>s.id==="youtube");
  const youtubeVerified=!youtubeRequired||Boolean(youTube?.verified&&youTube?.url);
+ const requested=Number(requestedDurationSeconds??plan?.request?.durationSeconds??plan?.request?.story?.durationSeconds??0);
+ const actual=Number(finalVideo?.durationSeconds??finalVideo?.duration??0);
+ const tolerance=Math.max(2,requested*0.1);
+ const durationVerified=Number.isFinite(requested)&&requested>0&&Number.isFinite(actual)&&actual>0&&Math.abs(actual-requested)<=tolerance;
+ if(!durationVerified)failures.push("duration");
  return {
-  ok:failures.length===0&&finalVerified&&youtubeVerified,
-  failures:failures.map(x=>x.id),
+  ok:failures.length===0&&finalVerified&&youtubeVerified&&durationVerified,
+  failures,
   finalVideoVerified:finalVerified,
   youtubeVerified,
-  claim:"DONE only if all required evidence is present."
+  duration:{verified:durationVerified,requestedSeconds:requested,actualSeconds:actual,toleranceSeconds:Number(tolerance.toFixed(2))},
+  claim:"DONE only if all required evidence, requested duration, and final output proof match."
  };
 }

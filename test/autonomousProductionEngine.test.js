@@ -11,7 +11,7 @@ test("autonomous plan requires proof before DONE",()=>{
  const p=buildAutonomousPlan({prompt:"A story bana kar YouTube pe upload karo"});
  const r=productionCompletionProof({plan:p,evidence:{story:true,characters:true,visuals:true,videos:true,post:true},finalVideo:{rendered:true,verified:true},youTube:null});
  assert.equal(r.ok,false);
- const r2=productionCompletionProof({plan:p,evidence:{story:true,characters:true,camera:true,visuals:true,videos:true,post:true,voice:true,lipSync:true,audio:true,render:true,youtubePackage:true,shorts:true},finalVideo:{rendered:true,verified:true},youTube:{verified:true,url:"https://www.youtube.com/watch?v=abc"}});
+ const r2=productionCompletionProof({plan:p,evidence:{story:true,characters:true,camera:true,visuals:true,videos:true,post:true,voice:true,lipSync:true,audio:true,render:true,youtubePackage:true,shorts:true},finalVideo:{rendered:true,verified:true,durationSeconds:15},youTube:{verified:true,url:"https://www.youtube.com/watch?v=abc"}});
  assert.equal(r2.ok,true);
 });
 test("autonomous request normalizes a bounded render plan",()=>{
@@ -28,4 +28,15 @@ test("autonomous plan refuses DONE when generated voice or pixel lip-sync proof 
  const proof=productionCompletionProof({plan:p,evidence,finalVideo:{rendered:true,verified:true},youTube:null});
  assert.equal(proof.ok,false);
  assert.ok(proof.failures.includes("lipSync"));
+});
+
+
+test("autonomous production cannot claim a 5-7 minute episode from a short MP4",()=>{
+ const plan=buildAutonomousPlan({prompt:"Create a 7 minute episode",durationSeconds:420});
+ const evidence={story:true,characters:true,camera:true,visuals:true,videos:true,post:true,voice:true,lipSync:true,audio:true,render:true,youtubePackage:true,shorts:true};
+ const proof=productionCompletionProof({plan,evidence,finalVideo:{rendered:true,verified:true,durationSeconds:15},requestedDurationSeconds:420});
+ assert.equal(proof.ok,false);
+ assert.ok(proof.failures.includes("duration"));
+ assert.equal(proof.duration.requestedSeconds,420);
+ assert.equal(proof.duration.actualSeconds,15);
 });

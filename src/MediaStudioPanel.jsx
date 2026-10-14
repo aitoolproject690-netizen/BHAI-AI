@@ -9,6 +9,7 @@ export default function MediaStudioPanel({onClose}){
  const[prompt,setPrompt]=useState("");
  const[style,setStyle]=useState("3d");
  const[aspect,setAspect]=useState("16:9");
+ const[durationSeconds,setDurationSeconds]=useState("420");
  const[autoPublish,setAutoPublish]=useState(false);
  const[action,setAction]=useState("");
  const[result,setResult]=useState(null);
@@ -21,7 +22,7 @@ export default function MediaStudioPanel({onClose}){
    let body;
    if(kind==="image-pack")body={type:"image-pack",prompt:prompt.trim(),style,aspectRatio:aspect};
    else if(kind==="shorts")body={type:"shorts"};
-   else body={prompt:prompt.trim(),durationSeconds:15,language:"Hindi",genre:"suspense",visualStyle:style==="anime"?"anime cinematic illustration":style==="2d"?"2D hand-drawn cartoon illustration":"3D anime cinematic cartoon",aspectRatio:aspect,autoPublish,privacy:"private",render:true,maxScenes:3};
+   else body={prompt:prompt.trim(),durationSeconds:Number(durationSeconds),language:"Hindi",genre:"suspense",visualStyle:style==="anime"?"anime cinematic illustration":style==="2d"?"2D hand-drawn cartoon illustration":"3D anime cinematic cartoon",aspectRatio:aspect,autoPublish,privacy:"private",render:true,maxScenes:3};
    const r=await fetch(apiUrl(kind==="production"?"/api/production":"/api/media"),{method:"POST",headers:headers(),body:JSON.stringify(body)});
    const d=await r.json().catch(()=>({}));
    if(!r.ok||d.error)throw new Error(d.error||("HTTP "+r.status));
@@ -41,6 +42,7 @@ export default function MediaStudioPanel({onClose}){
    <div className="mediaStudioGrid">
     <label><span>Style</span><select value={style} onChange={e=>setStyle(e.target.value)}><option value="3d">3D cinematic</option><option value="anime">Anime</option><option value="2d">2D cartoon</option></select></label>
     <label><span>Aspect</span><select value={aspect} onChange={e=>setAspect(e.target.value)}><option>16:9</option><option>9:16</option><option>1:1</option><option>4:5</option></select></label>
+    <label><span>Episode target</span><select value={durationSeconds} onChange={e=>setDurationSeconds(e.target.value)}><option value="300">5 minutes</option><option value="420">7 minutes</option></select></label>
    </div>
    <label className="mediaStudioPublish"><input type="checkbox" checked={autoPublish} onChange={e=>setAutoPublish(e.target.checked)}/><span><b>Auto-publish YouTube</b><small>Sirf connected channel + verified upload hone par publish hoga.</small></span></label>
    {busy&&<div className="mediaStudioBusy"><Loader2 className="spin" size={15}/> {action==="image-pack"?"3 images generate ho rahi hain...":action==="shorts"?"Vertical Shorts render ho rahe hain...":"Full production pipeline run ho rahi hai..."}</div>}
@@ -48,6 +50,8 @@ export default function MediaStudioPanel({onClose}){
    {result&&<div className="mediaStudioResult">
     <div className="mediaStudioStatus">{result.verified===true?"✅ Verified output":"⚠️ Partial / provider pending"}</div>
     {result.text&&<p>{result.text.replace(/[#*_]/g,"").slice(0,1200)}</p>}
+    {result.production?.proof?.duration&&<div className="mediaStudioCard"><b>⏱️ Duration verification</b><span>Target: {Math.round(result.production.proof.duration.requestedSeconds)}s · Rendered: {Math.round(result.production.proof.duration.actualSeconds)}s</span>{!result.production.proof.duration.verified&&<small>Full-episode completion tabhi verified hogi jab rendered MP4 selected target duration se match kare.</small>}</div>}
+    {result.production?.proof?.failures?.length>0&&<div className="mediaStudioError"><b>Incomplete stages:</b> {result.production.proof.failures.join(", ")}</div>}
     {result.youtubePackage&&<div className="mediaStudioCard"><b>📺 YouTube Package</b><span>{result.youtubePackage.title}</span><span>{result.youtubePackage.hashtags?.join(" ")}</span></div>}
     {(result.thumbnails||[]).length>0&&<div className="mediaStudioThumbs">{result.thumbnails.map(t=><div key={t.index}><img src={"data:"+t.mimeType+";base64,"+t.data}/><small>Thumbnail {t.index}</small></div>)}</div>}
     {(result.thumbnail?.data)&&!(result.thumbnails||[]).length&&<img className="mediaStudioHero" src={"data:"+result.thumbnail.mimeType+";base64,"+result.thumbnail.data}/>}

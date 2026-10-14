@@ -684,3 +684,42 @@ test("AI router falls back from Gemini quota to Pollinations text",async()=>{
     Object.assign(process.env,old);
   }
 });
+
+test("Core outage falls back to a configured external provider",async()=>{
+  const old={...process.env};
+  const originalFetch=global.fetch;
+  process.env.BHAI_CORE_URL="https://core.test";
+  process.env.BHAI_CORE_API_KEY="test-core";
+  process.env.GEMINI_API_KEY="test-gemini";
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.HF_TOKEN;
+  delete process.env.POLLINATIONS_API_KEY;
+  try{
+    const calls=[];
+    global.fetch=async(url)=>{
+      const u=String(url);
+      calls.push(u);
+      if(u.startsWith("https://core.test/")){
+        return new Response(JSON.stringify({error:{message:"Core temporarily unavailable"}}),{status:503,headers:{"content-type":"application/json"}});
+      }
+      if(u.includes("generativelanguage.googleapis.com")){
+        return new Response(JSON.stringify({candidates:[{content:{parts:[{text:"Fallback provider answered correctly."}]}}]}),{status:200,headers:{"content-type":"application/json"}});
+      }
+      throw new Error("Unexpected provider request: "+u);
+    };
+    const {generateWithRouter}=await import("../api/aiRouter.js?core-outage-fallback="+Date.now());
+    const result=await generateWithRouter({task:"write a short story",role:"story",fallback:true});
+    assert.equal(result.provider,"gemini");
+    assert.equal(result.text,"Fallback provider answered correctly.");
+    assert.deepEqual(result.failedProviders,["core"]);
+    assert.deepEqual(result.attemptedProviders,["core","gemini"]);
+    assert.equal(calls.length,2);
+  }finally{
+    global.fetch=originalFetch;
+    for(const k of Object.keys(process.env)){if(!(k in old))delete process.env[k]}
+    Object.assign(process.env,old);
+  }
+});
+

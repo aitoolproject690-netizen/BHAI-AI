@@ -21,7 +21,7 @@ export async function getAccountById(accountId,db){
 
 export async function getSession(req,db){const t=String(req.headers?.authorization||"").replace(/^Bearer\s+/i,"").trim();if(!t)return null;const h=hash(t);const r=await db.query("SELECT a.id,a.email,a.role,a.credits,a.blocked FROM bhai_sessions s JOIN bhai_accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>NOW()",[h]);const a=r.rows[0];if(!a||a.blocked)return null;return a;}
 export default async function handler(req,res){
- await initDb().catch(()=>false);const db=await getDb();if(!db)return json(res,503,{error:"DATABASE_URL is required"});await schema(db);
+ await initDb().catch(()=>false);const db=await getDb();if(!db){const configured=Boolean(String(process.env.DATABASE_URL||"").trim());return json(res,503,{error:configured?"Database connection unavailable; check server logs and DATABASE_SSL_MODE.":"DATABASE_URL is required",databaseConfigured:configured});}await schema(db);
  if(req.method==="POST"){
   const action=String(req.body?.action||"");
   if(action==="register"){const email=String(req.body?.email||"").trim().toLowerCase(),password=String(req.body?.password||"");if(!/^\S+@\S+\.\S+$/.test(email)||password.length<8)return json(res,400,{error:"Valid email and password(8+) required"});const id=crypto.randomUUID();try{await db.query("INSERT INTO bhai_accounts(id,email,password_hash) VALUES($1,$2,$3)",[id,email,await makePassword(password)]);}catch{return json(res,409,{error:"Account already exists"});}return json(res,201,{ok:true,account:{id,email,role:"user",credits:0}});}

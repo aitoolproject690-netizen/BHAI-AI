@@ -1,6 +1,6 @@
 import React,{useEffect,useState}from"react";
 import{X,UserCircle,LogIn,UserPlus,LogOut,Wallet,ShieldCheck,Eye,EyeOff}from"lucide-react";
-const API_BASE="https://bhai-ai-vpna.onrender.com";
+const API_BASE=typeof window!=="undefined"?String(window.location.origin||"").replace(/\/+$/,""):"";
 const api=p=>API_BASE+p;
 export default function AccountPanel({onClose,onAccount,ownerOnly=false}){
  const[mode,setMode]=useState("login"),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[showPassword,setShowPassword]=useState(false),[account,setAccount]=useState(null),[ledger,setLedger]=useState([]),[plans,setPlans]=useState([]),[activeSub,setActiveSub]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(""),[info,setInfo]=useState("");
